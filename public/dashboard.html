@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="pl">
+
+<head>
+    <meta charset="utf-8" />
+    <title>PK – Dashboard</title>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+    <style>
+        body {
+            font-family: system-ui, sans-serif;
+            margin: 20px;
+        }
+
+        table {
+            border-collapse: collapse;
+            width: 100%;
+            max-width: 800px;
+        }
+
+        th {
+            background: #7b002c;
+            color: #fff;
+            text-align: left;
+        }
+
+        tr:nth-child(even) {
+            background: #f8f8f8;
+        }
+
+        td,
+        th {
+            border: 1px solid #ccc;
+            padding: 6px 10px;
+        }
+
+        h1,
+        h2 {
+            color: #7b002c;
+        }
+
+        button {
+            background: #7b002c;
+            color: #fff;
+            border: none;
+            padding: 6px 12px;
+            border-radius: 6px;
+            cursor: pointer;
+        }
+
+        button:hover {
+            background: #a00040;
+        }
+    </style>
+
+</head>
+
+<body>
+    <h1>Dashboard</h1>
+    <button id="logout">Wyloguj</button>
+    <pre id="out">Ładowanie…</pre>
+    <h2>Nowa sprawa</h2>
+    <form id="newCaseForm" style="margin:12px 0; display:flex; gap:8px; align-items:center;">
+        <input id="nc_client" name="client" placeholder="Klient" required />
+        <input id="nc_amount" name="loan_amount" type="number" step="0.01" min="0" placeholder="Kwota (PLN)" required />
+        <select id="nc_status" name="status">
+            <option value="nowa">nowa</option>
+            <option value="analiza">analiza</option>
+            <option value="zamknięta">zamknięta</option>
+        </select>
+        <button type="submit">Dodaj</button>
+        <span id="nc_msg" style="margin-left:8px;color:#7b002c;"></span>
+    </form>
+
+    <h2>Sprawy</h2>
+    <table id="casesTable" border="1" cellspacing="0" cellpadding="6">
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Klient</th>
+                <th>Kwota (PLN)</th>
+                <th>Status</th>
+                <th>Data utworzenia</th>
+            </tr>
+        </thead>
+        <tbody></tbody>
+    </table>
+
+
+    <script src="/js/dashboard.js"></script>
+
+</body>
+
+</html>

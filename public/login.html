@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="pl">
+
+<head>
+    <meta charset="utf-8" />
+    <title>PK – Logowanie</title>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+</head>
+
+<body>
+    <h1>Logowanie</h1>
+    <form id="loginForm">
+        <input id="email" name="email" type="email" placeholder="email" required autocomplete="email">
+        <input id="password" name="password" type="password" placeholder="hasło" required
+            autocomplete="current-password">
+        <button>Zaloguj</button>
+    </form>
+    <p id="msg"></p>
+    <script>
+        const form = document.getElementById('loginForm');
+        const msg = document.getElementById('msg');
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            msg.textContent = 'Logowanie...';
+            const email = document.getElementById('email').value.trim();
+            const password = document.getElementById('password').value;
+            try {
+                const r = await fetch('/api/auth/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email, password })
+                });
+                const data = await r.json();
+                if (!r.ok) throw new Error(data?.error || 'Błąd logowania');
+                localStorage.setItem('pk_token', data.token);
+                localStorage.setItem('pk_user', JSON.stringify(data.user));
+                location.href = '/dashboard.html';
+            } catch (err) {
+                msg.textContent = 'Logowanie nieudane: ' + err.message;
+            }
+        });
+    </script>
+</body>
+
+</html>
