@@ -4,7 +4,7 @@ import path from "path";
 import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
-
+import kpiRouter from './routes/kpi';
 
 dotenv.config();
 
@@ -16,6 +16,7 @@ console.log("Static dir:", require("path").join(__dirname, "..", "public"));
 
 app.use("/api/auth", authRouter);
 app.use("/api/cases", casesRouter);
+app.use('/api', kpiRouter);
 
 const PORT = process.env.PORT || 4000;
 

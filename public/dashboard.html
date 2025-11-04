@@ -1,93 +1,396 @@
-<!doctype html>
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<!DOCTYPE html>
 <html lang="pl">
 
 <head>
-    <meta charset="utf-8" />
-    <title>PK – Dashboard</title>
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Dashboard — Portal PK</title>
+    <link rel="stylesheet" href="/style.css" />
     <style>
         body {
             font-family: system-ui, sans-serif;
-            margin: 20px;
+            background: #f9fafb;
+            margin: 0;
+            padding: 0;
         }
 
+        header {
+            background: #fff;
+            border-bottom: 1px solid #e5e7eb;
+            padding: 12px 24px;
+            font-weight: 600;
+            font-size: 20px;
+            color: #111827;
+        }
+
+        main {
+            padding: 24px;
+        }
+
+        /* === KPI sekcja === */
+        .kpi-bar {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+            gap: 12px;
+            align-items: stretch;
+            margin: 0 0 24px;
+        }
+
+        .kpi-card {
+            border: 1px solid #e5e7eb;
+            border-radius: 14px;
+            padding: 12px 14px;
+            background: #fff;
+            box-shadow: 0 1px 2px rgba(0, 0, 0, .04);
+        }
+
+        .kpi-label {
+            font-size: 12px;
+            color: #6b7280;
+            margin-bottom: 4px;
+            letter-spacing: .2px;
+        }
+
+        .kpi-value {
+            font-size: 24px;
+            font-weight: 700;
+            line-height: 1.1;
+        }
+
+        .kpi-refresh {
+            border: 1px solid #e5e7eb;
+            border-radius: 12px;
+            padding: 0 14px;
+            background: #fafafa;
+            cursor: pointer;
+            font-weight: 600;
+        }
+
+        .kpi-refresh:active {
+            transform: translateY(1px);
+        }
+
+        /* === Tabela spraw === */
         table {
-            border-collapse: collapse;
             width: 100%;
-            max-width: 800px;
+            border-collapse: collapse;
+            background: #fff;
+            border-radius: 12px;
+            overflow: hidden;
         }
 
-        th {
-            background: #7b002c;
-            color: #fff;
+        thead {
+            background: #f3f4f6;
+            font-size: 14px;
+            color: #374151;
             text-align: left;
         }
 
-        tr:nth-child(even) {
-            background: #f8f8f8;
+        th,
+        td {
+            padding: 10px 12px;
+            border-bottom: 1px solid #e5e7eb;
         }
 
-        td,
-        th {
-            border: 1px solid #ccc;
-            padding: 6px 10px;
-        }
-
-        h1,
-        h2 {
-            color: #7b002c;
-        }
-
-        button {
-            background: #7b002c;
-            color: #fff;
-            border: none;
-            padding: 6px 12px;
-            border-radius: 6px;
+        tbody tr:hover {
+            background: #f9fafb;
             cursor: pointer;
         }
 
-        button:hover {
-            background: #a00040;
+        /* === Premium header + tło === */
+        header {
+            background: #0f172a;
+            /* granat */
+            color: #fff;
+            border-bottom: none;
+        }
+
+        /* === 2 kolumny === */
+        .layout {
+            display: grid;
+            grid-template-columns: 1.15fr 0.85fr;
+            /* lewa nieco szersza */
+            gap: 16px;
+        }
+
+        /* lewa kolumna (lista) */
+        .col-left {
+            min-height: 60vh;
+        }
+
+        /* prawa kolumna (szczegóły) */
+        .col-right {
+            background: #fff;
+            border: 1px solid #e5e7eb;
+            border-radius: 12px;
+            padding: 16px;
+            min-height: 60vh;
+            box-shadow: 0 1px 2px rgba(0, 0, 0, .04);
+            position: sticky;
+            top: 16px;
+            /* ładny „sticky” efekt podczas scrolla */
+        }
+
+        /* pusty stan szczegółów */
+        .details-empty {
+            display: grid;
+            place-items: center;
+            text-align: center;
+            color: #6b7280;
+            height: 100%;
+            gap: 8px;
+        }
+
+        .details-empty .shield {
+            width: 64px;
+            height: 64px;
+            border-radius: 14px;
+            display: grid;
+            place-items: center;
+            font-weight: 800;
+            background: linear-gradient(135deg, #7f1d1d, #1f2937);
+            /* bordo + grafit */
+            color: #fff;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, .12);
+        }
+
+        /* ładniejsza tabela (zostaw Twoje istniejące reguły – to tylko drobne doprawki) */
+        thead {
+            position: sticky;
+            top: 0;
+            z-index: 1;
+        }
+
+        tbody tr {
+            transition: background .12s ease;
+        }
+
+        tbody tr:hover {
+            background: #f3f4f6;
+        }
+
+        .form-grid {
+            display: grid;
+            gap: 10px;
+        }
+
+        .form-grid label {
+            font-size: 12px;
+            color: #374151;
+            display: grid;
+            gap: 6px;
+        }
+
+        .form-grid input,
+        .form-grid select {
+            border: 1px solid #e5e7eb;
+            border-radius: 10px;
+            padding: 10px;
+            font: inherit;
+            background: #fff;
+        }
+
+        .form-grid button {
+            border: none;
+            border-radius: 10px;
+            padding: 10px 14px;
+            font-weight: 700;
+            cursor: pointer;
+            background: #111827;
+            color: #fff;
+        }
+
+        .form-msg {
+            font-size: 12px;
+            color: #065f46;
+            min-height: 16px;
+        }
+
+        /* modal */
+        .modal {
+            position: fixed;
+            inset: 0;
+            z-index: 1000;
+        }
+
+        .modal-backdrop {
+            position: absolute;
+            inset: 0;
+            background: rgba(0, 0, 0, .35);
+        }
+
+        .modal-card {
+            position: relative;
+            margin: 8vh auto;
+            width: min(560px, 92vw);
+            background: #fff;
+            border-radius: 12px;
+            border: 1px solid #e5e7eb;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, .2);
+            overflow: hidden;
+        }
+
+        .modal-header,
+        .modal-footer {
+            padding: 12px 16px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .modal-body {
+            padding: 12px 16px;
+        }
+
+        #cmClose {
+            border: none;
+            background: transparent;
+            font-size: 22px;
+            cursor: pointer;
+        }
+
+        #cmSave {
+            border: none;
+            border-radius: 10px;
+            padding: 10px 14px;
+            font-weight: 700;
+            cursor: pointer;
+            background: #111827;
+            color: #fff;
         }
     </style>
-
 </head>
 
 <body>
-    <h1>Dashboard</h1>
-    <button id="logout">Wyloguj</button>
-    <pre id="out">Ładowanie…</pre>
-    <h2>Nowa sprawa</h2>
-    <form id="newCaseForm" style="margin:12px 0; display:flex; gap:8px; align-items:center;">
-        <input id="nc_client" name="client" placeholder="Klient" required />
-        <input id="nc_amount" name="loan_amount" type="number" step="0.01" min="0" placeholder="Kwota (PLN)" required />
-        <select id="nc_status" name="status">
-            <option value="nowa">nowa</option>
-            <option value="analiza">analiza</option>
-            <option value="zamknięta">zamknięta</option>
+    <header>Dashboard — Pokonaj Kredyt</header>
+
+    <div id="filterBar" style="display:flex;gap:8px;align-items:center;margin:8px 0 12px">
+        <label>Status:</label>
+        <select id="flt_status">
+            <option value="">— wszystkie —</option>
+            <option>nowa</option>
+            <option>analiza</option>
+            <option>w toku</option>
+            <option>success</option>
+            <option>przegrana</option>
         </select>
-        <button type="submit">Dodaj</button>
-        <span id="nc_msg" style="margin-left:8px;color:#7b002c;"></span>
-    </form>
+        <button id="flt_refresh">Odśwież</button>
+    </div>
 
-    <h2>Sprawy</h2>
-    <table id="casesTable" border="1" cellspacing="0" cellpadding="6">
-        <thead>
-            <tr>
-                <th>ID</th>
-                <th>Klient</th>
-                <th>Kwota (PLN)</th>
-                <th>Status</th>
-                <th>Data utworzenia</th>
-            </tr>
-        </thead>
-        <tbody></tbody>
-    </table>
+    <main>
+        <!-- === KPI: START === -->
+        <section id="kpiBar" class="kpi-bar">
+            <div class="kpi-card">
+                <div class="kpi-label">Wszystkie sprawy</div>
+                <div class="kpi-value" id="kpiAll">–</div>
+            </div>
+            <div class="kpi-card">
+                <div class="kpi-label">W toku</div>
+                <div class="kpi-value" id="kpiOpen">–</div>
+            </div>
+            <div class="kpi-card">
+                <div class="kpi-label">Sukcesy</div>
+                <div class="kpi-value" id="kpiSuccess">–</div>
+            </div>
+            <div class="kpi-card">
+                <div class="kpi-label">Przegrane</div>
+                <div class="kpi-value" id="kpiLost">–</div>
+            </div>
+            <div class="kpi-card">
+                <div class="kpi-label">Nowe (miesiąc)</div>
+                <div class="kpi-value" id="kpiThisMonth">–</div>
+            </div>
+            <button id="kpiRefresh" class="kpi-refresh" title="Odśwież KPI">Odśwież</button>
+        </section>
+        <!-- === KPI: END === -->
 
+        <!-- === Layout 2-kolumnowy: START === -->
+        <div class="layout">
+            <aside class="col-left">
+                <!-- === Tabela spraw (bez zmian ID) === -->
+                <table id="caseTable">
+                    <thead>
+                        <tr>
+                            <th>Klient</th>
+                            <th>Kwota kredytu</th>
+                            <th>WPS</th>
+                            <th>Data zawarcia</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
 
-    <script src="/js/dashboard.js"></script>
+                    <tbody id="caseTableBody">
+                        <!-- tu JS wstrzyknie wiersze -->
+                    </tbody>
+                </table>
+            </aside>
 
+            <section class="col-right">
+                <h2 style="margin:0 0 12px 0;">Dodaj nową sprawę</h2>
+
+                <form id="newCaseForm" class="form-grid">
+                    <label>Klient
+                        <input id="nc_client" type="text" required placeholder="np. Jan Kowalski">
+                    </label>
+
+                    <label>Kwota (PLN)
+                        <input id="nc_amount" type="number" min="0" step="100" required placeholder="np. 25000">
+                    </label>
+
+                    <label>Status
+                        <select id="nc_status" required>
+                            <option value="nowa">nowa</option>
+                            <option value="analiza">analiza</option>
+                            <option value="w toku">w toku</option>
+                            <option value="success">success</option>
+                            <option value="przegrana">przegrana</option>
+                        </select>
+                    </label>
+
+                    <button type="submit">Zapisz sprawę</button>
+                    <div id="nc_msg" class="form-msg"></div>
+                </form>
+            </section>
+
+        </div>
+        <!-- === Layout 2-kolumnowy: END === -->
+        <!-- === MODAL: WPS / Status (krok 1/3) === -->
+        <div id="caseModal" class="modal" style="display:none;">
+            <div class="modal-backdrop"></div>
+            <div class="modal-card">
+                <div class="modal-header">
+                    <h3>Edytuj sprawę</h3>
+                    <button id="cmClose" aria-label="Zamknij">×</button>
+                </div>
+                <div class="modal-body">
+                    <div class="form-grid">
+                        <label>Klient
+                            <input id="cmClient" type="text" disabled>
+                        </label>
+                        <label>WPS (PLN)
+                            <input id="cmWps" type="number" min="0" step="100">
+                        </label>
+                        <label>Status
+                            <select id="cmStatus">
+                                <option>nowa</option>
+                                <option>analiza</option>
+                                <option>w toku</option>
+                                <option>success</option>
+                                <option>przegrana</option>
+                            </select>
+                        </label>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button id="cmSave">Zapisz</button>
+                </div>
+            </div>
+        </div>
+
+    </main>
+
+    <script src="/dashboard.js"></script>
 </body>
 
 </html>
