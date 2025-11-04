@@ -94,5 +94,29 @@ router.get("/:id", async (req, res) => {
         res.status(500).json({ error: "DETAILS_FAILED" });
     }
 });
+// === GET /api/cases/:id ===
+// Zwraca szczegóły pojedynczej sprawy
+app.get('/api/cases/:id', async (req, res) => {
+    const { id } = req.params;
+    try {
+        const q = await pool.query(
+            `SELECT id, client, loan_amount, status, wps, contract_date
+   FROM cases
+   WHERE id = $1`,
+            [id]
+        );
+
+
+        if (q.rows.length === 0) {
+            return res.status(404).json({ error: 'Case not found' });
+        }
+
+        res.json(q.rows[0]);
+    } catch (err) {
+        console.error('Error fetching case', err);
+        res.status(500).json({ error: 'Server error' });
+    }
+});
+
 
 export default router;

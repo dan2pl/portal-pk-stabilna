@@ -142,51 +142,65 @@ document.addEventListener('DOMContentLoaded', async () => {
         await fetchKPI(); // KPI na razie globalnie (bez filtra)
     });
 
+    // --- referencje modala (raz, globalnie) ---
+    const cmModal = document.getElementById('caseModal');
+    const cmClient = document.getElementById('cmClient');
+    const cmWps = document.getElementById('cmWps');
+    const cmStatus = document.getElementById('cmStatus');
+    const cmAmount = document.getElementById('cmAmount'); // ✅ tu
+    const cmDate = document.getElementById('cmDate');   // ✅ tu
+    if (cmAmount) cmAmount.setAttribute('step', 'any');
+
     bindKPI();
     await fetchKPI();
 
     // === Modal: otwieranie po kliknięciu w wiersz ===
     const tbodyEl = document.getElementById('caseTableBody');
     if (tbodyEl) {
-        tbodyEl.addEventListener('click', (e) => {
-            const tr = e.target.closest('tr');
+        tbodyEl.addEventListener('click', (ev) => {
+            const tr = ev.target.closest('tr');
             if (!tr) return;
 
             const caseId = tr.getAttribute('data-id') || '';
             if (!caseId) return;
 
-            const modalEl = document.getElementById('caseModal');
-            const cmClient = document.getElementById('cmClient');
-            const cmWps = document.getElementById('cmWps');
-            const cmStatus = document.getElementById('cmStatus');
+            const modalEl = cmModal; // użyj globalnej referencji
             if (!modalEl || !cmClient || !cmWps || !cmStatus) return;
 
-            // mini „loading” w polach
-            cmClient.value = 'Ładowanie…';
+            // mini "loading" / reset
+            cmClient.value = 'ładowanie…';
             cmWps.value = '';
             cmStatus.value = 'nowa';
+            if (cmAmount) cmAmount.value = '';
+            if (cmDate) cmDate.value = '';
 
             fetchJSON(`/api/cases/${encodeURIComponent(caseId)}`)
                 .then(d => {
-                    // uzupełnij pola z API
-                    cmClient.value = d.client || '';
-                    cmWps.value = (d.wps !== null && d.wps !== undefined && d.wps !== '')
-                        ? String(d.wps)
-                        : '';
+                    cmClient.value = d.client || ''; // zmiana z client_name
+                    cmWps.value = (d.wps ?? '') !== '' ? String(d.wps) : '';
                     cmStatus.value = d.status || 'nowa';
 
-                    // zapamiętaj ID w modalu
+                    if (cmAmount) cmAmount.value = d.loan_amount == null ? '' : String(Number(d.loan_amount));
+                    if (cmDate) {
+                        cmDate.removeAttribute('disabled'); // pozwól mu się wypełnić
+                        console.log('contract_date=', d.contract_date);
+                        cmDate.value = d.contract_date || '';
+                        cmDate.setAttribute('disabled', true); // z powrotem zablokuj
+                    }
+
+
+
                     modalEl.dataset.caseId = String(d.id || caseId);
-                    // pokaż modal
                     modalEl.style.display = 'block';
                 })
                 .catch(err => {
                     console.error('DETAILS ERROR', err);
                     alert('Nie udało się pobrać szczegółów sprawy.');
                 });
-
         });
     }
+
+
 
     // === Modal: zamykanie ===
     const cmCloseEl = document.getElementById('cmClose');
@@ -232,37 +246,62 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     if (cmSave && modalElSave) {
         cmSave.addEventListener('click', async () => {
-            console.log('cmSave click');
             const id = modalElSave.dataset.caseId || '';
-            if (!id) {
-                console.warn('Brak caseId w modalu');
-                return;
+            if (!id) { alert('Brak ID sprawy.'); return; }
+
+            // pobranie wartości z pól
+            const wpsRaw = document.getElementById('cmWps')?.value?.trim() ?? '';
+            const statusVal = document.getElementById('cmStatus')?.value ?? 'nowa';
+            const elAmount = document.getElementById('cmAmount');
+            const amountRaw = elAmount ? elAmount.value.trim() : '';
+
+            const dateRaw = document.getElementById('cmDate')?.value?.trim() ?? '';
+
+            // normalizacja liczb (usuń spacje, zamień przecinek na kropkę)
+            const normNum = (v) => {
+                if (v === '' || v == null) return null;
+                const n = Number(String(v).replace(/\s/g, '').replace(',', '.'));
+                return Number.isFinite(n) ? n : null;
+            };
+
+            const wpsNorm = normNum(wpsRaw);
+            const amountNorm = normNum(amountRaw);
+
+            // walidacja daty (YYYY-MM-DD) – jeśli pusta, traktuj jako null
+            let dateNorm = null;
+            if (dateRaw) {
+                if (!/^\d{4}-\d{2}-\d{2}$/.test(dateRaw)) {
+                    alert('Nieprawidłowy format daty. Użyj YYYY-MM-DD.');
+                    return;
+                }
+                dateNorm = dateRaw;
             }
 
-            const wpsRaw = document.getElementById('cmWps').value.trim();
-            const statusVal = document.getElementById('cmStatus').value;
-
-            // 🧮 normalizacja liczby: usuń spacje, zamień przecinek na kropkę
-            const wpsNorm =
-                wpsRaw && wpsRaw !== '—'
-                    ? Number(wpsRaw.replace(/\s/g, '').replace(',', '.'))
-                    : null;
+            // budujemy payload tylko z wartościami, które mamy
+            const payload = {
+                wps: wpsNorm,                // może być null → COALESCE po stronie backendu
+                status: statusVal || null,
+                loan_amount: amountNorm,     // NOWE
+                contract_date: dateNorm      // NOWE
+            };
 
             try {
                 await fetchJSON(`/api/cases/${encodeURIComponent(id)}`, {
                     method: 'PATCH',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ wps: wpsNorm, status: statusVal })
+                    body: JSON.stringify(payload)
                 });
 
+                // zamknij modal i odśwież widoki
                 modalElSave.style.display = 'none';
                 await loadCases();
                 await fetchKPI();
             } catch (e) {
                 console.error('SAVE ERROR', e);
-                alert('Nie udało się zapisać: ' + e.message);
+                alert('Nie udało się zapisać: ' + (e?.message || e));
             }
         });
+
     }
 
 
