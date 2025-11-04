@@ -152,11 +152,8 @@ document.addEventListener('DOMContentLoaded', async () => {
             const tr = e.target.closest('tr');
             if (!tr) return;
 
-            // wg kolejności kolumn: Klient | Kwota | WPS | Data zawarcia | Status
-            const cells = [...tr.querySelectorAll('td')].map(td => td.textContent.trim());
-            const [client, amount, wps, dateStr, status] = cells;
-
             const caseId = tr.getAttribute('data-id') || '';
+            if (!caseId) return;
 
             const modalEl = document.getElementById('caseModal');
             const cmClient = document.getElementById('cmClient');
@@ -164,12 +161,30 @@ document.addEventListener('DOMContentLoaded', async () => {
             const cmStatus = document.getElementById('cmStatus');
             if (!modalEl || !cmClient || !cmWps || !cmStatus) return;
 
-            cmClient.value = client || '';
-            cmWps.value = (wps && wps !== '—') ? String(wps).replace(/\s/g, '').replace(',', '.') : '';
-            cmStatus.value = status || 'nowa';
+            // mini „loading” w polach
+            cmClient.value = 'Ładowanie…';
+            cmWps.value = '';
+            cmStatus.value = 'nowa';
 
-            modalEl.dataset.caseId = caseId;
-            modalEl.style.display = 'block';
+            fetchJSON(`/api/cases/${encodeURIComponent(caseId)}`)
+                .then(d => {
+                    // uzupełnij pola z API
+                    cmClient.value = d.client || '';
+                    cmWps.value = (d.wps !== null && d.wps !== undefined && d.wps !== '')
+                        ? String(d.wps)
+                        : '';
+                    cmStatus.value = d.status || 'nowa';
+
+                    // zapamiętaj ID w modalu
+                    modalEl.dataset.caseId = String(d.id || caseId);
+                    // pokaż modal
+                    modalEl.style.display = 'block';
+                })
+                .catch(err => {
+                    console.error('DETAILS ERROR', err);
+                    alert('Nie udało się pobrać szczegółów sprawy.');
+                });
+
         });
     }
 
