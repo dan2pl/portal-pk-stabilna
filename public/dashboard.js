@@ -304,6 +304,11 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     }
 
+    // --- Wylogowanie ---
+    document.getElementById('logoutBtn')?.addEventListener('click', () => {
+        localStorage.removeItem('token');
+        window.location.href = '/login.html';
+    });
 
     console.log('init done');
 });

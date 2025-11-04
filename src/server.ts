@@ -1,38 +1,60 @@
-import casesRouter from "./routes/cases";
-import authRouter from "./routes/auth";
-import path from "path";
-import express from "express";
-import cors from "cors";
-import dotenv from "dotenv";
-import kpiRouter from './routes/kpi';
+// src/server.ts
+import express from 'express';
+import cors from 'cors';
+import path from 'path';
+import dotenv from 'dotenv';
+import jwt from 'jsonwebtoken';
+import pool from './db';
+
+// --- import tras ---
+import casesRoutes from './routes/cases';
 
 dotenv.config();
-
 const app = express();
+
+// --- middlewares ---
 app.use(cors());
 app.use(express.json());
-app.use(express.static(path.join(__dirname, "..", "public")));
-console.log("Static dir:", require("path").join(__dirname, "..", "public"));
+app.use(express.static(path.join(__dirname, '../public')));
 
-app.use("/api/auth", authRouter);
-app.use("/api/cases", casesRouter);
-app.use('/api', kpiRouter);
+// --- middleware JWT: chronimy wyłącznie /api/* poza /api/login ---
+app.use('/api', (req, res, next) => {
+    if (req.path === '/login') return next(); // /api/login bez tokena
 
+    const auth = req.headers.authorization;
+    if (!auth) return res.status(401).json({ error: 'Brak tokena' });
+
+    try {
+        const token = auth.split(' ')[1];
+        const payload = jwt.verify(token, process.env.JWT_SECRET || 'sekret') as {
+            id: number;
+            email: string;
+        };
+        // @ts-ignore
+        req.user = payload;
+        next();
+    } catch {
+        return res.status(401).json({ error: 'Nieprawidłowy token' });
+    }
+});
+
+
+// --- trasy główne ---
+casesRoutes(app);
+
+// --- login testowy ---
+app.post('/api/login', async (req, res) => {
+    const { email, password } = req.body;
+    if (email === 'admin@pk.pl' && password === '1234') {
+        const token = jwt.sign({ id: 1, email }, process.env.JWT_SECRET || 'sekret');
+        res.json({ token });
+    } else {
+        res.status(401).json({ error: 'Błędne dane logowania' });
+    }
+});
+
+// --- start serwera ---
 const PORT = process.env.PORT || 4000;
-
-app.get("/api/health", (_req, res) => {
-    res.json({ ok: true, message: "Server running on port " + PORT });
-});
-
 app.listen(PORT, () => {
-    console.log(`✅ Server running on http://localhost:${PORT}`);
+    console.log(`✅ Server listening on port ${PORT}`);
 });
-const PUBLIC_DIR = path.resolve(process.cwd(), "public");
-console.log("PUBLIC_DIR =", PUBLIC_DIR);
-
-app.get("/login.html", (_req, res) =>
-    res.sendFile(path.join(PUBLIC_DIR, "login.html"))
-);
-app.get("/dashboard.html", (_req, res) =>
-    res.sendFile(path.join(PUBLIC_DIR, "dashboard.html"))
-);

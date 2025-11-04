@@ -259,141 +259,154 @@
             background: #111827;
             color: #fff;
         }
+
+        #logoutBtn:hover {
+            background: #c0002a;
+        }
     </style>
 </head>
 
 <body>
     <header>Dashboard — Pokonaj Kredyt</header>
 
-    <div id="filterBar" style="display:flex;gap:8px;align-items:center;margin:8px 0 12px">
-        <label>Status:</label>
-        <select id="flt_status">
-            <option value="">— wszystkie —</option>
-            <option>nowa</option>
-            <option>analiza</option>
-            <option>w toku</option>
-            <option>success</option>
-            <option>przegrana</option>
-        </select>
-        <button id="flt_refresh">Odśwież</button>
-    </div>
-
-    <main>
-        <!-- === KPI: START === -->
-        <section id="kpiBar" class="kpi-bar">
-            <div class="kpi-card">
-                <div class="kpi-label">Wszystkie sprawy</div>
-                <div class="kpi-value" id="kpiAll">–</div>
-            </div>
-            <div class="kpi-card">
-                <div class="kpi-label">W toku</div>
-                <div class="kpi-value" id="kpiOpen">–</div>
-            </div>
-            <div class="kpi-card">
-                <div class="kpi-label">Sukcesy</div>
-                <div class="kpi-value" id="kpiSuccess">–</div>
-            </div>
-            <div class="kpi-card">
-                <div class="kpi-label">Przegrane</div>
-                <div class="kpi-value" id="kpiLost">–</div>
-            </div>
-            <div class="kpi-card">
-                <div class="kpi-label">Nowe (miesiąc)</div>
-                <div class="kpi-value" id="kpiThisMonth">–</div>
-            </div>
-            <button id="kpiRefresh" class="kpi-refresh" title="Odśwież KPI">Odśwież</button>
-        </section>
-        <!-- === KPI: END === -->
-
-        <!-- === Layout 2-kolumnowy: START === -->
-        <div class="layout">
-            <aside class="col-left">
-                <!-- === Tabela spraw (bez zmian ID) === -->
-                <table id="caseTable">
-                    <thead>
-                        <tr>
-                            <th>Klient</th>
-                            <th>Kwota kredytu</th>
-                            <th>WPS</th>
-                            <th>Data zawarcia</th>
-                            <th>Status</th>
-                        </tr>
-                    </thead>
-
-                    <tbody id="caseTableBody">
-                        <!-- tu JS wstrzyknie wiersze -->
-                    </tbody>
-                </table>
-            </aside>
-
-            <section class="col-right">
-                <h2 style="margin:0 0 12px 0;">Dodaj nową sprawę</h2>
-
-                <form id="newCaseForm" class="form-grid">
-                    <label>Klient
-                        <input id="nc_client" type="text" required placeholder="np. Jan Kowalski">
-                    </label>
-
-                    <label>Kwota (PLN)
-                        <input id="nc_amount" type="number" min="0" step="100" required placeholder="np. 25000">
-                    </label>
-
-                    <label>Status
-                        <select id="nc_status" required>
-                            <option value="nowa">nowa</option>
-                            <option value="analiza">analiza</option>
-                            <option value="w toku">w toku</option>
-                            <option value="success">success</option>
-                            <option value="przegrana">przegrana</option>
-                        </select>
-                    </label>
-
-                    <button type="submit">Zapisz sprawę</button>
-                    <div id="nc_msg" class="form-msg"></div>
-                </form>
-            </section>
-
+    <body>
+        <header
+            style="display:flex;justify-content:space-between;align-items:center;padding:10px 20px;background:#f6f6f6;">
+            <h1>Portal PK – Dashboard</h1>
+            <button id="logoutBtn"
+                style="padding:6px 12px;border:none;border-radius:6px;background:#a20021;color:#fff;cursor:pointer;">
+                🚪 Wyloguj
+            </button>
+        </header>
+        <div id="filterBar" style="display:flex;gap:8px;align-items:center;margin:8px 0 12px">
+            <label>Status:</label>
+            <select id="flt_status">
+                <option value="">— wszystkie —</option>
+                <option>nowa</option>
+                <option>analiza</option>
+                <option>w toku</option>
+                <option>success</option>
+                <option>przegrana</option>
+            </select>
+            <button id="flt_refresh">Odśwież</button>
         </div>
-        <!-- === Layout 2-kolumnowy: END === -->
-        <!-- === MODAL: WPS / Status (krok 1/3) === -->
-        <div id="caseModal" class="modal" style="display:none;">
-            <div class="modal-backdrop"></div>
-            <div class="modal-card">
-                <div class="modal-header">
-                    <h3>Edytuj sprawę</h3>
-                    <button id="cmClose" aria-label="Zamknij">×</button>
+
+        <main>
+            <!-- === KPI: START === -->
+            <section id="kpiBar" class="kpi-bar">
+                <div class="kpi-card">
+                    <div class="kpi-label">Wszystkie sprawy</div>
+                    <div class="kpi-value" id="kpiAll">–</div>
                 </div>
-                <div class="modal-body">
-                    <div class="form-grid">
+                <div class="kpi-card">
+                    <div class="kpi-label">W toku</div>
+                    <div class="kpi-value" id="kpiOpen">–</div>
+                </div>
+                <div class="kpi-card">
+                    <div class="kpi-label">Sukcesy</div>
+                    <div class="kpi-value" id="kpiSuccess">–</div>
+                </div>
+                <div class="kpi-card">
+                    <div class="kpi-label">Przegrane</div>
+                    <div class="kpi-value" id="kpiLost">–</div>
+                </div>
+                <div class="kpi-card">
+                    <div class="kpi-label">Nowe (miesiąc)</div>
+                    <div class="kpi-value" id="kpiThisMonth">–</div>
+                </div>
+                <button id="kpiRefresh" class="kpi-refresh" title="Odśwież KPI">Odśwież</button>
+            </section>
+            <!-- === KPI: END === -->
+
+            <!-- === Layout 2-kolumnowy: START === -->
+            <div class="layout">
+                <aside class="col-left">
+                    <!-- === Tabela spraw (bez zmian ID) === -->
+                    <table id="caseTable">
+                        <thead>
+                            <tr>
+                                <th>Klient</th>
+                                <th>Kwota kredytu</th>
+                                <th>WPS</th>
+                                <th>Data zawarcia</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+
+                        <tbody id="caseTableBody">
+                            <!-- tu JS wstrzyknie wiersze -->
+                        </tbody>
+                    </table>
+                </aside>
+
+                <section class="col-right">
+                    <h2 style="margin:0 0 12px 0;">Dodaj nową sprawę</h2>
+
+                    <form id="newCaseForm" class="form-grid">
                         <label>Klient
-                            <input id="cmClient" type="text" disabled>
+                            <input id="nc_client" type="text" required placeholder="np. Jan Kowalski">
                         </label>
 
-
-
-                        <label>WPS (PLN)
-                            <input id="cmWps" type="number" min="0" step="100">
+                        <label>Kwota (PLN)
+                            <input id="nc_amount" type="number" min="0" step="100" required placeholder="np. 25000">
                         </label>
+
                         <label>Status
-                            <select id="cmStatus">
-                                <option>nowa</option>
-                                <option>analiza</option>
-                                <option>w toku</option>
-                                <option>success</option>
-                                <option>przegrana</option>
+                            <select id="nc_status" required>
+                                <option value="nowa">nowa</option>
+                                <option value="analiza">analiza</option>
+                                <option value="w toku">w toku</option>
+                                <option value="success">success</option>
+                                <option value="przegrana">przegrana</option>
                             </select>
                         </label>
+
+                        <button type="submit">Zapisz sprawę</button>
+                        <div id="nc_msg" class="form-msg"></div>
+                    </form>
+                </section>
+
+            </div>
+            <!-- === Layout 2-kolumnowy: END === -->
+            <!-- === MODAL: WPS / Status (krok 1/3) === -->
+            <div id="caseModal" class="modal" style="display:none;">
+                <div class="modal-backdrop"></div>
+                <div class="modal-card">
+                    <div class="modal-header">
+                        <h3>Edytuj sprawę</h3>
+                        <button id="cmClose" aria-label="Zamknij">×</button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="form-grid">
+                            <label>Klient
+                                <input id="cmClient" type="text" disabled>
+                            </label>
+
+
+
+                            <label>WPS (PLN)
+                                <input id="cmWps" type="number" min="0" step="100">
+                            </label>
+                            <label>Status
+                                <select id="cmStatus">
+                                    <option>nowa</option>
+                                    <option>analiza</option>
+                                    <option>w toku</option>
+                                    <option>success</option>
+                                    <option>przegrana</option>
+                                </select>
+                            </label>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button id="cmSave">Zapisz</button>
                     </div>
                 </div>
-                <div class="modal-footer">
-                    <button id="cmSave">Zapisz</button>
-                </div>
             </div>
-        </div>
 
-    </main>
+        </main>
 
-    <script src="/dashboard.js"></script>
-</body>
+        <script src="/dashboard.js"></script>
+    </body>
 
 </html>
