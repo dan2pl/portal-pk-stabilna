@@ -10,6 +10,8 @@ console.log('dashboard.js loaded');
 document.addEventListener('DOMContentLoaded', async () => {
     console.log('DOMContentLoaded start');
 
+    let lastItems = [];
+
     // --- auth check ---
     const token = localStorage.getItem('pk_token');
     if (!token) {
@@ -42,6 +44,36 @@ document.addEventListener('DOMContentLoaded', async () => {
             location.href = '/login.html';
         };
     }
+    // --- lista banków + helper do wypełniania selecta ---
+    const BANKS = [
+        "Alior Bank",
+        "Bank Millennium",
+        "Bank Pekao",
+        "Bank Pocztowy",
+        "BNP Paribas",
+        "BOŚ Bank",
+        "Citi Handlowy",
+        "Credit Agricole",
+        "Getin Bank",
+        "ING Bank Śląski",
+        "mBank",
+        "PKO BP",
+        "Santander Bank Polska",
+        "Santander Consumer",
+        "SKOK",
+        "Smartney",
+        "VeloBank",
+        "Bank Spółdzielczy"
+    ];
+
+    function fillBankSelect(sel, current) {
+        if (!sel) return;
+        sel.innerHTML =
+            '<option value="">— wybierz —</option>' +
+            BANKS.map(b => `<option value="${b}">${b}</option>`).join('');
+        if (current) sel.val
+        ue = current;
+    }
 
     // --- optional: health (jeśli #out istnieje) ---
     const outData = document.getElementById('out');
@@ -58,6 +90,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     // === KPI ===
+
+
     async function fetchKPI() {
         console.log('fetchKPI() start');
         const data = await fetchJSON('/api/kpi');
@@ -68,10 +102,70 @@ document.addEventListener('DOMContentLoaded', async () => {
         (document.getElementById('kpiThisMonth') || {}).textContent = Number(data.thisMonth ?? 0);
         console.log('KPI fetched');
     }
+
     function bindKPI() {
         const btn = document.getElementById('kpiRefresh');
         if (btn) btn.addEventListener('click', fetchKPI);
     }
+    // ===== KPI (All/Open/Success/Lost) =====
+    // —— dokładne mapowanie KPI ——
+    // UWAGA: „nowa” NIE liczy się do „W toku”
+    function normStatus(s) {
+        const x = String(s || "").trim().toLowerCase();
+
+        // tylko realne "w toku"
+        if (x === "w toku" || x === "in_progress" || x === "open" || x === "otwarta")
+            return "in_progress";
+
+        // sukcesy / zakończone pozytywnie
+        if (x === "sukces" || x === "wygrana" || x === "zakończona" ||
+            x === "closed" || x === "done" || x === "finished" || x === "success")
+            return "success";
+
+        // przegrane / odrzucone
+        if (x === "przegrana" || x === "odrzucona" || x === "lost" ||
+            x === "rejected" || x === "zamknięta bez sukcesu")
+            return "lost";
+
+        // nowe sprawy traktujemy osobno (NIE wliczamy do „W toku”)
+        if (x === "nowa" || x === "nowy" || x === "new") return "new";
+
+        return "other";
+    }
+
+    function computeKpis(items) {
+        const list = Array.isArray(items) ? items : [];
+        const total = list.length;
+        let open = 0, success = 0, lost = 0;
+
+        for (const c of list) {
+            const st = normStatus(c.status || c.case_status);
+            if (st === "in_progress") open++;
+            else if (st === "success") success++;
+            else if (st === "lost") lost++;
+            // „new” i „other” nie zwiększają żadnego z trzech liczników
+        }
+        return { total, open, success, lost };
+    }
+
+
+    function renderKpis(k) {
+        const set = (id, val) => {
+            const el = document.getElementById(id);
+            if (!el) return;
+            // czyścimy placeholdery i wpisujemy liczby
+            el.textContent = "";
+            el.innerText = String(val);
+        };
+        set("kpiAll", k.total);
+        set("kpiOpen", k.open);
+        set("kpiSuccess", k.success);
+        set("kpiLost", k.lost);
+    }
+    // ===== /KPI =====
+
+
+
 
     // === LISTA SPRAW ===
     async function loadCases(status = '') {
@@ -87,6 +181,25 @@ document.addEventListener('DOMContentLoaded', async () => {
         } catch (e) {
             tBody.innerHTML = `<tr><td colspan="5">Błąd /api/cases: ${e.message}</td></tr>`;
             return;
+        }
+        async function loadCases() {
+            // ... Twój fetch:
+            const d = await fetchJSON('/api/cases?...');    // albo jakkolwiek to masz
+
+            // ... tu renderujesz tabelę z d.items ...
+
+            // --- KPI z tych samych danych co tabela ---
+            try {
+                console.log('🔸 items for KPI', items);
+                const k = computeKpis(items);
+                console.log('✅ KPI recalculated:', k);
+                renderKpis(k);
+                console.log('📊 renderKpis called');
+            } catch (e) {
+                console.warn('KPI compute error:', e);
+            }
+
+
         }
 
         const statusNorm = String(status || '').toLowerCase();
@@ -115,6 +228,19 @@ document.addEventListener('DOMContentLoaded', async () => {
             const dObj = new Date(norm);
             const dateStr = isNaN(dObj) ? '—' : dObj.toLocaleDateString('pl-PL');
             const statusStr = String(c.status || '—');
+            // --- KPI: licz z dokładnie tych samych danych co tabela ---
+            try {
+                const items = Array.isArray(d?.items) ? d.items : (Array.isArray(d) ? d : []);
+                lastItems = items;
+
+                const k = computeKpis(items);
+                requestAnimationFrame(() => {
+                    renderKpis(k);
+                    console.log("✅ KPI recalculated & rendered:", k);
+                });
+            } catch (e) {
+                console.warn("KPI compute/render error:", e);
+            }
 
             return `
 <tr data-id="${c.id ?? ''}">
@@ -139,7 +265,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     const btn = document.getElementById('flt_refresh');
     if (btn && sel) btn.addEventListener('click', async () => {
         await loadCases(sel.value || '');
-        await fetchKPI(); // KPI na razie globalnie (bez filtra)
+        /*await fetchKPI(); // KPI na razie globalnie (bez filtra)*/
     });
 
     // --- referencje modala (raz, globalnie) ---
@@ -150,9 +276,65 @@ document.addEventListener('DOMContentLoaded', async () => {
     const cmAmount = document.getElementById('cmAmount'); // ✅ tu
     const cmDate = document.getElementById('cmDate');   // ✅ tu
     if (cmAmount) cmAmount.setAttribute('step', 'any');
+    const addBank = document.getElementById('addBank'); // z formularza „Dodaj nową sprawę”
+    const cmBank = document.getElementById('cmBank');  // z modala
 
-    bindKPI();
-    await fetchKPI();
+    fillBankSelect(addBank, "");
+    fillBankSelect(cmBank, "");
+
+    // === Dodawanie nowej sprawy ===
+    const addBtn = document.getElementById('addCaseBtn');
+    const addClientEl = document.getElementById('addClient');
+    const addAmountEl = document.getElementById('addAmount');
+    const addBankEl = document.getElementById('addBank');
+
+    addBtn?.addEventListener('click', async (e) => {
+        e.preventDefault();
+
+        const client = addClientEl?.value?.trim() || '';
+        const amountRaw = (addAmountEl?.value || '').replace(',', '.');
+        const amount = parseFloat(amountRaw);
+        const bank = addBankEl?.value || '';
+
+        if (!client) return alert('Podaj klienta');
+        if (Number.isNaN(amount)) return alert('Podaj poprawną kwotę');
+
+        const payload = {
+            client,
+            loan_amount: amount,
+            status: 'nowa',
+            bank: bank || null
+        };
+
+        console.log('POST /api/cases payload =', payload);
+
+        try {
+            await fetchJSON('/api/cases', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+
+            // wyczyść formularz
+            addClientEl.value = '';
+            addAmountEl.value = '';
+            addBankEl.value = '';
+
+            // pokaż wszystkie sprawy i odśwież tabelę
+            const flt = document.getElementById('flt_status');
+            if (flt) flt.value = '';
+            await loadCases?.('');
+
+        } catch (err) {
+            console.error('Add case error:', err);
+            alert('Nie udało się dodać sprawy: ' + (err?.message || ''));
+        }
+    });
+
+
+    /*bindKPI();*/
+    //await fetchKPI();//
+
 
     // === Modal: otwieranie po kliknięciu w wiersz ===
     const tbodyEl = document.getElementById('caseTableBody');
@@ -188,6 +370,26 @@ document.addEventListener('DOMContentLoaded', async () => {
                         cmDate.setAttribute('disabled', true); // z powrotem zablokuj
                     }
 
+                    // --- BANK w modalu: ustaw wartość z rekordu ---
+                    if (cmBank) {
+                        const val = d.bank || "";
+
+                        // jeśli select nie był jeszcze wypełniony → wypełnij i od razu wybierz wartość
+                        if (!cmBank.options.length) {
+                            fillBankSelect(cmBank, val);
+                        } else {
+                            // jeśli tego banku nie ma na liście (np. stara nazwa) → dodaj tymczasowo
+                            if (val && ![...cmBank.options].some(o => o.value === val)) {
+                                const opt = document.createElement('option');
+                                opt.value = val;
+                                opt.textContent = val;
+                                cmBank.appendChild(opt);
+                            }
+                            cmBank.value = val;
+                        }
+
+                        console.log('🧾 modal: ustawiam bank =', val);
+                    }
 
 
                     modalEl.dataset.caseId = String(d.id || caseId);
@@ -233,7 +435,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 form.reset();
                 if (msg) msg.textContent = 'Dodano ✔︎';
                 await loadCases();
-                await fetchKPI();
+                /*await fetchKPI();*/
                 if (msg) setTimeout(() => (msg.textContent = ''), 1200);
             } catch (err) {
                 if (msg) msg.textContent = 'Błąd: ' + err.message;
@@ -284,6 +486,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 loan_amount: amountNorm,     // NOWE
                 contract_date: dateNorm      // NOWE
             };
+            if (cmBank) payload.bank = cmBank.value || null;
 
             try {
                 await fetchJSON(`/api/cases/${encodeURIComponent(id)}`, {
@@ -295,7 +498,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 // zamknij modal i odśwież widoki
                 modalElSave.style.display = 'none';
                 await loadCases();
-                await fetchKPI();
+                /*await fetchKPI();*/
             } catch (e) {
                 console.error('SAVE ERROR', e);
                 alert('Nie udało się zapisać: ' + (e?.message || e));

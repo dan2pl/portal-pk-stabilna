@@ -6,6 +6,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Dashboard — Portal PK</title>
+    <link rel="stylesheet" href="style.css">
     <link rel="stylesheet" href="/style.css" />
     <style>
         body {
@@ -281,13 +282,13 @@
         <div id="filterBar" style="display:flex;gap:8px;align-items:center;margin:8px 0 12px">
             <label>Status:</label>
             <select id="flt_status">
-                <option value="">— wszystkie —</option>
-                <option>nowa</option>
-                <option>analiza</option>
-                <option>w toku</option>
-                <option>success</option>
-                <option>przegrana</option>
+                <option value="">wszystkie</option>
+                <option value="new">Nowe</option>
+                <option value="in_progress">W toku</option>
+                <option value="positive">Analiza pozytywna</option>
+                <option value="rejected">Odrzucone</option>
             </select>
+
             <button id="flt_refresh">Odśwież</button>
         </div>
 
@@ -299,23 +300,23 @@
                     <div class="kpi-value" id="kpiAll">–</div>
                 </div>
                 <div class="kpi-card">
+                    <div class="kpi-label">Nowe</div>
+                    <div class="kpi-value" id="kpiNew">–</div>
+                </div>
+                <div class="kpi-card">
+                    <div class="kpi-label">Analiza pozytywna</div>
+                    <div class="kpi-value" id="kpiPositive">–</div>
+                </div>
+                <div class="kpi-card">
                     <div class="kpi-label">W toku</div>
-                    <div class="kpi-value" id="kpiOpen">–</div>
+                    <div class="kpi-value" id="kpiInProgress">–</div>
                 </div>
                 <div class="kpi-card">
-                    <div class="kpi-label">Sukcesy</div>
-                    <div class="kpi-value" id="kpiSuccess">–</div>
+                    <div class="kpi-label">Odrzucone</div>
+                    <div class="kpi-value" id="kpiRejected">–</div>
                 </div>
-                <div class="kpi-card">
-                    <div class="kpi-label">Przegrane</div>
-                    <div class="kpi-value" id="kpiLost">–</div>
-                </div>
-                <div class="kpi-card">
-                    <div class="kpi-label">Nowe (miesiąc)</div>
-                    <div class="kpi-value" id="kpiThisMonth">–</div>
-                </div>
-                <button id="kpiRefresh" class="kpi-refresh" title="Odśwież KPI">Odśwież</button>
             </section>
+
             <!-- === KPI: END === -->
 
             <!-- === Layout 2-kolumnowy: START === -->
@@ -340,31 +341,36 @@
                 </aside>
 
                 <section class="col-right">
-                    <h2 style="margin:0 0 12px 0;">Dodaj nową sprawę</h2>
+                    <div class="card form-card">
+                        <h3 class="card-title">Dodaj nową sprawę</h3>
 
-                    <form id="newCaseForm" class="form-grid">
-                        <label>Klient
-                            <input id="nc_client" type="text" required placeholder="np. Jan Kowalski">
-                        </label>
+                        <div class="form-grid">
+                            <div class="field">
+                                <label for="addClient"><span>Klient</span></label>
+                                <input id="addClient" type="text" placeholder="np. Jan Kowalski">
+                            </div>
 
-                        <label>Kwota (PLN)
-                            <input id="nc_amount" type="number" min="0" step="100" required placeholder="np. 25000">
-                        </label>
+                            <div class="field">
+                                <label for="addAmount"><span>Kwota (PLN)</span></label>
+                                <input id="addAmount" type="number" min="0" step="0.01" placeholder="np. 25 000">
+                            </div>
 
-                        <label>Status
-                            <select id="nc_status" required>
-                                <option value="nowa">nowa</option>
-                                <option value="analiza">analiza</option>
-                                <option value="w toku">w toku</option>
-                                <option value="success">success</option>
-                                <option value="przegrana">przegrana</option>
-                            </select>
-                        </label>
+                            <div class="field">
+                                <label for="addBank"><span>Bank</span></label>
+                                <select id="addBank"></select>
+                            </div>
+                        </div>
 
-                        <button type="submit">Zapisz sprawę</button>
-                        <div id="nc_msg" class="form-msg"></div>
-                    </form>
+                        <input id="addStatus" type="hidden" value="nowa">
+
+                        <div class="form-actions">
+                            <button id="addCaseBtn" class="btn btn-primary" type="button">Zapisz sprawę</button>
+
+                        </div>
+                    </div>
                 </section>
+
+
 
             </div>
             <!-- === Layout 2-kolumnowy: END === -->
@@ -381,7 +387,38 @@
                             <label>Klient
                                 <input id="cmClient" type="text" disabled>
                             </label>
+                            <!-- MODAL: Bank -->
+                            <div class="cm-row" style="display:flex; gap:12px; flex-wrap:wrap; margin-top:10px;">
+                                <label style="display:flex; flex-direction:column; gap:6px; min-width:220px;">
+                                    <span>Bank</span>
+                                    <select id="cmBank"></select>
+                                </label>
+                            </div>
 
+                            <!-- Sekcja: Finanse / Metadane -->
+                            <div class="cm-section"
+                                style="margin-top:12px; padding-top:12px; border-top:1px solid #eee;">
+                                <h4 style="margin:0 0 8px 0; font-weight:600;">Finanse</h4>
+
+                                <div style="display:flex; gap:12px; flex-wrap:wrap;">
+                                    <label style="display:flex; flex-direction:column; gap:6px; min-width:220px;">
+                                        <span>Kwota kredytu</span>
+                                        <input id="cmLoanAmount" type="number" step="0.01" min="0"
+                                            placeholder="np. 25000.00" />
+                                    </label>
+
+                                    <label style="display:flex; flex-direction:column; gap:6px; min-width:220px;">
+                                        <span>Data zawarcia umowy</span>
+                                        <input id="cmContractDate" type="date" />
+                                    </label>
+                                </div>
+
+                                <div style="display:flex; align-items:center; gap:10px; margin-top:10px;">
+                                    <button id="cmMetaSave" class="btn btn-primary">Zapisz</button>
+                                    <span id="cmMetaSaved" style="display:none; color:green; font-weight:600;">✓
+                                        Zapisano</span>
+                                </div>
+                            </div>
 
 
                             <label>WPS (PLN)
