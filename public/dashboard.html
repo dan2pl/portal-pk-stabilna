@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="pl">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Portal PK — Dashboard</title>
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="/style.css" />
+  </head>
+  <body>
+    <header class="site-header">
+      <div class="wrap">
+        <h1>Portal PK – Dashboard</h1>
+        <button id="logoutBtn">🚪 Wyloguj</button>
+      </div>
+    </header>
+
+    <main>
+      <div
+        id="filterBar"
+        style="display: flex; gap: 8px; align-items: center; margin: 8px 0 12px"
+      >
+        <label>Status:</label>
+        <select id="flt_status">
+          <option value="">wszystkie</option>
+          <option value="new">Nowe</option>
+          <option value="in_progress">W toku</option>
+          <option value="success">Analiza pozytywna</option>
+          <option value="lost">Odrzucone</option>
+        </select>
+        <button id="flt_refresh">Odśwież</button>
+      </div>
+
+      <!-- KPI -->
+      <section id="kpiBar" class="kpi-bar">
+        <div class="kpi-card" data-status="">
+          <!-- Wszystkie -->
+          <div class="kpi-label">Wszystkie sprawy</div>
+          <div class="kpi-value" id="kpiAll">–</div>
+        </div>
+        <div class="kpi-card" data-status="new">
+          <!-- Nowe -->
+          <div class="kpi-label">Nowe</div>
+          <div class="kpi-value" id="kpiNew">–</div>
+        </div>
+        <div class="kpi-card" data-status="success">
+          <!-- Analiza pozytywna -->
+          <div class="kpi-label">Analiza pozytywna</div>
+          <div class="kpi-value" id="kpiPositive">–</div>
+        </div>
+        <div class="kpi-card" data-status="in_progress">
+          <!-- W toku -->
+          <div class="kpi-label">W toku</div>
+          <div class="kpi-value" id="kpiInProgress">–</div>
+        </div>
+        <div class="kpi-card" data-status="lost">
+          <!-- Odrzucone -->
+          <div class="kpi-label">Odrzucone</div>
+          <div class="kpi-value" id="kpiRejected">–</div>
+        </div>
+      </section>
+
+      <section id="kpiWpsBar" class="kpi-bar" style="margin-top: 12px">
+        <div class="kpi-card">
+          <div class="kpi-label">Suma WPS (wszystkie) (PLN)</div>
+          <div class="kpi-value" id="kpiWpsTotal">–</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-label">Suma WPS (w toku) (PLN)</div>
+          <div class="kpi-value" id="kpiWpsInProgress">–</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-label">Śr. WPS na sprawę (w toku) (PLN)</div>
+          <div class="kpi-value" id="kpiWpsAvgInProgress">–</div>
+        </div>
+      </section>
+
+      <!-- Layout 2 kolumny -->
+      <div class="layout">
+        <aside class="col-left">
+          <table id="caseTable">
+            <thead>
+              <tr>
+                <th>Klient</th>
+                <th>Bank</th>
+                <th>Kwota kredytu</th>
+                <th>WPS</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody id="caseTableBody"></tbody>
+          </table>
+        </aside>
+
+        <section class="col-right">
+          <div class="card form-card">
+            <h3 class="card-title">Dodaj nową sprawę</h3>
+            <div class="form-grid">
+              <div class="field">
+                <label for="addClient"><span>Klient</span></label>
+                <input
+                  id="addClient"
+                  type="text"
+                  placeholder="np. Jan Kowalski"
+                />
+              </div>
+              <div class="field">
+                <label for="addAmount"><span>Kwota (PLN)</span></label>
+                <input
+                  id="addAmount"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  placeholder="np. 25 000"
+                />
+              </div>
+              <div class="field">
+                <label for="addBank"><span>Bank</span></label>
+                <select id="addBank"></select>
+              </div>
+            </div>
+            <input id="addStatus" type="hidden" value="nowa" />
+            <div class="form-actions">
+              <button id="addCaseBtn" type="button">Zapisz sprawę</button>
+            </div>
+          </div>
+        </section>
+      </div>
+
+      <!-- === MODAL: Edycja sprawy (estetyczny) === -->
+      <div
+        id="caseModal"
+        class="modal modal-modern"
+        style="display: none"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="cmTitle"
+      >
+        <div class="modal-backdrop"></div>
+        <div class="modal-card modal-sheet">
+          <div class="modal-header">
+            <div class="title">
+              <span>Sprawa:</span>
+              <span id="cmClient">—</span>
+              <span id="cmStatusBadge" class="badge">—</span>
+            </div>
+            <div style="display: flex; gap: 8px; align-items: center">
+              <button id="cmClose" aria-label="Zamknij" class="btn">×</button>
+            </div>
+          </div>
+
+          <div class="modal-tabs">
+            <div class="tab active" data-tab="info">Podsumowanie</div>
+            <div class="tab" data-tab="edit">Edycja</div>
+            <div class="tab" data-tab="offers">Produkty/Usługi</div>
+          </div>
+
+          <div class="modal-body">
+            <!-- INFO -->
+            <div class="tabpanel active" data-panel="info">
+              <div class="grid">
+                <div class="section">
+                  <div class="kv">
+                    <div class="item">
+                      <div class="lbl">Klient</div>
+                      <div class="val" id="cmInfoClient">—</div>
+                    </div>
+                    <div class="item">
+                      <div class="lbl">Bank</div>
+                      <div class="val" id="cmInfoBank">—</div>
+                    </div>
+                    <div class="item">
+                      <div class="lbl">Kwota kredytu</div>
+                      <div class="val" id="cmInfoAmount">—</div>
+                    </div>
+                    <div class="item">
+                      <div class="lbl">WPS</div>
+                      <div class="val" id="cmInfoWps">—</div>
+                    </div>
+                    <div class="item">
+                      <div class="lbl">Status</div>
+                      <div class="val" id="cmInfoStatus">—</div>
+                    </div>
+                    <div class="item">
+                      <div class="lbl">Data zawarcia</div>
+                      <div class="val" id="cmInfoDate">—</div>
+                    </div>
+                  </div>
+                </div>
+                <div class="section">
+                  <div style="font-weight: 700; margin-bottom: 8px">
+                    Dane kontaktowe
+                  </div>
+                  <div class="kv">
+                    <div class="item">
+                      <div class="lbl">Telefon</div>
+                      <div class="val" id="cmInfoPhone">—</div>
+                    </div>
+                    <div class="item">
+                      <div class="lbl">E-mail</div>
+                      <div class="val" id="cmInfoEmail">—</div>
+                    </div>
+                    <div class="item" style="grid-column: 1/-1">
+                      <div class="lbl">Adres</div>
+                      <div class="val" id="cmInfoAddress">—</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div style="margin-top: 10px; display: flex; gap: 8px">
+                <a class="btn" href="#" id="openFullCase"
+                  >🔎 Otwórz pełny widok</a
+                >
+              </div>
+            </div>
+
+            <!-- EDIT -->
+            <div class="tabpanel" data-panel="edit">
+              <div class="grid">
+                <div class="section">
+                  <div class="kv">
+                    <div class="item">
+                      <div class="lbl">WPS (PLN)</div>
+                      <input
+                        id="cmWps"
+                        type="number"
+                        step="100"
+                        min="0"
+                        style="
+                          width: 100%;
+                          padding: 10px;
+                          border: 1px solid #e5e7eb;
+                          border-radius: 10px;
+                        "
+                      />
+                    </div>
+                    <div class="item">
+                      <div class="lbl">Status</div>
+                      <select
+                        id="cmStatus"
+                        style="
+                          width: 100%;
+                          padding: 10px;
+                          border: 1px solid #e5e7eb;
+                          border-radius: 10px;
+                        "
+                      >
+                        <option>nowa</option>
+                        <option>analiza</option>
+                        <option>w toku</option>
+                        <option>success</option>
+                        <option>przegrana</option>
+                      </select>
+                    </div>
+                    <div class="item">
+                      <div class="lbl">Kwota kredytu</div>
+                      <input
+                        id="cmAmount"
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        style="
+                          width: 100%;
+                          padding: 10px;
+                          border: 1px solid #e5e7eb;
+                          border-radius: 10px;
+                        "
+                      />
+                    </div>
+                    <div class="item">
+                      <div class="lbl">Bank</div>
+                      <select
+                        id="cmBank"
+                        style="
+                          width: 100%;
+                          padding: 10px;
+                          border: 1px solid #e5e7eb;
+                          border-radius: 10px;
+                        "
+                      ></select>
+                    </div>
+                    <div class="item">
+                      <div class="lbl">Data zawarcia</div>
+                      <input
+                        id="cmDate"
+                        type="date"
+                        style="
+                          width: 100%;
+                          padding: 10px;
+                          border: 1px solid #e5e7eb;
+                          border-radius: 10px;
+                        "
+                      />
+                    </div>
+                  </div>
+                </div>
+                <div class="section">
+                  <div style="font-weight: 700; margin-bottom: 8px">Akcje</div>
+                  <button id="cmSave" class="btn btn-primary">💾 Zapisz</button>
+                </div>
+              </div>
+            </div>
+
+            <!-- OFFERS -->
+            <div class="tabpanel" data-panel="offers">
+              <div class="offers" id="cmOffers">Ładowanie propozycji…</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Diagnostics overlay -->
+      <div id="diagnostics"></div>
+    </main>
+
+    <script src="/dashboard.js"></script>
+  </body>
+</html>

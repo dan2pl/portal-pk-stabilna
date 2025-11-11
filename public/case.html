@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="pl">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Szczegóły sprawy — Portal PK</title>
+    <link rel="stylesheet" href="/style.css" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+  </head>
+  <body class="case-view">
+    <header class="site-header">
+      <div class="wrap">
+        <button
+          onclick="window.location.href='/dashboard.html'"
+          class="btn btn-light"
+        >
+          ← Lista spraw
+        </button>
+        <h1 id="caseTitle">Sprawa</h1>
+        <div id="caseStatusBadge" class="badge">—</div>
+      </div>
+    </header>
+
+    <main class="case-layout">
+      <!-- LEWA KOLUMNA -->
+      <section class="col-left">
+        <div class="card summary-card">
+          <h3>Podsumowanie sprawy</h3>
+          <div class="summary-row">
+            <div>WPS:</div>
+            <div id="wpsValue">—</div>
+          </div>
+          <div class="summary-row">
+            <div>Kwota kredytu:</div>
+            <div id="loanAmountValue">—</div>
+          </div>
+          <div class="summary-row">
+            <div>Bank:</div>
+            <div id="bankValue">—</div>
+          </div>
+          <div class="summary-row">
+            <div>Data zawarcia:</div>
+            <div id="contractDateValue">—</div>
+          </div>
+        </div>
+
+        <div class="card notes-card">
+          <div class="card-header">
+            <h3>Notatki i aktywności</h3>
+            <div style="display: flex; gap: 8px; align-items: center">
+              <input
+                id="noteInput"
+                placeholder="Dodaj notatkę…"
+                style="
+                  padding: 8px 10px;
+                  border: 1px solid #e5e7eb;
+                  border-radius: 8px;
+                "
+              />
+              <button id="noteAdd" class="btn btn-small">+ Dodaj</button>
+            </div>
+          </div>
+          <div id="notesList">Brak notatek</div>
+        </div>
+
+        <div class="card attachments-card">
+          <div class="card-header">
+            <h3>Załączniki</h3>
+            <button id="attachAddBtn" class="btn btn-small">
+              + Dodaj plik
+            </button>
+          </div>
+
+          <div id="dropzone" class="dropzone" style="margin-top: 8px">
+            Przeciągnij pliki tutaj lub kliknij, aby wybrać
+          </div>
+          <input id="fileInput" type="file" multiple style="display: none" />
+
+          <div id="attachmentsList" class="list" style="margin-top: 10px">
+            Brak załączników
+          </div>
+        </div>
+      </section>
+
+      <!-- PRAWA KOLUMNA -->
+      <aside class="col-right">
+        <div class="card client-card">
+          <h3>Dane klienta</h3>
+          <div class="client-info">
+            <div>
+              <strong>Imię i nazwisko:</strong> <span id="clientName">—</span>
+            </div>
+            <div><strong>Telefon:</strong> <span id="clientPhone">—</span></div>
+            <div><strong>E-mail:</strong> <span id="clientEmail">—</span></div>
+            <div><strong>Adres:</strong> <span id="clientAddress">—</span></div>
+            <div><strong>PESEL:</strong> <span id="clientPesel">—</span></div>
+          </div>
+        </div>
+
+        <div class="card meta-card">
+          <h3>Metryka sprawy</h3>
+          <div class="meta-grid">
+            <div><strong>ID:</strong> <span id="caseId">—</span></div>
+            <div><strong>Status:</strong> <span id="caseStatus">—</span></div>
+            <div><strong>Utworzono:</strong> <span id="createdAt">—</span></div>
+            <div>
+              <strong>Aktualizacja:</strong> <span id="updatedAt">—</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="card actions-card">
+          <h3>Szybkie akcje</h3>
+          <div class="actions-row">
+            <button id="actSendMail" class="btn btn-light">
+              Wyślij e-mail
+            </button>
+            <button id="actExportPdf" class="btn btn-light">Eksport PDF</button>
+            <button id="actDelete" class="btn btn-danger">Usuń sprawę</button>
+          </div>
+        </div>
+      </aside>
+    </main>
+
+    <script src="/case.js"></script>
+  </body>
+</html>

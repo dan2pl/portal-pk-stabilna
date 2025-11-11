@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="pl">
+
+<head>
+    <meta charset="utf-8" />
+    <title>PK – Logowanie</title>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+</head>
+
+<body>
+    <h1>Logowanie</h1>
+    <form id="loginForm">
+        <input id="email" name="email" type="email" placeholder="email" required autocomplete="email">
+        <input id="password" name="password" type="password" placeholder="hasło" required
+            autocomplete="current-password">
+        <button>Zaloguj</button>
+    </form>
+    <p id="msg"></p>
+    <script>
+        const form = document.getElementById('loginForm');
+        const msg = document.getElementById('msg');
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            msg.textContent = 'Logowanie...';
+            const email = document.getElementById('email').value.trim();
+            const password = document.getElementById('password').value;
+            try {
+                const r = await fetch('/api/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email, password })
+                });
+                const data = await r.json();
+                if (!r.ok) throw new Error(data?.error || 'Błąd logowania');
+                localStorage.setItem('pk_token', data.token);
+                localStorage.setItem('pk_user', JSON.stringify(data.user));
+                location.href = '/dashboard.html';
+            } catch (err) {
+                msg.textContent = 'Logowanie nieudane: ' + err.message;
+            }
+        });
+    </script>
+    <script>
+        (() => {
+            const form = document.querySelector('form');
+            if (!form) return;
+
+            // Upewnij się, że inputy mają takie ID jak poniżej, albo podmień selektory
+            const $email = document.querySelector('#email') || document.querySelector('input[name="email"]');
+            const $pass = document.querySelector('#password') || document.querySelector('input[name="password"]');
+
+            // ustaw action, jeśli brak
+            if (!form.getAttribute('action')) form.setAttribute('action', '/api/auth/login');
+
+            form.addEventListener('submit', async (e) => {
+                e.preventDefault();
+
+                const endpoint = form.getAttribute('action');
+                const email = $email ? String($email.value || '') : '';
+                const password = $pass ? String($pass.value || '') : '';
+
+                try {
+                    const r = await fetch(endpoint, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ email, password }),
+                    });
+
+                    const raw = await r.text();
+                    if (!r.ok) {
+                        alert('Błędny login lub hasło.\n' + (raw || r.statusText));
+                        return;
+                    }
+
+                    let data = {};
+                    try { data = JSON.parse(raw); } catch { }
+                    const token = data && data.token;
+
+                    if (!token) {
+                        alert('Serwer nie zwrócił pola "token" w JSON.');
+                        return;
+                    }
+
+                    localStorage.setItem('token', token);
+                    window.location.href = '/dashboard.html';
+                } catch (err) {
+                    console.error(err);
+                    alert('Błąd połączenia z serwerem.');
+                }
+            });
+        })();
+    </script>
+
+
+
+</body>
+
+</html>
