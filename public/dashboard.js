@@ -44,6 +44,80 @@ async function step(name, fn) {
   }
 }
 
+// === blok [A] Search helpery i filtr ===
+
+// Debounce, aby nie renderować na każdą literę zbyt często
+function debounce(fn, delay = 200) {
+  let t;
+  return (...args) => {
+    clearTimeout(t);
+    t = setTimeout(() => fn.apply(null, args), delay);
+  };
+}
+
+// Usuwanie polskich znaków (żeby "Zółć" == "Zolc")
+function normalize(str = "") {
+  return str
+    .toString()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/\p{Diacritic}/gu, "");
+}
+
+// Próbujemy wyciągnąć nazwisko klienta z obiektu sprawy
+function extractLastName(caseRow) {
+  // Obsłuż kilka możliwych nazw pól w Twoich danych
+  const candidates = [
+    caseRow?.client_last_name,
+    caseRow?.klient_nazwisko,
+    caseRow?.nazwisko,
+  ];
+  // jeśli mamy pełne imię i nazwisko w jednym polu:
+  const fullCandidates = [
+    caseRow?.client_name,
+    caseRow?.klient,
+    caseRow?.klient_imie_nazwisko,
+    caseRow?.imie_nazwisko,
+    caseRow?.name,
+  ];
+
+  for (const c of candidates) {
+    if (c) return c;
+  }
+  for (const f of fullCandidates) {
+    if (f) {
+      const parts = f.trim().split(/\s+/);
+      return parts.length ? parts[parts.length - 1] : f;
+    }
+  }
+  return "";
+}
+
+// Szuka w każdym polu tekstowym rekordu (bez polskich znaków)
+function filterCasesByLastName(query, sourceArray) {
+  const q = normalize(query.trim());
+  if (!q) return [...sourceArray];
+
+  function haystack(row) {
+    const parts = [];
+    (function walk(v) {
+      if (v == null) return;
+      if (typeof v === 'string') { parts.push(normalize(v)); return; }
+      if (typeof v === 'number') { parts.push(String(v)); return; }
+      if (Array.isArray(v)) { v.forEach(walk); return; }
+      if (typeof v === 'object') { for (const k in v) if (Object.prototype.hasOwnProperty.call(v, k)) walk(v[k]); }
+    })(row);
+    return parts.join(' ');
+  }
+
+  return sourceArray.filter(r => haystack(r).includes(q));
+}
+
+
+// Spróbujemy podeprzeć się istniejącymi funkcjami:
+//  - renderCases(list)  — jeśli masz taką do rysowania listy
+//  - openCaseModal(id) — do otwierania modala szczegółów
+// Jeśli nazwy są inne, podmień w bloku B na Twoje.
 
 // Helpers (auth + fetch)
 function authHeaders() {
@@ -60,6 +134,69 @@ async function fetchJSON(url, opts = {}) {
   }
   const ct = res.headers.get("content-type") || "";
   return ct.includes("application/json") ? res.json() : res.text();
+}
+// === Minimalny renderer listy spraw ===
+// Szuka <tbody id="casesTbody">; jeśli go nie ma, tworzy fallback <div id="casesList">
+function ensureCasesContainer() {
+  let tbody = document.getElementById('casesTbody');
+  if (tbody) return { mode: 'table', el: tbody };
+
+  // fallback: prosty <div> z kartami
+  let list = document.getElementById('casesList');
+  if (!list) {
+    list = document.createElement('div');
+    list.id = 'casesList';
+    list.style.marginTop = '8px';
+    const anchor = document.getElementById('casesTable') || document.body;
+    anchor.parentNode.insertBefore(list, anchor.nextSibling);
+  }
+  return { mode: 'cards', el: list };
+}
+
+function pickId(row) {
+  return row?.id ?? row?.case_id ?? row?.sprawa_id ?? null;
+}
+function pickClient(row) {
+  // próbujemy różne pola
+  return (
+    row?.client_name ||
+    row?.klient ||
+    row?.klient_imie_nazwisko ||
+    row?.imie_nazwisko ||
+    [row?.client_first_name, row?.client_last_name].filter(Boolean).join(' ') ||
+    row?.name ||
+    '—'
+  );
+}
+function pickBank(row) {
+  const label = row?.bank_name || row?.bank?.name || row?.bank_label || row?.bank || null;
+  return label || '—';
+}
+function pickAmount(row) {
+  const n = row?.wps ?? row?.amount ?? row?.kwota ?? null;
+  if (n == null || n === '') return '—';
+  const num = Number(n);
+  return Number.isFinite(num) ? num.toLocaleString('pl-PL', { style:'currency', currency:'PLN' }) : String(n);
+}
+function pickStatus(row) {
+  return row?.status || row?.state || row?.stan || '—';
+}
+
+
+// === Ładowanie pełnej listy spraw + Blok C ===
+async function loadAndRenderAllCases() {
+  try {
+    const data = await fetchJSON('/api/cases'); // <- pobranie wszystkich spraw
+
+    // [C] Zachowaj pełną listę spraw do cache wyszukiwarki
+    const list = Array.isArray(data) ? data : (data.rows || data.items || data.list || data.cases || data.data || data.results || []);
+window.casesCache = list;
+console.log('[PK] fetched list length:', Array.isArray(list) ? list.length : 'not array', 'keys:', data && typeof data === 'object' ? Object.keys(data) : typeof data);
+
+  } catch (err) {
+    console.error('Nie udało się pobrać listy spraw:', err);
+    alert('Nie udało się pobrać listy spraw.');
+  }
 }
 
 // Banki (źródło prawdy)
@@ -747,5 +884,108 @@ document.addEventListener('DOMContentLoaded', async () => {
     console.error('[PK:ERR] BOOT FAIL', e);
     showDiag('❌ Boot zatrzymany: ' + (e?.message || e));
   }
-  
+  await loadAndRenderAllCases(); // <-- DODAJ TĘ LINIĘ
+
+  // === [B] Inicjalizacja pola wyszukiwarki ===
+(function initCaseSearch() {
+  const input = document.getElementById("caseSearch");
+  const clearBtn = document.getElementById("clearCaseSearch");
+  const countEl = document.getElementById("caseSearchCount");
+
+  if (!input) return; // bezpiecznik, jeśli nie ma pola w DOM
+
+  // Trzymamy w pamięci pełną listę spraw po pierwszym pobraniu
+  // (ustawiamy to w bloku [C])
+  window.casesCache = window.casesCache || [];
+
+  function updateCount(n, q) {
+    if (!q) {
+      countEl.textContent = "";
+      return;
+    }
+    countEl.textContent = n === 1 ? "Znaleziono 1 sprawę" : `Znaleziono: ${n}`;
+  }
+
+ const apply = debounce(() => {
+  const base = Array.isArray(window.casesCache) ? window.casesCache : [];
+  console.log('[PK][search] cache size:', base.length);
+
+  const q = (input.value || '').trim();
+  const nq = normalize(q);
+
+  // Celujemy w GŁÓWNĄ tabelę na dashboardzie: bierzemy ostatnią <table> na stronie
+  const tables = document.querySelectorAll('table');
+  const mainTbody = tables.length ? tables[tables.length - 1].querySelector('tbody') : null;
+
+  if (!mainTbody) {
+    console.warn('[PK][search] Nie znaleziono głównej tabeli (tbody).');
+    updateCount(0, q);
+    return;
+  }
+
+  const rows = Array.from(mainTbody.querySelectorAll('tr'));
+
+  // PUSTE ZAPYTANIE → pokaż wszystkie wiersze i wyczyść licznik
+  if (!nq) {
+    rows.forEach(tr => { tr.style.display = ''; });
+    updateCount('', '');
+    return;
+  }
+
+  // Filtr: ukrywamy wiersze, które nie zawierają frazy (po normalizacji)
+  let shown = 0;
+  rows.forEach(tr => {
+    const txt = normalize(tr.textContent || '');
+    const hit = txt.includes(nq);
+    tr.style.display = hit ? '' : 'none';
+    if (hit) shown++;
+  });
+
+  updateCount(shown, q);
+
+  // Jeśli dokładnie 1 widoczny wiersz → spróbuj otworzyć modal (ID z 1. komórki)
+  if (shown === 1 && typeof openCaseModal === 'function') {
+    const onlyTr = rows.find(tr => tr.style.display !== 'none');
+    const idCell = onlyTr ? onlyTr.querySelector('td,th') : null;
+    const caseId = idCell ? (idCell.textContent || '').trim() : null;
+    if (caseId) {
+      setTimeout(() => openCaseModal(caseId), 80);
+    }
+  }
+}, 200);
+
+
+  input.addEventListener("input", apply);
+
+  // Enter — natychmiast zastosuj (i ewentualnie otwórz modal)
+  input.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") apply();
+    if (e.key === "Escape") {
+      input.value = "";
+      apply();
+      input.blur();
+    }
+  });
+
+  // Wyczyść przyciskiem „×”
+  if (clearBtn) {
+    clearBtn.addEventListener("click", () => {
+      input.value = "";
+      input.focus();
+      apply();
+    });
+  }
+
+  // Skrót klawiaturowy Ctrl/Cmd+K — focus na wyszukiwarkę
+  document.addEventListener("keydown", (e) => {
+    const isMac = navigator.platform.toUpperCase().includes("MAC");
+    if ((isMac && e.metaKey && e.key.toLowerCase() === "k") ||
+        (!isMac && e.ctrlKey && e.key.toLowerCase() === "k")) {
+      e.preventDefault();
+      input.focus();
+      input.select();
+    }
+  });
+})();
+
 });
