@@ -343,10 +343,20 @@ tbody tr:hover { background: #f3f4f6; cursor: pointer; }
 .modal { position: fixed; inset: 0; z-index: 1000; }
 .modal-backdrop { position: absolute; inset: 0; background: rgba(0,0,0,.35); }
 .modal-card {
-  position: relative; margin: 8vh auto; width: min(560px, 92vw);
-  background: #fff; border-radius: 12px; border: 1px solid #e5e7eb;
-  box-shadow: 0 10px 30px rgba(0,0,0,.2); overflow: hidden;
+  position: relative;
+  margin: 6vh auto;
+  width: min(560px, 92vw);
+  background: #fff;
+  border-radius: 12px;
+  border: 1px solid #e5e7eb;
+  box-shadow: 0 10px 30px rgba(0,0,0,.2);
+
+  /* 🔽 poprawki, które naprawiają "uciekanie" treści */
+  max-height: 88vh;           /* niech modal nie wychodzi poza ekran */
+  overflow-y: auto;           /* pozwala przewijać zawartość */
+  padding-bottom: 24px;       /* oddech na dole */
 }
+
 .modal-header,.modal-footer {
   padding: 12px 16px; display: flex; align-items: center; justify-content: space-between;
 }
@@ -481,3 +491,44 @@ body.modal-open { overflow: hidden; }
 .offer .cta .btn-primary { background:#0f172a; color:#fff; border-color:#0f172a; }
 .modal { display: none; }
 .modal.is-open { display: block; }
+
+.card{ background:#fff;border:1px solid #e5e7eb;border-radius:12px;box-shadow:0 1px 2px rgba(0,0,0,.04);margin:12px 0; }
+.card-h{ display:flex;align-items:center;justify-content:space-between;padding:12px 14px;border-bottom:1px solid #eef0f3; }
+.card-title{ font-weight:700;color:#111827; }
+.card-sub{ font-size:12px;color:#6b7280;margin-top:2px; }
+.card-b{ padding:12px 14px; }
+#skdOffer {
+  margin-bottom: 24px; /* żeby nie kleiło się do dołu */
+}
+
+.grid2{ display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px; }
+.group{ background:#fafbfc;border:1px solid #eef0f3;border-radius:10px;padding:10px; }
+.group-title{ font-weight:600;color:#374151;margin-bottom:8px; }
+.row{ display:flex;flex-wrap:wrap;gap:10px; }
+
+.fld{ display:flex;flex-direction:column;gap:6px; min-width:220px; }
+.fld input{ border:1px solid #e5e7eb;border-radius:8px;padding:8px;font:inherit; }
+
+.radio{ display:flex;gap:10px;align-items:flex-start;border:1px solid #e5e7eb;background:#fff;border-radius:10px;padding:10px;margin-bottom:8px; }
+.radio input{ margin-top:3px; }
+.radio small{ color:#6b7280; display:block; margin-top:2px; }
+
+.est{ display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:8px; }
+.est > div{ display:flex;align-items:center;justify-content:space-between;background:#fff;border:1px solid #e5e7eb;border-radius:8px;padding:8px 10px; }
+.est strong{ font-weight:700; }
+
+.btn{ border:0;border-radius:10px;padding:8px 12px;cursor:pointer; }
+.btn-primary{ background:#1f2937;color:#fff; }
+.btn-primary:hover{ filter:brightness(1.05); }
+
+#skdOffer.readonly { opacity: .96; }
+#skdOffer.readonly .btn-primary { display: none; }
+.skd-disabled { opacity: .45; pointer-events: none; filter: grayscale(8%); }
+
+/* widoczność wg roli */
+body[data-role="agent"]  #skdEligibilityGroup   { display: none !important; }
+body[data-role="agent"]  #skdVariantAdminGroup  { display: none !important; }
+body[data-role="admin"]  #clientPreferenceBlock { display: none !important; }
+
+/* helper do filtrowania wariantów */
+.hidden { display: none !important; }

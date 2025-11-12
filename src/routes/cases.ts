@@ -176,7 +176,56 @@ export default function casesRoutes(app: Express) {
             res.status(500).json({ error: "Server error" });
         }
     });
+// === ZAPIS OFERTY SKD (eligibility / variant / client_preference / wps_forecast) ===
+app.put("/api/cases/:id/skd-offer", async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    const { wps_forecast, offer_skd } = req.body || {};
 
+    if (!Number.isFinite(id)) {
+      return res.status(400).json({ error: "Niepoprawne ID sprawy" });
+    }
+
+    // Bezpiecznie rzutujemy JSON do jsonb
+    await pool.query(
+      `UPDATE cases
+         SET wps_forecast = $1,
+             offer_skd    = $2::jsonb,
+             updated_at   = now()
+       WHERE id = $3`,
+      [
+        wps_forecast === undefined || wps_forecast === null ? null : Number(wps_forecast),
+        JSON.stringify(offer_skd || {}),
+        id,
+      ]
+    );
+
+    res.json({ ok: true });
+  } catch (err) {
+    console.error("PUT /api/cases/:id/skd-offer error", err);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+// === AKTUALIZACJA OFERTY SKD (PUT /api/cases/:id/skd-offer) ===
+app.put("/api/cases/:id/skd-offer", async (req, res) => {
+  const { id } = req.params;
+  const { wps_forecast, offer_skd } = req.body || {};
+
+  try {
+    await pool.query(
+      `UPDATE cases SET 
+         wps_forecast = $1,
+         offer_skd = $2
+       WHERE id = $3`,
+      [wps_forecast ?? null, JSON.stringify(offer_skd || {}), id]
+    );
+    res.json({ ok: true });
+  } catch (err) {
+    console.error("PUT /api/cases/:id/skd-offer error", err);
+    res.status(500).json({ error: "Server error" });
+  }
+});
     console.log("➡️ routes: GET/POST/PATCH /api/cases registered");
 }
 

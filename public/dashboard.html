@@ -7,7 +7,7 @@
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <link rel="stylesheet" href="/style.css" />
   </head>
-  <body>
+  <body data-role="agent">
     <header class="site-header">
       <div class="wrap">
         <h1>Portal PK – Dashboard</h1>
@@ -204,6 +204,183 @@
             <div class="tab" data-tab="edit">Edycja</div>
             <div class="tab" data-tab="offers">Produkty/Usługi</div>
           </div>
+          <!-- ===== OFERTA SKD (sekcja) ===== -->
+          <section id="skdOffer" class="card">
+            <header class="card-h">
+              <div>
+                <div class="card-title">Oferta SKD</div>
+                <div id="skdOfferSub" class="card-sub">—</div>
+              </div>
+              <button
+                id="skdOfferSaveBtn"
+                class="btn btn-primary"
+                style="display: none"
+              >
+                Zapisz
+              </button>
+            </header>
+
+            <div class="card-b">
+              <!-- === DOSTĘPNOŚĆ WARIANTÓW (tylko dla admina) === -->
+              <div class="group" id="skdEligibilityGroup">
+                <div class="group-title">
+                  Dostępność wariantów (co możemy zaproponować)
+                </div>
+                <div class="row">
+                  <label class="chk">
+                    <input type="checkbox" id="eligSf50" checked />
+                    <span>Success Fee 50% — bez ryzyka</span>
+                  </label>
+                  <label class="chk">
+                    <input type="checkbox" id="eligSf49" checked />
+                    <span>Success Fee 49% — z wynagrodzeniem początkowym</span>
+                  </label>
+                  <label class="chk">
+                    <input type="checkbox" id="eligSell" checked />
+                    <span>Sprzedaż roszczenia — wypłata z góry</span>
+                  </label>
+                </div>
+                <small
+                  >Odznacz warianty, które nie są możliwe dla tej sprawy.</small
+                >
+              </div>
+
+              <!-- === PREFERENCJA KLIENTA (tylko dla partnera) === -->
+              <div class="group" id="clientPreferenceBlock">
+                <div class="group-title">Preferencja Klienta</div>
+                <label class="radio">
+                  <input type="radio" name="clientPref" value="sf50" />
+                  <div><b>Success Fee 50%</b> — bez ryzyka dla Klienta</div>
+                </label>
+                <label class="radio">
+                  <input type="radio" name="clientPref" value="sf49" />
+                  <div>
+                    <b>Success Fee 49%</b> — z wynagrodzeniem początkowym
+                  </div>
+                </label>
+                <label class="radio">
+                  <input type="radio" name="clientPref" value="sell" />
+                  <div><b>Sprzedaż roszczenia</b> — wypłata z góry</div>
+                </label>
+                <small
+                  >Wybierz, którą opcją klient jest najbardziej
+                  zainteresowany.</small
+                >
+              </div>
+
+              <div class="grid2">
+                <div class="group">
+                  <div class="group-title">WPS prognoza</div>
+                  <div class="row">
+                    <label class="fld">
+                      <span>Kwota (PLN)</span>
+                      <input
+                        id="wpsForecastInput"
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        placeholder="np. 18 500,00"
+                      />
+                    </label>
+                    <!-- (opcjonalnie) szybkie ustawienie z pola WPS w podsumowaniu, jeśli jest w DOM -->
+                    <button
+                      id="btnCopyWpsToForecast"
+                      class="btn"
+                      title="Przepisz z WPS"
+                    >
+                      Użyj wartości z WPS
+                    </button>
+                  </div>
+                </div>
+
+                <div class="group" id="skdVariantAdminGroup">
+                  <div class="group-title">Wariant oferty</div>
+
+                  <label class="radio" data-variant="sf50">
+                    <input type="radio" name="skdVariant" value="sf50" />
+                    <div>
+                      <div>
+                        <b>Opłata za sukces 50/50</b> — bez ryzyka dla Klienta
+                      </div>
+                      <small
+                        >Rozliczenie 50/50 od WPS. Anulowanie przyszłych odsetek
+                        dla Klienta
+                      </small>
+                    </div>
+                  </label>
+
+                  <label class="radio" data-variant="sf49">
+                    <input type="radio" name="skdVariant" value="sf49" />
+                    <div>
+                      <div>
+                        <b>Wariant Zlecenie 49/51</b> — ryzyko po stronie
+                        Klienta.
+                      </div>
+                      <small
+                        >Wynagrodzenie wstępne dla pośrednika za zawarcie umowy.
+                        Anulowanie przyszłych odsetek dla Klienta</small
+                      >
+                    </div>
+                  </label>
+
+                  <label class="radio" data-variant="sell">
+                    <input type="radio" name="skdVariant" value="sell" />
+                    <div>
+                      <div><b>Sprzedaż roszczenia</b> — środki z góry</div>
+                      <small
+                        >Ustalony procent od WPS. Wypłata dla Klienta do 14 dni.
+                        Anulowanie przyszłych odsetek dla Klienta</small
+                      >
+                      <div class="row" data-extra="sell">
+                        <label class="fld">
+                          <span>Minimalna stawka dla Klienta (%)</span>
+                          <input
+                            id="buyoutPctInput"
+                            type="number"
+                            step="0.1"
+                            min="0"
+                            max="100"
+                            value="10"
+                          />
+                        </label>
+                      </div>
+                    </div>
+                  </label>
+                </div>
+              </div>
+
+              <div class="group">
+                <div class="group-title">Symulacja wypłat (szacunek)</div>
+                <div class="est">
+                  <div>
+                    <span>„Teraz” (z góry):</span><strong id="estNow">—</strong>
+                  </div>
+                  <div>
+                    <span>„Później” (po odzyskaniu):</span
+                    ><strong id="estLater">—</strong>
+                  </div>
+                  <div>
+                    <span>Suma dla Klienta:</span
+                    ><strong id="estTotal">—</strong>
+                  </div>
+                </div>
+                <small
+                  >Wartości orientacyjne — WPS traktujemy jako bazę do
+                  rozliczeń.</small
+                >
+              </div>
+
+              <div class="group">
+                <div class="group-title">Notatka (wewnętrzna)</div>
+                <textarea
+                  id="skdOfferNotes"
+                  rows="3"
+                  placeholder="np. klient preferuje sprzedaż roszczenia; możliwa korekta % przy wykupie."
+                ></textarea>
+              </div>
+            </div>
+          </section>
+          <!-- ===== /OFERTA SKD ===== -->
 
           <div class="modal-body">
             <!-- INFO -->
