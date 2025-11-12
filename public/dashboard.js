@@ -865,6 +865,605 @@ if (cmSave && cmModal) {
   });
 }
 
+// === Seed: bankList (wycisza 401 z /api/banks) ===
+window.bankList = [
+  "PKO BP","Santander","mBank","ING","Alior","Millennium","BNP Paribas",
+  "Credit Agricole","BOŚ","Pekao SA","Nest Bank","Citi Handlowy","VeloBank"
+];
+
+// === Modal SKD (blok 1/3): bootstrap + template + render (bez zapisu do API) ===
+(function skdBootstrap(){
+  const $ = (id)=>document.getElementById(id);
+  const money = (n)=> (n==null || Number.isNaN(+n)) ? '' : (+n).toFixed(2);
+  const STATUS = [
+    {v:'draft',l:'Szkic'},{v:'sent',l:'Wysłana'},{v:'accepted',l:'Zaakceptowana'},
+    {v:'declined',l:'Odrzucona'},{v:'archived',l:'Zarchiwizowana'}
+  ];
+  const ctx = { offer:null, role:'agent', dirty:false };
+  window.PK_SKD = window.PK_SKD || {};
+  window.PK_SKD._getCtx = ()=>ctx;
+
+  // ——— wstrzyknięcie szablonu (tylko jeśli brak) ———
+  function ensureTemplate(){
+    if ($('skdOfferModal')) return;
+    const wrap = document.createElement('div');
+    wrap.innerHTML = `
+<div id="skdOfferModal" class="modal" style="display:none;">
+  <div class="modal-dialog" style="background:#fff;border-radius:14px;box-shadow:0 10px 28px rgba(0,0,0,.15);max-width:980px;margin:40px auto;overflow:hidden">
+    <div class="modal-header" style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;background:#f8f9fb">
+      <h3 style="margin:0;font-weight:700;">Oferta SKD</h3>
+      <button class="modal-close" aria-label="Zamknij" style="background:transparent;border:0;font-size:20px;cursor:pointer">×</button>
+    </div>
+
+    <div class="modal-tabs" style="display:flex;gap:8px;padding:8px 16px;border-bottom:1px solid #e6e8ec">
+      <button class="tab active" data-tab="summary" style="padding:6px 10px;border:1px solid #e6e8ec;border-bottom:0;border-radius:8px 8px 0 0;background:#fff;font-weight:700;cursor:pointer">Podsumowanie</button>
+      <button class="tab" data-tab="params"  style="padding:6px 10px;border:1px solid #e6e8ec;border-bottom:0;border-radius:8px 8px 0 0;background:#fafbfc;cursor:pointer">Parametry</button>
+      <button class="tab" data-tab="schedule"style="padding:6px 10px;border:1px solid #e6e8ec;border-bottom:0;border-radius:8px 8px 0 0;background:#fafbfc;cursor:pointer">Harmonogram</button>
+      <button class="tab" data-tab="history" style="padding:6px 10px;border:1px solid #e6e8ec;border-bottom:0;border-radius:8px 8px 0 0;background:#fafbfc;cursor:pointer">Historia</button>
+    </div>
+
+    <div class="modal-body" style="padding:14px 16px">
+      <section class="tab-panel" id="skdTab-summary">
+        <div class="grid-2" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px">
+          <div><label style="display:block;font-size:.86rem;color:#556;opacity:.9;margin-bottom:4px">Klient</label><div id="skdClientName">—</div></div>
+          <div><label style="display:block;font-size:.86rem;color:#556;opacity:.9;margin-bottom:4px">Status</label><select id="skdStatus" style="width:100%;padding:8px;border:1px solid #dde0e6;border-radius:8px"></select></div>
+          <div><label style="display:block;font-size:.86rem;color:#556;opacity:.9;margin-bottom:4px">Wariant</label>
+            <select id="skdVariant" style="width:100%;padding:8px;border:1px solid #dde0e6;border-radius:8px">
+              <option value="success_fee">Prowizja za sukces</option>
+              <option value="upfront_buyout">Wykup z góry</option>
+            </select>
+          </div>
+          <div><label style="display:block;font-size:.86rem;color:#556;opacity:.9;margin-bottom:4px">Bank</label><select id="skdBank" style="width:100%;padding:8px;border:1px solid #dde0e6;border-radius:8px"></select></div>
+          <div><label style="display:block;font-size:.86rem;color:#556;opacity:.9;margin-bottom:4px">WPS (prognoza)</label><input id="skdWpsForecast" type="number" step="0.01" style="width:100%;padding:8px;border:1px solid #dde0e6;border-radius:8px"></div>
+          <div><label style="display:block;font-size:.86rem;color:#556;opacity:.9;margin-bottom:4px">Prowizja (%)</label><input id="skdFeePercent" type="number" step="0.1" style="width:100%;padding:8px;border:1px solid #dde0e6;border-radius:8px"></div>
+          <div><label style="display:block;font-size:.86rem;color:#556;opacity:.9;margin-bottom:4px">Prowizja (PLN)</label><input id="skdFeeAmount" type="number" step="0.01" style="width:100%;padding:8px;border:1px solid #dde0e6;border-radius:8px"></div>
+          <div><label style="display:block;font-size:.86rem;color:#556;opacity:.9;margin-bottom:4px">Ważna do</label><input id="skdValidUntil" type="date" style="width:100%;padding:8px;border:1px solid #dde0e6;border-radius:8px"></div>
+        </div>
+      </section>
+
+      <section class="tab-panel" id="skdTab-params" style="display:none">
+        <div class="grid-2" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px">
+          <div><label style="display:block;font-size:.86rem;color:#556;opacity:.9;margin-bottom:4px">Kwota kredytu (PLN)</label><input id="skdLoanAmount" type="number" step="0.01" style="width:100%;padding:8px;border:1px solid #dde0e6;border-radius:8px"></div>
+          <div><label style="display:block;font-size:.86rem;color:#556;opacity:.9;margin-bottom:4px">Okres (m-ce)</label><input id="skdTenor" type="number" step="1" style="width:100%;padding:8px;border:1px solid #dde0e6;border-radius:8px"></div>
+          <div><label style="display:block;font-size:.86rem;color:#556;opacity:.9;margin-bottom:4px">RRSO (%)</label><input id="skdApr" type="number" step="0.01" style="width:100%;padding:8px;border:1px solid #dde0e6;border-radius:8px"></div>
+          <div><label style="display:block;font-size:.86rem;color:#556;opacity:.9;margin-bottom:4px">Uwagi wewnętrzne</label><textarea id="skdInternalNote" rows="3" style="width:100%;padding:8px;border:1px solid #dde0e6;border-radius:8px"></textarea></div>
+        </div>
+      </section>
+
+      <section class="tab-panel" id="skdTab-schedule" style="display:none"><pre id="skdScheduleBox" style="white-space:pre-wrap;margin:0;color:#667085">Brak harmonogramu do wyświetlenia.</pre></section>
+      <section class="tab-panel" id="skdTab-history"  style="display:none"><ol id="skdHistoryList" style="margin:0;padding-left:18px"></ol></section>
+    </div>
+
+    <div class="modal-footer" style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;background:#f8f9fb">
+      <div id="skdDirtyHint" style="display:none;color:#667085">Niezapisane zmiany…</div>
+      <div>
+        <button id="skdDeleteBtn" style="padding:8px 12px;border-radius:10px;border:0;background:#ef4444;color:#fff;cursor:pointer;display:none">Usuń</button>
+        <button id="skdSaveBtn"   style="padding:8px 12px;border-radius:10px;border:0;background:#2f6fed;color:#fff;cursor:pointer">Zapisz</button>
+      </div>
+    </div>
+  </div>
+</div>`;
+    document.body.appendChild(wrap.firstElementChild);
+  }
+
+  // ——— util: readOnly/disabled wg roli ———
+  function setRO(node, flag){ if(!node) return; node.readOnly=!!flag; node.disabled=!!flag; }
+  function computeFee(o){ return (o && o.wps_forecast && o.fee_percent) ? (Number(o.wps_forecast)*Number(o.fee_percent)/100) : null; }
+  function setDirty(f){ const hint=$('skdDirtyHint'); if(hint) hint.style.display=f?'block':'none'; ctx.dirty=!!f; }
+
+  // ——— lista banków (globalna lub API, z fallbackiem) ———
+  async function loadBanks(){
+    if (Array.isArray(window.bankList) && window.bankList.length) return window.bankList;
+    try{ const r=await fetch('/api/banks'); if(!r.ok) throw 0; const d=await r.json(); window.bankList=d; return d; }
+    catch(_){ return ["PKO BP","Santander","mBank","ING","Alior","Millennium","BNP Paribas"]; }
+  }
+
+  // ——— render ———
+  async function render(){
+    const o = ctx.offer || {};
+    $('skdClientName').textContent = o.client_name || '—';
+
+    // status
+    const st = $('skdStatus'); st.innerHTML='';
+    STATUS.forEach(s=>{ const opt=document.createElement('option'); opt.value=s.v; opt.textContent=s.l; if(o.status===s.v) opt.selected=true; st.appendChild(opt); });
+
+    // wariant + bank
+    $('skdVariant').value = o.variant || 'success_fee';
+    const bl = await loadBanks(); const bs = $('skdBank'); bs.innerHTML='';
+    bl.forEach(b=>{ const opt=document.createElement('option'); opt.value=b; opt.textContent=b; if(o.bank===b) opt.selected=true; bs.appendChild(opt); });
+
+    // liczby / daty / notatka
+    $('skdWpsForecast').value = o.wps_forecast ?? '';
+    $('skdFeePercent').value  = o.fee_percent ?? '';
+    $('skdFeeAmount').value   = o.fee_amount ?? '';
+    $('skdValidUntil').value  = (o.valid_until||'').substring(0,10);
+    $('skdLoanAmount').value  = o.loan_amount ?? '';
+    $('skdTenor').value       = o.tenor_months ?? '';
+    $('skdApr').value         = o.apr_percent ?? '';
+    $('skdInternalNote').value= o.internal_note ?? '';
+
+    // schedule
+    const sb = $('skdScheduleBox');
+    if (Array.isArray(o.schedule) && o.schedule.length){
+      sb.textContent = o.schedule.map(r=>`${r.no}. ${r.date} — ${money(r.amount)} PLN`).join('\n');
+    } else { sb.textContent = 'Brak harmonogramu do wyświetlenia.'; }
+
+    // historia
+    const hl = $('skdHistoryList'); hl.innerHTML='';
+    (o.history||[]).slice().reverse().forEach(h=>{
+      const li=document.createElement('li');
+      li.textContent = `${new Date(h.ts).toLocaleString()} — ${h.by}: ${h.msg}`;
+      hl.appendChild(li);
+    });
+
+    // role
+    const isAdmin = ctx.role === 'admin';
+    ['skdStatus','skdBank','skdWpsForecast','skdFeePercent','skdFeeAmount','skdValidUntil','skdLoanAmount','skdTenor','skdApr'].forEach(id=> setRO($(id), !isAdmin));
+    setRO($('skdVariant'), false);
+    setRO($('skdInternalNote'), false);
+    $('skdDeleteBtn').style.display = isAdmin ? 'inline-block' : 'none';
+
+    bindInputs(); setDirty(false);
+        window.dispatchEvent(new Event('pk_skd_render'));
+
+  }
+
+  // ——— eventy pól (lokalne, bez API) ———
+  function bindInputs(){
+    const bind = (id, fn)=>{ const n=$(id); if(!n) return; n.oninput = n.onchange = fn; };
+    bind('skdStatus', ()=>{ ctx.offer.status = $('skdStatus').value; setDirty(true); });
+    bind('skdVariant',()=>{ ctx.offer.variant= $('skdVariant').value; setDirty(true); });
+    bind('skdBank',   ()=>{ ctx.offer.bank   = $('skdBank').value; setDirty(true); });
+
+    bind('skdWpsForecast', ()=>{ ctx.offer.wps_forecast = +$('skdWpsForecast').value || null; recalcFee(); setDirty(true); });
+    bind('skdFeePercent',  ()=>{ ctx.offer.fee_percent  = +$('skdFeePercent').value  || null; recalcFee(); setDirty(true); });
+    bind('skdFeeAmount',   ()=>{ ctx.offer.fee_amount   = +$('skdFeeAmount').value   || null; setDirty(true); });
+
+    bind('skdValidUntil',  ()=>{ ctx.offer.valid_until  = $('skdValidUntil').value; setDirty(true); });
+    bind('skdLoanAmount',  ()=>{ ctx.offer.loan_amount  = +$('skdLoanAmount').value || null; setDirty(true); });
+    bind('skdTenor',       ()=>{ ctx.offer.tenor_months = +$('skdTenor').value      || null; setDirty(true); });
+    bind('skdApr',         ()=>{ ctx.offer.apr_percent  = +$('skdApr').value        || null; setDirty(true); });
+    bind('skdInternalNote',()=>{ ctx.offer.internal_note= $('skdInternalNote').value; setDirty(true); });
+
+    $('skdSaveBtn').onclick   = ()=> alert('Zapis pojawi się w bloku 2 (PUT /api/offers/:id).');
+    $('skdDeleteBtn').onclick = ()=> alert('Usuwanie pojawi się w bloku 2 (DELETE /api/offers/:id).');
+  }
+
+  function recalcFee(){
+    const f = computeFee(ctx.offer);
+    if (f!=null){ ctx.offer.fee_amount = f; $('skdFeeAmount').value = money(f); }
+  }
+
+  // ——— taby + zamykanie ———
+  function wireChrome(){
+    const modal = $('skdOfferModal');
+    modal.querySelector('.modal-close').onclick = close;
+    modal.addEventListener('click', (e)=>{ if(e.target===modal) close(); });
+
+    modal.querySelectorAll('.modal-tabs .tab').forEach(tab=>{
+      tab.onclick = ()=>{
+        modal.querySelectorAll('.modal-tabs .tab').forEach(t=>t.classList.remove('active'));
+        tab.classList.add('active');
+        const tn = tab.dataset.tab;
+        modal.querySelectorAll('.tab-panel').forEach(p=> p.style.display = 'none');
+        $('skdTab-'+tn).style.display = '';
+      };
+    });
+  }
+
+  function open(offer, role){
+    ctx.offer = structuredClone(offer||{});
+    ctx.role  = role || 'agent';
+    $('skdOfferModal').style.display = 'block';
+    document.body.classList.add('modal-open');
+    render();
+  }
+
+  function close(){
+    $('skdOfferModal').style.display = 'none';
+    document.body.classList.remove('modal-open');
+  }
+
+  // ——— publiczny interfejs ———
+  ensureTemplate(); wireChrome();
+  window.PK_SKD = window.PK_SKD || {};
+  window.PK_SKD.openOffer = open;    // użyj: PK_SKD.openOffer(offerObj, 'admin'|'agent')
+  window.PK_SKD.close     = close;
+})();
+// === Modal SKD: sekcja Opcje (admin toggluje, agent podgląda) ===
+(function skdOptionsSection(){
+  const $ = (id)=>document.getElementById(id);
+  function ensureHost(){
+    const host = document.createElement('div'); host.id = 'skdOptionsHost';
+    const summary = document.getElementById('skdTab-summary');
+    if (!summary) return;
+    // wstrzykuj pod istniejące pola
+    summary.appendChild(document.createElement('hr'));
+    const h = document.createElement('h4'); h.textContent = 'Opcje oferty'; h.style.margin='8px 0';
+    summary.appendChild(h);
+    summary.appendChild(host);
+  }
+
+  function renderOptions(){
+    if (!window.PK_SKD || !PK_SKD._getCtx) return;
+    const ctx = PK_SKD._getCtx();
+    const host = document.getElementById('skdOptionsHost'); if (!host) return;
+    const isAdmin = ctx.role === 'admin';
+    const opts = Array.isArray(ctx.offer.options) ? ctx.offer.options : (ctx.offer.options = []);
+
+    host.innerHTML = '';
+    if (isAdmin){
+      // admin: checkboxy + edycja opisu
+      opts.forEach((o, idx)=>{
+        const row = document.createElement('div'); row.style.display='grid'; row.style.gridTemplateColumns='24px 220px 1fr'; row.style.gap='8px'; row.style.alignItems='center'; row.style.margin='6px 0';
+        const cb = document.createElement('input'); cb.type='checkbox'; cb.checked=!!o.enabled;
+        cb.onchange = ()=>{ o.enabled = cb.checked; markDirty(); };
+        const label = document.createElement('div'); label.textContent = o.label || o.key;
+        const desc = document.createElement('input'); desc.type='text'; desc.value = o.desc || ''; desc.placeholder='Krótki opis opcji';
+        desc.oninput = ()=>{ o.desc = desc.value; markDirty(); };
+        row.appendChild(cb); row.appendChild(label); row.appendChild(desc);
+        host.appendChild(row);
+      });
+      // dodawanie nowej opcji (prosty dodaj)
+      const add = document.createElement('button');
+      add.textContent = 'Dodaj opcję'; add.style.marginTop='6px'; add.style.padding='6px 10px'; add.style.border='0'; add.style.borderRadius='8px'; add.style.background='#eef2ff'; add.style.cursor='pointer';
+      add.onclick = ()=>{
+        const key = prompt('Klucz opcji (np. expedite)'); if(!key) return;
+        const label = prompt('Etykieta (np. Tryb przyspieszony)') || key;
+        const desc = prompt('Opis krótki (opcjonalnie)') || '';
+        ctx.offer.options.push({key, label, desc, enabled:true}); markDirty(); renderOptions();
+      };
+      host.appendChild(add);
+    } else {
+      // agent: tylko włączone opcje (lista)
+      const enabled = opts.filter(o=>o.enabled);
+      if (!enabled.length){ host.textContent = 'Brak dostępnych opcji od administratora.'; return; }
+      enabled.forEach(o=>{
+        const row = document.createElement('div'); row.style.margin='6px 0';
+        const strong = document.createElement('div'); strong.style.fontWeight='600'; strong.textContent = o.label || o.key;
+        const d = document.createElement('div'); d.style.color='#667085'; d.textContent = o.desc || '';
+        row.appendChild(strong); row.appendChild(d); host.appendChild(row);
+      });
+    }
+  }
+
+  function markDirty(){ const hint=document.getElementById('skdDirtyHint'); if(hint) hint.style.display='block'; if (window.PK_SKD && PK_SKD._getCtx) PK_SKD._getCtx().dirty = true; }
+
+  // expose mini hooki do istniejącego modułu
+  if (!window.PK_SKD) window.PK_SKD = {};
+  // getter na ctx z bloku 1 (dodamy tam 1 linijkę, patrz niżej)
+  // rerender opcji przy każdym renderze modala
+  window.addEventListener('pk_skd_render', renderOptions);
+
+  // wstrzyknięcie kontenera na „Opcje”
+  ensureHost();
+})();
+// === API bootstrap (auth token / csrf / cookies) ===
+window.API = window.API || { base: '/api', authToken: null }; 
+function getCsrf(){ return document.querySelector('meta[name="csrf-token"]')?.content || null; }
+
+async function apiFetch(path, opts={}){
+  const headers = Object.assign({'Content-Type':'application/json'}, opts.headers || {});
+  if (window.API.authToken) headers['Authorization'] = 'Bearer ' + window.API.authToken;
+  const csrf = getCsrf(); if (csrf) headers['X-CSRF-Token'] = csrf;
+
+  return fetch(`${window.API.base}${path}`, {
+    ...opts,
+    headers,
+    credentials: 'include',   // ważne przy ciasteczkach
+  });
+}
+
+// === Modal SKD (blok 2/3): zapis (PUT), usuwanie (DELETE), walidacje — z DEV fallback ===
+(function skdPersist(){
+  if(!window.PK_SKD || !PK_SKD._getCtx){ console.warn('PK_SKD ctx not ready'); return; }
+  const $ = (id)=>document.getElementById(id);
+
+  function toast(msg){ if(window.showToast) showToast(msg); else alert(msg); }
+  function disable(btn, flag){ if(btn){ btn.disabled=!!flag; btn.style.opacity=flag?0.6:1; } }
+
+  function validate(o){
+    const errs=[];
+    if(!o.status) errs.push('Wybierz status.');
+    if(!o.bank) errs.push('Wybierz bank.');
+    if(!o.variant) errs.push('Wybierz wariant.');
+    if(o.variant==='success_fee' && !o.fee_percent && !o.fee_amount) errs.push('Podaj prowizję (%, PLN lub oba).');
+    if(o.fee_percent!=null && (o.fee_percent<0 || o.fee_percent>100)) errs.push('Prowizja % musi być 0–100.');
+    if(o.wps_forecast!=null && o.wps_forecast<0) errs.push('WPS nie może być ujemny.');
+    if(o.fee_amount!=null && o.fee_amount<0) errs.push('Prowizja (PLN) nie może być ujemna.');
+    return errs;
+  }
+
+  async function save(){
+    const ctx = PK_SKD._getCtx(); const o = ctx.offer||{};
+    const errs = validate(o);
+    if(errs.length){ toast('Popraw dane:\n• '+errs.join('\n• ')); return; }
+
+    const btn = $('skdSaveBtn'); disable(btn,true);
+    try{
+      const r = await apiFetch(`/offers/${encodeURIComponent(o.id)}`,{
+        method:'PUT',
+        body: JSON.stringify({ offer_skd: o })
+      });
+
+      if(r.status === 401){
+        // DEV fallback: zapis do localStorage
+        localStorage.setItem('skd_offers:'+o.id, JSON.stringify(o));
+        ctx.offer = o; ctx.dirty = false;
+        const hint = $('skdDirtyHint'); if(hint) hint.style.display='none';
+        if(window.refreshCasesRow) window.refreshCasesRow(o.id, { offer_skd: ctx.offer });
+        toast('Tryb DEV: zapis lokalny (backend 401).');
+        return;
+      }
+      if(!r.ok) throw new Error('HTTP '+r.status);
+
+      const out = await r.json();
+      ctx.offer = out.offer_skd || o;
+      ctx.dirty = false;
+      const hint = $('skdDirtyHint'); if(hint) hint.style.display='none';
+      if(window.refreshCasesRow) window.refreshCasesRow(o.id, { offer_skd: ctx.offer });
+      toast('Zapisano ofertę SKD.');
+    }catch(e){
+      console.error(e);
+      toast('Nie udało się zapisać (sprawdź uprawnienia/API).');
+    }finally{
+      disable(btn,false);
+    }
+  }
+
+  async function del(){
+    const ctx = PK_SKD._getCtx(); const o = ctx.offer||{};
+    if(ctx.role!=='admin'){ toast('Usuwanie dostępne tylko dla administratora.'); return; }
+    if(!confirm('Na pewno usunąć tę ofertę?')) return;
+
+    const btn = $('skdDeleteBtn'); disable(btn,true);
+    try{
+      const r = await apiFetch(`/offers/${encodeURIComponent(o.id)}`,{ method:'DELETE' });
+
+      if(r.status === 401){
+        // DEV fallback: usuń lokalny zapis
+        localStorage.removeItem('skd_offers:'+o.id);
+        if(window.removeCaseRow) window.removeCaseRow(o.id);
+        if(window.PK_SKD && PK_SKD.close) PK_SKD.close();
+        toast('Tryb DEV: lokalne usunięcie (backend 401).');
+        return;
+      }
+      if(!r.ok && r.status!==204) throw new Error('HTTP '+r.status);
+
+      if(window.removeCaseRow) window.removeCaseRow(o.id);
+      if(window.PK_SKD && PK_SKD.close) PK_SKD.close();
+      toast('Usunięto ofertę SKD.');
+    }catch(e){
+      console.error(e);
+      toast('Nie udało się usunąć (sprawdź uprawnienia/API).');
+    }finally{
+      disable(btn,false);
+    }
+  }
+
+  function bindButtons(){
+    const saveBtn = $('skdSaveBtn');
+    const delBtn  = $('skdDeleteBtn');
+    if(saveBtn) saveBtn.onclick = save;
+    if(delBtn)  delBtn.onclick  = del;
+  }
+
+  window.addEventListener('pk_skd_render', bindButtons);
+})();
+// === Modal SKD (blok 3/3): podpięcie do tabeli + badge statusu + walidacja daty ===
+(function skdWireAndUX(){
+  const $ = (id)=>document.getElementById(id);
+
+  // ——— Mini CSS na badge (wstrzyknięcie raz) ———
+  (function injectBadgeCss(){
+    if (document.getElementById('skd-badge-css')) return;
+    const s = document.createElement('style');
+    s.id = 'skd-badge-css';
+    s.textContent = `
+      .skd-badge{display:inline-block;padding:2px 8px;border-radius:999px;font-size:12px;font-weight:600}
+      .skd-badge.draft{background:#eef2ff;color:#1e3a8a}
+      .skd-badge.sent{background:#ecfeff;color:#155e75}
+      .skd-badge.accepted{background:#ecfdf5;color:#065f46}
+      .skd-badge.declined{background:#fef2f2;color:#991b1b}
+      .skd-badge.archived{background:#f1f5f9;color:#334155}
+      .skd-warn{margin-top:6px;font-size:12px;color:#b91c1c}
+      .skd-field-error{border-color:#ef4444 !important; box-shadow:0 0 0 2px rgba(239,68,68,.15)}
+    `;
+    document.head.appendChild(s);
+  })();
+
+  // ——— Badge helper ———
+  function makeBadge(statusText){
+    const s = (statusText||'').toLowerCase();
+    const span = document.createElement('span');
+    span.className = `skd-badge ${s}`;
+    span.textContent = ({draft:'Szkic',sent:'Wysłana',accepted:'Zaakceptowana',declined:'Odrzucona',archived:'Zarchiwizowana'})[s] || statusText || '—';
+    return span;
+  }
+
+  // ——— Pomaluj badge w tabeli (dla elementów z atrybutem data-offer-status) ———
+  function paintBadges(root=document){
+    root.querySelectorAll('[data-offer-status]').forEach(el=>{
+      const txt = (el.getAttribute('data-offer-status') || el.textContent || '').trim();
+      el.innerHTML = ''; el.appendChild(makeBadge(txt));
+    });
+  }
+
+  // ——— Walidacja daty „ważna do” (po renderze modala) ———
+  function validateValidUntil(){
+    const input = $('skdValidUntil'); if(!input) return;
+    const warnId = 'skdValidWarn';
+    const old = $(warnId); if(old) old.remove();
+
+    const v = input.value;
+    if(!v) { input.classList.remove('skd-field-error'); return; }
+
+    // porównanie z „dziś” (lokalnie)
+    const today = new Date(); today.setHours(0,0,0,0);
+    const dt = new Date(v);   dt.setHours(0,0,0,0);
+
+    if(dt < today){
+      input.classList.add('skd-field-error');
+      const w = document.createElement('div');
+      w.id = warnId; w.className = 'skd-warn';
+      w.textContent = 'Uwaga: data ważności minęła. Zaktualizuj, aby oferta była aktualna.';
+      // wstrzykuj bezpośrednio pod polem
+      const parent = input.parentElement || input.closest('div') || $('skdTab-summary');
+      (parent||input).appendChild(w);
+    }else{
+      input.classList.remove('skd-field-error');
+    }
+  }
+
+  // ——— Listener: po każdym renderze modala ———
+  window.addEventListener('pk_skd_render', ()=>{
+    validateValidUntil();
+    paintBadges(); // na wypadek, gdyby status pokazywał się także w modalu
+  });
+
+  // ——— Podpięcie do tabeli spraw: data-action="open-skd" ———
+  (function wireCasesTable(){
+    const table = document.getElementById('casesTable');
+    if(!table) return;
+
+    table.addEventListener('click', async (e)=>{
+      const btn = e.target.closest('[data-action="open-skd"]');
+      if(!btn) return;
+
+      const id = btn.getAttribute('data-offer-id') || btn.getAttribute('data-id') || btn.dataset.offerId || btn.dataset.id;
+      if(!id) return;
+
+      // Pobierz ofertę z modelu lub API (z fallbakiem DEV, jeżeli masz 401)
+      let offer = (window.getOfferById && window.getOfferById(id)) || null;
+      if(!offer){
+        try{
+          const r = await apiFetch(`/offers/${encodeURIComponent(id)}`, { method:'GET' });
+          if(r.status === 401){
+            const local = localStorage.getItem('skd_offers:'+id);
+            offer = local ? JSON.parse(local) : null;
+          }else if(r.ok){
+            const json = await r.json();
+            offer = json.offer_skd || json.offer || null;
+          }
+        }catch(_){}
+      }
+
+      // jeżeli dalej brak — utwórz pusty szkielet, żeby admin mógł uzupełnić
+      if(!offer) offer = { id, status:'draft', variant:'success_fee', history:[], options:[] };
+
+      const role = (window.currentUser && window.currentUser.role) || 'agent';
+      if(window.PK_SKD && PK_SKD.openOffer) PK_SKD.openOffer(offer, role);
+    });
+
+    // Pomaluj badge od razu i po ewentualnym re-renderze tabeli
+    paintBadges(table);
+    window.addEventListener('cases_rendered', ()=>paintBadges(table)); // wywołaj to eventem z Twojego renderCases()
+  })();
+})();
+// === Modal SKD: UX agenta — filtr wariantów wg opcji admina ===
+(function skdAgentVariantWhitelist(){
+  const $ = (id)=>document.getElementById(id);
+
+  function enabledOptionKeys(opts){
+    return (Array.isArray(opts)?opts:[]).filter(o=>o.enabled).map(o=>o.key);
+  }
+  function labelForKey(opts, key){
+    const o = (opts||[]).find(x=>x.key===key);
+    return (o && (o.label||o.key)) || key;
+  }
+  function rebuildVariantForAgent(ctx){
+    const sel = $('skdVariant'); if(!sel) return;
+    const keys = enabledOptionKeys(ctx.offer.options);
+    if(!keys.length){
+      // brak dostępnych opcji -> zablokuj wybór + komunikat
+      sel.innerHTML = `<option value="">— brak opcji od administratora —</option>`;
+      sel.disabled = true;
+      return;
+    }
+    // zbuduj tylko dozwolone warianty
+    sel.innerHTML = '';
+    keys.forEach(k=>{
+      const opt = document.createElement('option');
+      opt.value = k; opt.textContent = labelForKey(ctx.offer.options, k);
+      sel.appendChild(opt);
+    });
+    sel.disabled = false;
+
+    // jeśli bieżący wariant niedozwolony -> przestaw na 1. dozwolony
+    if(!keys.includes(ctx.offer.variant)){
+      ctx.offer.variant = keys[0];
+      sel.value = keys[0];
+      const hint = document.getElementById('skdDirtyHint'); if(hint) hint.style.display='block';
+      if (window.PK_SKD && PK_SKD._getCtx) PK_SKD._getCtx().dirty = true;
+    }else{
+      sel.value = ctx.offer.variant;
+    }
+  }
+
+  // po każdym renderze modala — jeśli agent, odfiltruj warianty
+  window.addEventListener('pk_skd_render', ()=>{
+    if(!window.PK_SKD || !PK_SKD._getCtx) return;
+    const ctx = PK_SKD._getCtx();
+    if(ctx.role !== 'admin') rebuildVariantForAgent(ctx);
+  });
+})();
+
+// === PATCH 1: Walidacja "Ważna do" — live na input/change ===
+(function skdValidUntilLive(){
+  const $ = (id)=>document.getElementById(id);
+
+  function validate(){
+    const input = $('skdValidUntil'); if(!input) return;
+    const warnId = 'skdValidWarn';
+    const old = document.getElementById(warnId); if(old) old.remove();
+
+    const v = input.value;
+    if(!v){ input.classList.remove('skd-field-error'); return; }
+
+    const today = new Date(); today.setHours(0,0,0,0);
+    const dt = new Date(v);   dt.setHours(0,0,0,0);
+
+    if(dt < today){
+      input.classList.add('skd-field-error');
+      const w = document.createElement('div');
+      w.id = warnId; w.className = 'skd-warn';
+      w.textContent = 'Uwaga: data ważności minęła. Zaktualizuj, aby oferta była aktualna.';
+      (input.parentElement || input.closest('div') || document.getElementById('skdTab-summary') || input).appendChild(w);
+    }else{
+      input.classList.remove('skd-field-error');
+    }
+  }
+
+  function bind(){ const i = $('skdValidUntil'); if(!i) return; i.oninput = i.onchange = validate; validate(); }
+  window.addEventListener('pk_skd_render', bind);
+})();
+// === PATCH 2: Badge statusu — globalne malowanie + eventy ===
+(function skdBadgesGlobal(){
+  function makeBadge(statusText){
+    const s = (statusText||'').toLowerCase();
+    const span = document.createElement('span');
+    span.className = `skd-badge ${s}`;
+    span.textContent = ({draft:'Szkic',sent:'Wysłana',accepted:'Zaakceptowana',declined:'Odrzucona',archived:'Zarchiwizowana'})[s] || (statusText||'—');
+    return span;
+  }
+  function paint(root=document){
+    root.querySelectorAll('[data-offer-status]').forEach(el=>{
+      const txt = (el.getAttribute('data-offer-status') || el.textContent || '').trim();
+      // jeżeli już jest badge — pomiń
+      if(el.firstElementChild && el.firstElementChild.className.includes('skd-badge')) return;
+      el.textContent = ''; el.appendChild(makeBadge(txt));
+    });
+  }
+
+  // maluj na start, po renderze modala, po renderze tabeli i na żądanie
+  setTimeout(()=>paint(document), 0);
+  window.addEventListener('pk_skd_render', ()=>paint(document));
+  window.addEventListener('cases_rendered', ()=>paint(document));
+  window.addEventListener('paint_skd_badges', ()=>paint(document));
+})();
+// === (opcjonalnie) alias do apiFetch dla self-testów/legacy ===
+if (typeof window.apiFetch !== 'function' && typeof apiFetch === 'function') { window.apiFetch = apiFetch; }
+
 // ===== DIAGNOSTYKA / overlay =====
 function showDiag(msg) {
   let el = document.getElementById('pkDiag');
