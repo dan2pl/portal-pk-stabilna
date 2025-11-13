@@ -883,68 +883,6 @@ window.bankList = [
   window.PK_SKD = window.PK_SKD || {};
   window.PK_SKD._getCtx = ()=>ctx;
 
-  // ——— wstrzyknięcie szablonu (tylko jeśli brak) ———
-  function ensureTemplate(){
-    if ($('skdOfferModal')) return;
-    const wrap = document.createElement('div');
-    wrap.innerHTML = `
-<div id="skdOfferModal" class="modal" style="display:none;">
-  <div class="modal-dialog" style="background:#fff;border-radius:14px;box-shadow:0 10px 28px rgba(0,0,0,.15);max-width:980px;margin:40px auto;overflow:hidden">
-    <div class="modal-header" style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;background:#f8f9fb">
-      <h3 style="margin:0;font-weight:700;">Oferta SKD</h3>
-      <button class="modal-close" aria-label="Zamknij" style="background:transparent;border:0;font-size:20px;cursor:pointer">×</button>
-    </div>
-
-    <div class="modal-tabs" style="display:flex;gap:8px;padding:8px 16px;border-bottom:1px solid #e6e8ec">
-      <button class="tab active" data-tab="summary" style="padding:6px 10px;border:1px solid #e6e8ec;border-bottom:0;border-radius:8px 8px 0 0;background:#fff;font-weight:700;cursor:pointer">Podsumowanie</button>
-      <button class="tab" data-tab="params"  style="padding:6px 10px;border:1px solid #e6e8ec;border-bottom:0;border-radius:8px 8px 0 0;background:#fafbfc;cursor:pointer">Parametry</button>
-      <button class="tab" data-tab="schedule"style="padding:6px 10px;border:1px solid #e6e8ec;border-bottom:0;border-radius:8px 8px 0 0;background:#fafbfc;cursor:pointer">Harmonogram</button>
-      <button class="tab" data-tab="history" style="padding:6px 10px;border:1px solid #e6e8ec;border-bottom:0;border-radius:8px 8px 0 0;background:#fafbfc;cursor:pointer">Historia</button>
-    </div>
-
-    <div class="modal-body" style="padding:14px 16px">
-      <section class="tab-panel" id="skdTab-summary">
-        <div class="grid-2" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px">
-          <div><label style="display:block;font-size:.86rem;color:#556;opacity:.9;margin-bottom:4px">Klient</label><div id="skdClientName">—</div></div>
-          <div><label style="display:block;font-size:.86rem;color:#556;opacity:.9;margin-bottom:4px">Status</label><select id="skdStatus" style="width:100%;padding:8px;border:1px solid #dde0e6;border-radius:8px"></select></div>
-          <div><label style="display:block;font-size:.86rem;color:#556;opacity:.9;margin-bottom:4px">Wariant</label>
-            <select id="skdVariant" style="width:100%;padding:8px;border:1px solid #dde0e6;border-radius:8px">
-              <option value="success_fee">Prowizja za sukces</option>
-              <option value="upfront_buyout">Wykup z góry</option>
-            </select>
-          </div>
-          <div><label style="display:block;font-size:.86rem;color:#556;opacity:.9;margin-bottom:4px">Bank</label><select id="skdBank" style="width:100%;padding:8px;border:1px solid #dde0e6;border-radius:8px"></select></div>
-          <div><label style="display:block;font-size:.86rem;color:#556;opacity:.9;margin-bottom:4px">WPS (prognoza)</label><input id="skdWpsForecast" type="number" step="0.01" style="width:100%;padding:8px;border:1px solid #dde0e6;border-radius:8px"></div>
-          <div><label style="display:block;font-size:.86rem;color:#556;opacity:.9;margin-bottom:4px">Prowizja (%)</label><input id="skdFeePercent" type="number" step="0.1" style="width:100%;padding:8px;border:1px solid #dde0e6;border-radius:8px"></div>
-          <div><label style="display:block;font-size:.86rem;color:#556;opacity:.9;margin-bottom:4px">Prowizja (PLN)</label><input id="skdFeeAmount" type="number" step="0.01" style="width:100%;padding:8px;border:1px solid #dde0e6;border-radius:8px"></div>
-          <div><label style="display:block;font-size:.86rem;color:#556;opacity:.9;margin-bottom:4px">Ważna do</label><input id="skdValidUntil" type="date" style="width:100%;padding:8px;border:1px solid #dde0e6;border-radius:8px"></div>
-        </div>
-      </section>
-
-      <section class="tab-panel" id="skdTab-params" style="display:none">
-        <div class="grid-2" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px">
-          <div><label style="display:block;font-size:.86rem;color:#556;opacity:.9;margin-bottom:4px">Kwota kredytu (PLN)</label><input id="skdLoanAmount" type="number" step="0.01" style="width:100%;padding:8px;border:1px solid #dde0e6;border-radius:8px"></div>
-          <div><label style="display:block;font-size:.86rem;color:#556;opacity:.9;margin-bottom:4px">Okres (m-ce)</label><input id="skdTenor" type="number" step="1" style="width:100%;padding:8px;border:1px solid #dde0e6;border-radius:8px"></div>
-          <div><label style="display:block;font-size:.86rem;color:#556;opacity:.9;margin-bottom:4px">RRSO (%)</label><input id="skdApr" type="number" step="0.01" style="width:100%;padding:8px;border:1px solid #dde0e6;border-radius:8px"></div>
-          <div><label style="display:block;font-size:.86rem;color:#556;opacity:.9;margin-bottom:4px">Uwagi wewnętrzne</label><textarea id="skdInternalNote" rows="3" style="width:100%;padding:8px;border:1px solid #dde0e6;border-radius:8px"></textarea></div>
-        </div>
-      </section>
-
-      <section class="tab-panel" id="skdTab-schedule" style="display:none"><pre id="skdScheduleBox" style="white-space:pre-wrap;margin:0;color:#667085">Brak harmonogramu do wyświetlenia.</pre></section>
-      <section class="tab-panel" id="skdTab-history"  style="display:none"><ol id="skdHistoryList" style="margin:0;padding-left:18px"></ol></section>
-    </div>
-
-    <div class="modal-footer" style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;background:#f8f9fb">
-      <div id="skdDirtyHint" style="display:none;color:#667085">Niezapisane zmiany…</div>
-      <div>
-        <button id="skdDeleteBtn" style="padding:8px 12px;border-radius:10px;border:0;background:#ef4444;color:#fff;cursor:pointer;display:none">Usuń</button>
-        <button id="skdSaveBtn"   style="padding:8px 12px;border-radius:10px;border:0;background:#2f6fed;color:#fff;cursor:pointer">Zapisz</button>
-      </div>
-    </div>
-  </div>
-</div>`;
-    document.body.appendChild(wrap.firstElementChild);
-  }
 
   // ——— util: readOnly/disabled wg roli ———
   function setRO(node, flag){ if(!node) return; node.readOnly=!!flag; node.disabled=!!flag; }
@@ -1033,10 +971,38 @@ window.bankList = [
     const f = computeFee(ctx.offer);
     if (f!=null){ ctx.offer.fee_amount = f; $('skdFeeAmount').value = money(f); }
   }
+function initSkdTabs() {
+  const tabs = document.querySelectorAll('#skdOffer .modal-tabs .tab');
+  const panels = document.querySelectorAll('#skdOffer .tab-panel');
+
+  if (!tabs.length || !panels.length) return; // bezpieczeństwo
+
+  tabs.forEach((tab) => {
+    tab.addEventListener('click', () => {
+      const tn = tab.dataset.tab; // 'summary', 'contract', 'files'
+
+      // przełącz aktywną zakładkę (górne buttony)
+      tabs.forEach((t) => t.classList.remove('active'));
+      tab.classList.add('active');
+
+      // przełącz widoczne panele
+      panels.forEach((panel) => {
+        const isActive = panel.id === `tab-${tn}`;
+        panel.classList.toggle('active', isActive);
+        panel.style.display = isActive ? '' : 'none';
+      });
+    });
+  });
+}
+  initSkdTabs();
 
   // ——— taby + zamykanie ———
   function wireChrome(){
-    const modal = $('skdOfferModal');
+  const modal = document.getElementById('skdOfferModal');
+  if (!modal) {
+    console.warn('[SKD] wireChrome: #skdOfferModal not found – skipping chrome init.');
+    return;
+  }
     modal.querySelector('.modal-close').onclick = close;
     modal.addEventListener('click', (e)=>{ if(e.target===modal) close(); });
 
@@ -1065,7 +1031,7 @@ window.bankList = [
   }
 
   // ——— publiczny interfejs ———
-  ensureTemplate(); wireChrome();
+  wireChrome();
   window.PK_SKD = window.PK_SKD || {};
   window.PK_SKD.openOffer = open;    // użyj: PK_SKD.openOffer(offerObj, 'admin'|'agent')
   window.PK_SKD.close     = close;
@@ -1780,8 +1746,13 @@ function toggleSection(){
     let now=0, later=0;
     if(v==='sf50'){ now=0; later = wps*0.50; }
     else if(v==='sf49'){ now = -Math.max(0, num(state.offer_skd.upfront_fee)); later = wps*0.51; }
-    else if(v==='sell'){ now = wps*clamp(state.offer_skd.buyout_pct ?? 0.30, 0, 1); later = 0; }
-    const total = now + later;
+    else if(v==='sell'){ now = wps*clamp(state.offer_skd.buyout_pct ?? 0.10, 0, 1); later = 0; }
+    // odczyt anulowanych odsetek z pola w UI
+const futureInput = document.getElementById('futureInterestInput');
+const future = futureInput ? Number(futureInput.value || 0) : 0;
+
+const total = now + later + future;
+
     state.offer_skd.estimates = { client_now: r2(now), client_later: r2(later), total_client: r2(total) };
     $('#estNow')   && ($('#estNow').textContent   = fmt(state.offer_skd.estimates.client_now));
     $('#estLater') && ($('#estLater').textContent = fmt(state.offer_skd.estimates.client_later));
@@ -1822,7 +1793,7 @@ function toggleSection(){
       offer_skd: {
         variant: cd?.offer_skd?.variant || 'sf50',
         upfront_fee: cd?.offer_skd?.upfront_fee ?? null,
-        buyout_pct: cd?.offer_skd?.buyout_pct ?? 0.30,
+        buyout_pct: cd?.offer_skd?.buyout_pct ?? 0.10,
         notes: cd?.offer_skd?.notes || '',
         eligibility: cd?.offer_skd?.eligibility || { sf50:true, sf49:true, sell:true },
         estimates: cd?.offer_skd?.estimates || { client_now:0, client_later:0, total_client:0 }
@@ -1864,6 +1835,31 @@ async function saveSkdOffer(caseId, payload) {
     return {};
   }
 }
+(function setupCaseFiles() {
+  function init() {
+    const input = document.getElementById('caseFilesInput');
+    const list  = document.getElementById('caseFilesList');
+    const empty = document.getElementById('caseFilesEmpty');
+    if (!input || !list) return;
+
+    input.addEventListener('change', () => {
+      const files = Array.from(input.files || []);
+      list.innerHTML = '';
+      if (!files.length) {
+        empty.style.display = 'block';
+        return;
+      }
+      empty.style.display = 'none';
+      files.forEach(f => {
+        const li = document.createElement('li');
+        li.textContent = `${f.name} (${(f.size/1024).toFixed(1)} kB)`;
+        list.appendChild(li);
+      });
+    });
+  }
+  document.addEventListener('DOMContentLoaded', init);
+})();
 
 window.initSkdOffer = initSkdOffer;
 } // ← domknięcie brakującego bloku, np. funkcji lub DOMContentLoaded
+
