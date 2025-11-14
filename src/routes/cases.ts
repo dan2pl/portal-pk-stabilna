@@ -5,48 +5,27 @@ import pool from "../db";
 export default function casesRoutes(app: Express) {
     console.log("➡️ routes: cases + KPI loaded");
 
-    // === LISTA SPRAW ===
-    app.get("/api/cases", async (_req, res) => {
-        try {
-            const q = await pool.query(
-                `SELECT id, client, loan_amount, wps, status, contract_date, bank
-         FROM cases
-         ORDER BY id DESC`
-            );
-            res.json({ items: q.rows });
-        } catch (err) {
-            console.error("GET /api/cases error", err);
-            res.status(500).json({ error: "Server error" });
-        }
-        // === KPI: liczniki wg statusu ===
-        app.get("/api/cases/kpi", async (_req, res) => {
-            try {
-                const sql = `
-  SELECT
-    COUNT(*)::int AS all_total,
-    SUM(CASE WHEN lower(coalesce(status,'')) = 'nowa'       THEN 1 ELSE 0 END)::int AS nowa,
-    SUM(CASE WHEN lower(coalesce(status,'')) = 'w_toku'     THEN 1 ELSE 0 END)::int AS w_toku,
-    SUM(CASE WHEN lower(coalesce(status,'')) = 'zakonczona' THEN 1 ELSE 0 END)::int AS zakonczona,
-    SUM(CASE WHEN lower(coalesce(status,'')) = 'archiwalna' THEN 1 ELSE 0 END)::int AS archiwalna
-  FROM cases
-`;
-
-                const { rows } = await pool.query(sql);
-                const r = rows[0] || {};
-                res.json({
-                    all: r.all_total ?? 0,
-                    nowa: r.nowa ?? 0,
-                    w_toku: r.w_toku ?? 0,
-                    zakonczona: r.zakonczona ?? 0,
-                    archiwalna: r.archiwalna ?? 0,
-                });
-            } catch (err) {
-                console.error("GET /api/cases/kpi error", err);
-                res.status(500).json({ error: "Server error" });
-            }
-        });
-
-    });
+// === LISTA SPRAW (dla dashboardu) ===
+app.get("/api/cases", async (req, res) => {
+  try {
+    const q = await pool.query(
+      `SELECT
+         id,
+         client,
+         bank,
+         loan_amount,
+         COALESCE(wps_forecast, wps) AS wps,
+         status,
+         contract_date
+       FROM cases
+       ORDER BY id DESC`
+    );
+    res.json(q.rows);
+  } catch (err) {
+    console.error("GET /api/cases error", err);
+    res.status(500).json({ error: "Server error" });
+  }
+});
 
     // === KPI (opcjonalnie wykorzystywane przez front) ===
     app.get("/api/kpi", async (_req, res) => {
@@ -109,18 +88,16 @@ app.get("/api/cases/:id", async (req, res) => {
 
     try {
         const q = await pool.query(
-            `SELECT 
-                id, 
-                client, 
-                loan_amount, 
-                wps, 
-                status, 
-                contract_date, 
-                bank,
-                wps_forecast,
-                offer_skd
-             FROM cases
-             WHERE id = $1`,
+                  `SELECT 
+         id,
+         client,
+         loan_amount,
+         COALESCE(wps_forecast, wps) AS wps,
+         status,
+         contract_date,
+         bank
+       FROM cases
+       WHERE id = $1`,
             [id]
         );
 
@@ -254,12 +231,17 @@ app.get("/api/cases/:id/skd-offer", async (req, res) => {
 app.put("/api/cases/:id/skd-offer", async (req, res) => {
   const { id } = req.params;
   const { wps_forecast, offer_skd } = req.body || {};
-
+  console.log("PUT /api/cases/:id/skd-offer →", {
+    id,
+    wps_forecast,
+    hasOffer: !!offer_skd,
+  });
   try {
     await pool.query(
       `UPDATE cases SET 
          wps_forecast = $1,
-         offer_skd = $2
+         wps          = COALESCE($1, wps),
+         offer_skd    = $2
        WHERE id = $3`,
       [wps_forecast ?? null, JSON.stringify(offer_skd || {}), id]
     );

@@ -2336,9 +2336,11 @@ function initSkdOffer_v2(caseData) {
     });
   });
 
-  // 🔥 PRZYCISK "ZAPISZ"
+   // 🔥 PRZYCISK "ZAPISZ" – bindowany tylko raz
   const saveBtn = document.getElementById("skdOfferSaveBtn");
-  if (saveBtn) {
+  if (saveBtn && !saveBtn.dataset.bound) {
+    saveBtn.dataset.bound = "1";
+
     const markDirty = () => {
       saveBtn.style.display = "inline-block";
     };
@@ -2354,11 +2356,15 @@ function initSkdOffer_v2(caseData) {
         return;
       }
 
-      const wpsForecast = parseNumber(wpsForecastInput?.value);
+      const forecastVal = parseNumber(wpsForecastInput?.value);
+      const finalVal    = parseNumber(wpsFinalInput?.value);
+
+      // jeśli jest WPS ostateczny → on rządzi, inaczej prognoza
+      const wpsForecast = finalVal ?? forecastVal ?? null;
 
       // wariant aktualnie wybrany
       let selectedVariant = "sf50";
-      const selectedRadio = Array.from(variantRadios).find((r) => r.checked);
+      const selectedRadio = Array.from(variantRadios || []).find((r) => r.checked);
       if (selectedRadio) selectedVariant = selectedRadio.value;
 
       const buyoutPctRaw = parseNumber(buyoutPctInput?.value);
@@ -2369,9 +2375,9 @@ function initSkdOffer_v2(caseData) {
         buyout_pct: buyoutPctRaw != null ? buyoutPctRaw / 100 : null,
         notes: notesInput?.value || "",
         eligibility: {
-          sf50: !!eligSf50.checked,
-          sf49: !!eligSf49.checked,
-          sell: !!eligSell.checked,
+          sf50: !!eligSf50?.checked,
+          sf49: !!eligSf49?.checked,
+          sell: !!eligSell?.checked,
         },
         estimates: {},
       };
@@ -2409,7 +2415,6 @@ function initSkdOffer_v2(caseData) {
   });
 
   console.log("SKD_v2 initialState z caseData:", initialState);
-
   applyStateToForm(initialState);
 
   // 🔥 2) NADPISZ DANYMI Z BACKENDU
@@ -2427,73 +2432,13 @@ function initSkdOffer_v2(caseData) {
       });
 
       console.log("SKD_v2 (API) →", apiState);
-
       applyStateToForm(apiState);
     } catch (err) {
       console.error("SKD_v2: błąd pobierania oferty:", err);
     }
   })();
 }
-function initSkdOfferSaving() {
-  console.log("initSkdOfferSaving: start");
 
-  const root = document.getElementById("skdOffer");
-  const saveBtn = document.getElementById("skdOfferSaveBtn");
-
-  if (!root || !saveBtn) {
-    console.warn("initSkdOfferSaving: brak #skdOffer albo #skdOfferSaveBtn");
-    return;
-  }
-
-  const markDirty = () => {
-    saveBtn.style.display = "inline-block";
-  };
-
-  // nasłuchy input/change → pokazują przycisk
-  root.querySelectorAll("input, textarea, select").forEach((el) => {
-    el.addEventListener("input", markDirty);
-    el.addEventListener("change", markDirty);
-  });
-
-  // obsługa kliknięcia
-  saveBtn.addEventListener("click", async () => {
-    if (!window.currentCaseId) {
-      alert("Brak ID sprawy – nie mogę zapisać.");
-      return;
-    }
-
-    const offerData = collectSkdOfferFormData();
-
-    const wpsForecast =
-      offerData.wps && typeof offerData.wps.forecast === "number"
-        ? offerData.wps.forecast
-        : null;
-
-    console.log("▶ Zapis SKD dla sprawy", window.currentCaseId, {
-      wps_forecast: wpsForecast,
-      offer_skd: offerData,
-    });
-
-    try {
-      const res = await fetch(`/api/cases/${window.currentCaseId}/skd-offer`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          wps_forecast: wpsForecast,
-          offer_skd: offerData,
-        }),
-      });
-
-      if (!res.ok) throw new Error("HTTP " + res.status);
-
-      console.log("✅ Oferta SKD zapisana poprawnie");
-      saveBtn.style.display = "none";
-    } catch (err) {
-      console.error("❌ Błąd zapisu oferty SKD:", err);
-      alert("Nie udało się zapisać oferty SKD.");
-    }
-  });
-}
 window.initSkdOffer = initSkdOffer_v2;
 // nadpisujemy starą nazwę funkcji, żeby wszystko używało v2
 try {
