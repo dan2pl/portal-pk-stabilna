@@ -103,23 +103,50 @@ export default function casesRoutes(app: Express) {
         }
     });
 
-    // === SZCZEGÓŁY JEDNEJ SPRAWY ===
-    app.get("/api/cases/:id", async (req, res) => {
-        const { id } = req.params;
-        try {
-            const q = await pool.query(
-                `SELECT id, client, loan_amount, wps, status, contract_date, bank
-         FROM cases
-         WHERE id = $1`,
-                [id]
-            );
-            if (!q.rows.length) return res.status(404).json({ error: "Case not found" });
-            res.json(q.rows[0]);
-        } catch (err) {
-            console.error("GET /api/cases/:id error", err);
-            res.status(500).json({ error: "Server error" });
+    // === SZCZEGÓŁY JEDNEJ SPRAWY (z ofertą SKD!) ===
+app.get("/api/cases/:id", async (req, res) => {
+    const { id } = req.params;
+
+    try {
+        const q = await pool.query(
+            `SELECT 
+                id, 
+                client, 
+                loan_amount, 
+                wps, 
+                status, 
+                contract_date, 
+                bank,
+                wps_forecast,
+                offer_skd
+             FROM cases
+             WHERE id = $1`,
+            [id]
+        );
+
+        if (!q.rows.length) {
+            return res.status(404).json({ error: "Case not found" });
         }
-    });
+
+        const row = q.rows[0];
+
+        // Konwersja JSON → obiekt (gdy DB zwraca string)
+        let offer = row.offer_skd || {};
+        if (typeof offer === "string") {
+            try { offer = JSON.parse(offer); } catch { offer = {}; }
+        }
+
+        res.json({
+            ...row,
+            offer_skd: offer
+        });
+
+    } catch (err) {
+        console.error("GET /api/cases/:id error", err);
+        res.status(500).json({ error: "Server error" });
+    }
+});
+
 
     // === AKTUALIZACJA (WPS / STATUS / KWOTA / DATA / BANK) ===
     app.patch("/api/cases/:id", async (req, res) => {
@@ -176,33 +203,49 @@ export default function casesRoutes(app: Express) {
             res.status(500).json({ error: "Server error" });
         }
     });
-// === ZAPIS OFERTY SKD (eligibility / variant / client_preference / wps_forecast) ===
-app.put("/api/cases/:id/skd-offer", async (req, res) => {
+// === ODCZYT OFERTY SKD (GET /api/cases/:id/skd-offer) ===
+app.get("/api/cases/:id/skd-offer", async (req, res) => {
+  const { id } = req.params;
+
   try {
-    const id = Number(req.params.id);
-    const { wps_forecast, offer_skd } = req.body || {};
-
-    if (!Number.isFinite(id)) {
-      return res.status(400).json({ error: "Niepoprawne ID sprawy" });
-    }
-
-    // Bezpiecznie rzutujemy JSON do jsonb
-    await pool.query(
-      `UPDATE cases
-         SET wps_forecast = $1,
-             offer_skd    = $2::jsonb,
-             updated_at   = now()
-       WHERE id = $3`,
-      [
-        wps_forecast === undefined || wps_forecast === null ? null : Number(wps_forecast),
-        JSON.stringify(offer_skd || {}),
-        id,
-      ]
+    const result = await pool.query(
+      "SELECT wps_forecast, offer_skd FROM cases WHERE id = $1",
+      [id]
     );
 
-    res.json({ ok: true });
+    if (!result.rows.length) {
+      return res.status(404).json({ error: "Case not found" });
+    }
+
+    const row = result.rows[0];
+
+    // w zależności od typu kolumny: json / jsonb może być już obiektem, a może być stringiem
+    let rawOffer: any = row.offer_skd || {};
+    if (typeof rawOffer === "string") {
+      try {
+        rawOffer = JSON.parse(rawOffer);
+      } catch {
+        rawOffer = {};
+      }
+    }
+
+    const rawElig = (rawOffer && rawOffer.eligibility) || {};
+
+    const eligibility = {
+      sf50: rawElig.sf50 ?? true,  // undefined/null → true, false zostaje false
+      sf49: rawElig.sf49 ?? true,
+      sell: rawElig.sell ?? true,
+    };
+
+    return res.json({
+      wps_forecast: row.wps_forecast ?? null,
+      offer_skd: {
+        ...rawOffer,
+        eligibility,
+      },
+    });
   } catch (err) {
-    console.error("PUT /api/cases/:id/skd-offer error", err);
+    console.error("GET /api/cases/:id/skd-offer error", err);
     res.status(500).json({ error: "Server error" });
   }
 });

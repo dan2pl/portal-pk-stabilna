@@ -1518,13 +1518,21 @@ document.addEventListener('DOMContentLoaded', async () => {
       });
       updateCount(shown, q);
 
-      if (shown === 1 && typeof openCaseModal === "function") {
-        const onlyTr = rows.find(tr => tr.style.display !== "none");
-        const idCell = onlyTr ? onlyTr.querySelector("td,th") : null;
-        const caseId = idCell ? (idCell.textContent || "").trim() : null;
-        if (caseId) setTimeout(() => openCaseModal(caseId), 80);
+          if (shown === 1 && typeof openCaseModal === "function") {
+      const onlyTr = rows.find(tr => tr.style.display !== "none");
+      const idCell = onlyTr ? onlyTr.querySelector("td,th") : null;
+      const caseId = idCell ? (idCell.textContent || "").trim() : null;
+
+      if (caseId) {
+        setTimeout(() => {
+          window.currentCaseId = caseId;              // ⬅️ tutaj łapiemy ID sprawy
+          console.log("Otwieram sprawę ID:", caseId); // opcjonalny log do debugowania
+          openCaseModal(caseId);
+        }, 80);
       }
-    }, 200);
+    }
+  }, 200);
+
 
     // nasłuchy
     input.addEventListener("input", apply);
@@ -1561,24 +1569,236 @@ document.addEventListener('DOMContentLoaded', async () => {
   })(); // ← JEDYNE zamknięcie IIFE initCaseSearch
 });     // ← JEDYNE zamknięcie addEventListener('DOMContentLoaded', ...)
 
+function populateSkdOfferForm(offerSkd) {
+  if (!offerSkd) return;
+
+  const { eligibility, clientPref, variant, wps, notes, contract, filesMeta } = offerSkd;
+
+  // 1. Dostępność wariantów
+  if (eligibility) {
+    console.log("SKD eligibility z backendu:", eligibility);
+    const eligSf50 = document.getElementById("eligSf50");
+    const eligSf49 = document.getElementById("eligSf49");
+    const eligSell = document.getElementById("eligSell");
+
+    if (eligSf50) eligSf50.checked = !!eligibility.sf50;
+    if (eligSf49) eligSf49.checked = !!eligibility.sf49;
+    if (eligSell) eligSell.checked = !!eligibility.sell;
+  }
+
+  // 2. Preferencja klienta (radio clientPref)
+  if (clientPref) {
+    const prefRadio = document.querySelector(
+      `input[name="clientPref"][value="${clientPref}"]`
+    );
+    if (prefRadio) prefRadio.checked = true;
+  }
+
+  // 3. Wybrany wariant oferty (radio skdVariant)
+  if (variant) {
+    const variantRadio = document.querySelector(
+      `input[name="skdVariant"][value="${variant}"]`
+    );
+    if (variantRadio) variantRadio.checked = true;
+  }
+
+  // 4. WPS + odsetki
+  if (wps) {
+    const wpsForecastInput = document.getElementById("wpsForecastInput");
+    const wpsFinalInput = document.getElementById("wpsFinalInput");
+    const futureInterestInput = document.getElementById("futureInterestInput");
+    const buyoutPctInput = document.getElementById("buyoutPctInput");
+
+    if (wpsForecastInput && wps.forecast != null) {
+      wpsForecastInput.value = wps.forecast;
+    }
+    if (wpsFinalInput && wps.final != null) {
+      wpsFinalInput.value = wps.final;
+    }
+    if (futureInterestInput && wps.futureInterest != null) {
+      futureInterestInput.value = wps.futureInterest;
+    }
+    if (buyoutPctInput && wps.buyoutPct != null) {
+      buyoutPctInput.value = wps.buyoutPct;
+    }
+  }
+
+  // 5. Notatka
+  const notesEl = document.getElementById("skdOfferNotes");
+  if (notesEl && typeof notes === "string") {
+    notesEl.value = notes;
+  }
+
+  // 6. Dane do umowy
+  if (contract) {
+    const contractName = document.getElementById("contractName");
+    const contractPesel = document.getElementById("contractPesel");
+    const contractAddress = document.getElementById("contractAddress");
+    const contractPhone = document.getElementById("contractPhone");
+    const contractEmail = document.getElementById("contractEmail");
+    const contractIban = document.getElementById("contractIban");
+
+    if (contractName && contract.name != null) contractName.value = contract.name;
+    if (contractPesel && contract.pesel != null) contractPesel.value = contract.pesel;
+    if (contractAddress && contract.address != null) contractAddress.value = contract.address;
+    if (contractPhone && contract.phone != null) contractPhone.value = contract.phone;
+    if (contractEmail && contract.email != null) contractEmail.value = contract.email;
+    if (contractIban && contract.iban != null) contractIban.value = contract.iban;
+  }
+
+  // 7. Pliki – tylko meta, bez realnego uploadu
+  const filesList = document.getElementById("caseFilesList");
+  const filesEmpty = document.getElementById("caseFilesEmpty");
+
+  if (filesList && filesEmpty) {
+    filesList.innerHTML = "";
+
+    if (Array.isArray(filesMeta) && filesMeta.length > 0) {
+      filesEmpty.style.display = "none";
+      filesMeta.forEach((f) => {
+        const li = document.createElement("li");
+        li.textContent = `${f.name} (${Math.round((f.size || 0) / 1024)} kB)`;
+        filesList.appendChild(li);
+      });
+    } else {
+      filesEmpty.style.display = "";
+    }
+  }
+
+  const saveBtn = document.getElementById("skdOfferSaveBtn");
+  if (saveBtn) {
+    saveBtn.style.display = "none";
+  }
+}
+function resetSkdOfferForm() {
+  // checkboxy
+  ["eligSf50", "eligSf49", "eligSell"].forEach((id) => {
+    const el = document.getElementById(id);
+    if (el) el.checked = false;
+  });
+
+  // radio
+  document
+    .querySelectorAll('input[name="clientPref"], input[name="skdVariant"]')
+    .forEach((el) => (el.checked = false));
+
+  // inputy / textarea
+  [
+    "wpsForecastInput",
+    "wpsFinalInput",
+    "futureInterestInput",
+    "buyoutPctInput",
+    "skdOfferNotes",
+    "contractName",
+    "contractPesel",
+    "contractAddress",
+    "contractPhone",
+    "contractEmail",
+    "contractIban",
+  ].forEach((id) => {
+    const el = document.getElementById(id);
+    if (el) el.value = "";
+  });
+
+  // pliki
+  const filesList = document.getElementById("caseFilesList");
+  const filesEmpty = document.getElementById("caseFilesEmpty");
+  if (filesList) filesList.innerHTML = "";
+  if (filesEmpty) filesEmpty.style.display = "";
+
+  // przycisk Zapisz ukryty na starcie
+  const saveBtn = document.getElementById("skdOfferSaveBtn");
+  if (saveBtn) {
+    saveBtn.style.display = "none";
+  }
+}
+
 // ===== SKD Offer – inicjalizacja/logika =====
 function initSkdOffer(caseData) {
-  console.log('%cinitSkdOffer uruchomione','color:#fff;background:#900;padding:2px 6px;border-radius:4px;');
+  console.log(
+    '%cinitSkdOffer uruchomione',
+    'color:#fff;background:#900;padding:2px 6px;border-radius:4px;'
+  );
   console.log('initSkdOffer → caseData.id =', caseData && caseData.id);
-  if (!caseData) { console.warn('initSkdOffer: brak caseData'); return; }
+  if (!caseData) {
+    console.warn('initSkdOffer: brak caseData');
+    return;
+  }
 
   const root = document.getElementById('skdOffer');
-  if (!root) { console.warn('initSkdOffer: brak #skdOffer w DOM'); return; }
+  if (!root) {
+    console.warn('initSkdOffer: brak #skdOffer w DOM');
+    return;
+  }
+// ===== Zbiera wszystkie dane z formularza SKD =====
+function collectSkdOfferFormData() {
+  const root = document.getElementById("skdOffer");
+  if (!root) return {};
+
+  const $ = (sel) => root.querySelector(sel);
+
+  // 1. Eligibility (checkboxy)
+  const eligibility = {
+    sf50: $("#eligSf50")?.checked || false,
+    sf49: $("#eligSf49")?.checked || false,
+    sell: $("#eligSell")?.checked || false,
+  };
+
+  // 2. Preferencja klienta (radio)
+  const clientPref = root.querySelector("input[name='clientPref']:checked");
+  const client_preference = clientPref ? clientPref.value : null;
+
+  // 3. Wybrany wariant SKD (radio)
+  const variantEl = root.querySelector("input[name='skdVariant']:checked");
+  const variant = variantEl ? variantEl.value : null;
+
+  // 4. WPS
+  const wps = {
+    forecast: parseFloat($("#wpsForecastInput")?.value || "0") || 0,
+    final: parseFloat($("#wpsFinalInput")?.value || "0") || 0,
+    future_interest: parseFloat($("#futureInterestInput")?.value || "0") || 0,
+  };
+
+  // 5. Buyout %
+  const buyout_pct =
+    parseFloat($("#buyoutPctInput")?.value || "0") / 100 || 0;
+
+  // 6. Notatka
+  const notes = $("#skdOfferNotes")?.value || "";
+
+  return {
+    eligibility,
+    client_preference,
+    variant,
+    wps,
+    buyout_pct,
+    notes,
+  };
+}
+
+  // jednorazowa inicjalizacja logiki zapisu SKD
+  if (!window.__skdSavingInitialized) {
+    initSkdOfferSaving();
+    window.__skdSavingInitialized = true;
+  }
 
   const lastId = root.dataset.initedFor;
   if (lastId && String(lastId) === String(caseData.id || '')) {
-    console.log('%cinitSkdOffer: pominięto (już aktywne dla tej sprawy)','color:gray');
+    console.log(
+      '%cinitSkdOffer: pominięto (już aktywne dla tej sprawy)',
+      'color:gray'
+    );
     return;
   }
+
   root.dataset.initedFor = String(caseData.id || '');
   root.dataset.caseId    = String(caseData.id || '');
 
+  window.currentCaseId = caseData.id;
+  resetSkdOfferForm();
+
   const $ = (s) => root.querySelector(s);
+
   const wpsInput   = $('#wpsForecastInput');
   const copyBtn    = $('#btnCopyWpsToForecast');
   const saveBtn    = $('#skdOfferSaveBtn');
@@ -1590,6 +1810,80 @@ function initSkdOffer(caseData) {
   const isAdmin    = (document.body.dataset.role === 'admin');
 
   const state = normalizeSkdOffer(caseData);
+
+  function initSkdOfferSaving() {
+    console.log("initSkdOfferSaving uruchomione");
+  const root = document.getElementById("skdOffer");
+  const saveBtn = document.getElementById("skdOfferSaveBtn");
+  if (!root || !saveBtn) {
+    console.warn("initSkdOfferSaving: brak #skdOffer albo #skdOfferSaveBtn");
+    return;
+  }
+
+  const markDirty = () => {
+    saveBtn.style.display = "inline-block";
+  };
+
+  root.querySelectorAll("input, textarea, select").forEach((el) => {
+    el.addEventListener("input", markDirty);
+    el.addEventListener("change", markDirty);
+  });
+
+  saveBtn.addEventListener("click", async () => {
+    if (!window.currentCaseId) {
+      alert("Brak ID sprawy – nie mogę zapisać oferty SKD.");
+      return;
+    }
+
+    const offerData = collectSkdOfferFormData();
+
+    const wpsForecast =
+      offerData.wps && typeof offerData.wps.forecast === "number"
+        ? offerData.wps.forecast
+        : null;
+
+    console.log("▶ Zapis SKD dla sprawy", window.currentCaseId, {
+      wps_forecast: wpsForecast,
+      offer_skd: offerData,
+    });
+
+    try {
+      const res = await fetch(
+        `/api/cases/${window.currentCaseId}/skd-offer`,
+        {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            wps_forecast: wpsForecast,
+            offer_skd: offerData,
+          }),
+        }
+      );
+
+      if (!res.ok) {
+        throw new Error("HTTP " + res.status);
+      }
+
+      console.log("✅ Oferta SKD zapisana poprawnie");
+      saveBtn.style.display = "none";
+    } catch (err) {
+      console.error("❌ Błąd zapisu oferty SKD:", err);
+      alert("Nie udało się zapisać oferty SKD. Sprawdź konsolę (F12).");
+    }
+  });
+}
+
+  // ======================
+// ŁADOWANIE ZAPISANYCH DANYCH SKD
+const offerSkd = state.offer_skd || state.skd_offer || null;
+
+if (offerSkd) {
+  console.log("SKD: wczytywanie istniejącej oferty z backendu:", offerSkd);
+  populateSkdOfferForm(offerSkd);
+} else {
+  console.log("SKD: brak zapisanej oferty — czysty formularz");
+}
+
 const fallbackWps = Number(caseData?.wps || 0);
 if (isAdmin && (!state.wps_forecast || Number(state.wps_forecast) === 0) && fallbackWps > 0) {
   state.wps_forecast = fallbackWps;
@@ -1683,6 +1977,7 @@ if (isAdmin && (!state.wps_forecast || Number(state.wps_forecast) === 0) && fall
     });
   });
 }
+
 
 // po normalize + prefill:
 toggleSection();
@@ -1788,18 +2083,32 @@ const total = now + later + future;
   }
 
   function normalizeSkdOffer(cd){
-    return {
-      wps_forecast: cd?.wps_forecast ? Number(cd.wps_forecast) : 0,
-      offer_skd: {
-        variant: cd?.offer_skd?.variant || 'sf50',
-        upfront_fee: cd?.offer_skd?.upfront_fee ?? null,
-        buyout_pct: cd?.offer_skd?.buyout_pct ?? 0.10,
-        notes: cd?.offer_skd?.notes || '',
-        eligibility: cd?.offer_skd?.eligibility || { sf50:true, sf49:true, sell:true },
-        estimates: cd?.offer_skd?.estimates || { client_now:0, client_later:0, total_client:0 }
+  const rawOffer = cd?.offer_skd || {};
+  const rawElig  = rawOffer.eligibility || {};
+
+  const eligibility = {
+    sf50: rawElig.sf50 ?? true,  // jeśli undefined / null → true, jeśli false → ZOSTAJE false
+    sf49: rawElig.sf49 ?? true,
+    sell: rawElig.sell ?? true,
+  };
+
+  return {
+    wps_forecast: cd?.wps_forecast ? Number(cd.wps_forecast) : 0,
+    offer_skd: {
+      variant: rawOffer.variant || 'sf50',
+      upfront_fee: rawOffer.upfront_fee ?? null,
+      buyout_pct: rawOffer.buyout_pct ?? 0.10,
+      notes: rawOffer.notes || '',
+      eligibility,
+      estimates: rawOffer.estimates || {
+        client_now: 0,
+        client_later: 0,
+        total_client: 0
       }
-    };
-  }
+    }
+  };
+}
+
   function extractDomWps(){
     const el = document.getElementById('caseWpsValue');
     if(!el) return 0;
@@ -1859,7 +2168,339 @@ async function saveSkdOffer(caseId, payload) {
   }
   document.addEventListener('DOMContentLoaded', init);
 })();
+function normalizeSkdOffer(cd) {
+  const rawOffer = cd?.offer_skd || {};
+  const rawElig  = rawOffer.eligibility || {};
 
-window.initSkdOffer = initSkdOffer;
+  const eligibility = {
+    sf50: rawElig.sf50 ?? true,
+    sf49: rawElig.sf49 ?? true,
+    sell: rawElig.sell ?? true,
+  };
+
+  return {
+    wps_forecast: cd?.wps_forecast ? Number(cd.wps_forecast) : 0,
+    offer_skd: {
+      variant: rawOffer.variant || "sf50",
+      upfront_fee: rawOffer.upfront_fee ?? null,
+      buyout_pct: rawOffer.buyout_pct ?? 0.1,
+      notes: rawOffer.notes || "",
+      eligibility,
+      estimates: rawOffer.estimates || {
+        client_now: 0,
+        client_later: 0,
+        total_client: 0,
+      },
+    },
+  };
+}
+
+function initSkdOffer_v2(caseData) {
+  console.log(
+    "%cinitSkdOffer_v2 uruchomione",
+    "color:#fff;background:#900;padding:2px 6px;border-radius:4px;"
+  );
+  console.log("initSkdOffer_v2 → caseData.id =", caseData && caseData.id);
+
+  if (!caseData || !caseData.id) {
+    console.warn("initSkdOffer_v2: brak caseData lub id");
+    return;
+  }
+
+  const root = document.getElementById("skdOffer");
+  if (!root) {
+    console.warn("initSkdOffer_v2: brak #skdOffer w DOM");
+    return;
+  }
+
+  // zapamiętujemy ID sprawy
+  window.currentCaseId = caseData.id;
+
+  const $ = (sel) => root.querySelector(sel);
+
+  // POLA
+  const eligSf50 = $("#eligSf50");
+  const eligSf49 = $("#eligSf49");
+  const eligSell = $("#eligSell");
+
+  const wpsForecastInput    = $("#wpsForecastInput");
+  const wpsFinalInput       = $("#wpsFinalInput");
+  const futureInterestInput = $("#futureInterestInput");
+  const buyoutPctInput      = $("#buyoutPctInput");
+  const notesInput          = $("#skdOfferNotes");
+
+  const variantRadios = root.querySelectorAll("input[name='skdVariant']");
+
+  // KARTY WARIANTÓW
+  const variantCards = {
+    sf50: root.querySelector('[data-variant="sf50"]'),
+    sf49: root.querySelector('[data-variant="sf49"]'),
+    sell: root.querySelector('[data-variant="sell"]'),
+  };
+
+  // POMOCNICZE FUNKCJE
+  const toBool = (v, def = true) => {
+    if (v === undefined || v === null) return def;
+    if (v === true || v === false) return v;
+    if (typeof v === "string") {
+      if (v.toLowerCase() === "true") return true;
+      if (v.toLowerCase() === "false") return false;
+    }
+    if (v === 1) return true;
+    if (v === 0) return false;
+    return !!v;
+  };
+
+  const parseNumber = (value) => {
+    if (value === undefined || value === null || value === "") return null;
+    const cleaned = String(value).replace(/\s/g, "").replace(",", ".");
+    const n = Number(cleaned);
+    return Number.isFinite(n) ? n : null;
+  };
+
+  // 🔥 CHOWANIE / POKAZYWANIE KAFELKÓW
+  const syncVariantVisibility = (eligObj) => {
+    if (!eligObj) return;
+
+    const allowed = {
+      sf50: toBool(eligObj.sf50, true),
+      sf49: toBool(eligObj.sf49, true),
+      sell: toBool(eligObj.sell, true),
+    };
+
+    if (variantCards.sf50) variantCards.sf50.style.display = allowed.sf50 ? "" : "none";
+    if (variantCards.sf49) variantCards.sf49.style.display = allowed.sf49 ? "" : "none";
+    if (variantCards.sell) variantCards.sell.style.display = allowed.sell ? "" : "none";
+
+    // jeśli aktualnie wybrany wariant stał się niedozwolony → wybierz pierwszy dostępny
+    if (variantRadios && variantRadios.length) {
+      const radiosArr = Array.from(variantRadios);
+      let current = radiosArr.find((r) => r.checked);
+
+      if (!current || !allowed[current.value]) {
+        const firstAllowed = radiosArr.find((r) => allowed[r.value]);
+        if (firstAllowed) firstAllowed.checked = true;
+      }
+    }
+  };
+
+  // 🔥 WYPEŁNIENIE FORMULARZA DANYMI
+  const applyStateToForm = (state) => {
+    if (!state) return;
+
+    const offer = state.offer_skd || {};
+    const elig  = offer.eligibility || {};
+
+    console.log("SKD_v2 → applyStateToForm, eligibility:", elig);
+
+    // najważniejsze: chowamy / pokazujemy warianty
+    syncVariantVisibility(elig);
+
+    // checkboxy
+    if (eligSf50) eligSf50.checked = toBool(elig.sf50, true);
+    if (eligSf49) eligSf49.checked = toBool(elig.sf49, true);
+    if (eligSell) eligSell.checked = toBool(elig.sell, true);
+
+    // kwoty
+    if (wpsForecastInput && typeof state.wps_forecast === "number")
+      wpsForecastInput.value = String(state.wps_forecast).replace(".", ",");
+
+    if (wpsFinalInput && typeof offer.wps_final === "number")
+      wpsFinalInput.value = String(offer.wps_final).replace(".", ",");
+
+    if (futureInterestInput && typeof offer.future_interest === "number")
+      futureInterestInput.value = String(offer.future_interest).replace(".", ",");
+
+    if (buyoutPctInput && typeof offer.buyout_pct === "number")
+      buyoutPctInput.value = String(offer.buyout_pct * 100);
+
+    if (notesInput) notesInput.value = offer.notes || "";
+
+    // wariant (radio)
+    if (variantRadios && offer.variant) {
+      variantRadios.forEach((r) => {
+        r.checked = r.value === offer.variant;
+      });
+    }
+  };
+
+  // 🔥 DYNAMICZNE REAGOWANIE NA ZMIANĘ CHECKBOXÓW
+  [eligSf50, eligSf49, eligSell].forEach((el) => {
+    if (!el) return;
+    el.addEventListener("change", () => {
+      syncVariantVisibility({
+        sf50: !!eligSf50.checked,
+        sf49: !!eligSf49.checked,
+        sell: !!eligSell.checked,
+      });
+    });
+  });
+
+  // 🔥 PRZYCISK "ZAPISZ"
+  const saveBtn = document.getElementById("skdOfferSaveBtn");
+  if (saveBtn) {
+    const markDirty = () => {
+      saveBtn.style.display = "inline-block";
+    };
+
+    root.querySelectorAll("input, textarea, select").forEach((el) => {
+      el.addEventListener("input", markDirty);
+      el.addEventListener("change", markDirty);
+    });
+
+    saveBtn.addEventListener("click", async () => {
+      if (!window.currentCaseId) {
+        alert("Brak ID sprawy – nie mogę zapisać oferty SKD.");
+        return;
+      }
+
+      const wpsForecast = parseNumber(wpsForecastInput?.value);
+
+      // wariant aktualnie wybrany
+      let selectedVariant = "sf50";
+      const selectedRadio = Array.from(variantRadios).find((r) => r.checked);
+      if (selectedRadio) selectedVariant = selectedRadio.value;
+
+      const buyoutPctRaw = parseNumber(buyoutPctInput?.value);
+
+      const offerData = {
+        variant: selectedVariant,
+        upfront_fee: null,
+        buyout_pct: buyoutPctRaw != null ? buyoutPctRaw / 100 : null,
+        notes: notesInput?.value || "",
+        eligibility: {
+          sf50: !!eligSf50.checked,
+          sf49: !!eligSf49.checked,
+          sell: !!eligSell.checked,
+        },
+        estimates: {},
+      };
+
+      console.log("▶ Zapis SKD dla sprawy", window.currentCaseId, {
+        wps_forecast: wpsForecast,
+        offer_skd: offerData,
+      });
+
+      try {
+        const res = await fetch(`/api/cases/${window.currentCaseId}/skd-offer`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            wps_forecast: wpsForecast,
+            offer_skd: offerData,
+          }),
+        });
+
+        if (!res.ok) throw new Error("HTTP " + res.status);
+
+        console.log("✅ Oferta SKD zapisana poprawnie");
+        saveBtn.style.display = "none";
+      } catch (err) {
+        console.error("❌ Błąd zapisu oferty SKD:", err);
+        alert("Nie udało się zapisać oferty SKD. Sprawdź konsolę.");
+      }
+    });
+  }
+
+  // 🔥 1) ZAŁADUJ DANE Z caseData
+  const initialState = normalizeSkdOffer({
+    wps_forecast: caseData.wps_forecast,
+    offer_skd: caseData.offer_skd,
+  });
+
+  console.log("SKD_v2 initialState z caseData:", initialState);
+
+  applyStateToForm(initialState);
+
+  // 🔥 2) NADPISZ DANYMI Z BACKENDU
+  (async () => {
+    try {
+      const res = await fetch(`/api/cases/${caseData.id}/skd-offer`);
+      if (!res.ok) return;
+
+      const data = await res.json();
+      console.log("SKD_v2: wczytuję ofertę z backendu:", data);
+
+      const apiState = normalizeSkdOffer({
+        wps_forecast: data.wps_forecast,
+        offer_skd: data.offer_skd,
+      });
+
+      console.log("SKD_v2 (API) →", apiState);
+
+      applyStateToForm(apiState);
+    } catch (err) {
+      console.error("SKD_v2: błąd pobierania oferty:", err);
+    }
+  })();
+}
+function initSkdOfferSaving() {
+  console.log("initSkdOfferSaving: start");
+
+  const root = document.getElementById("skdOffer");
+  const saveBtn = document.getElementById("skdOfferSaveBtn");
+
+  if (!root || !saveBtn) {
+    console.warn("initSkdOfferSaving: brak #skdOffer albo #skdOfferSaveBtn");
+    return;
+  }
+
+  const markDirty = () => {
+    saveBtn.style.display = "inline-block";
+  };
+
+  // nasłuchy input/change → pokazują przycisk
+  root.querySelectorAll("input, textarea, select").forEach((el) => {
+    el.addEventListener("input", markDirty);
+    el.addEventListener("change", markDirty);
+  });
+
+  // obsługa kliknięcia
+  saveBtn.addEventListener("click", async () => {
+    if (!window.currentCaseId) {
+      alert("Brak ID sprawy – nie mogę zapisać.");
+      return;
+    }
+
+    const offerData = collectSkdOfferFormData();
+
+    const wpsForecast =
+      offerData.wps && typeof offerData.wps.forecast === "number"
+        ? offerData.wps.forecast
+        : null;
+
+    console.log("▶ Zapis SKD dla sprawy", window.currentCaseId, {
+      wps_forecast: wpsForecast,
+      offer_skd: offerData,
+    });
+
+    try {
+      const res = await fetch(`/api/cases/${window.currentCaseId}/skd-offer`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          wps_forecast: wpsForecast,
+          offer_skd: offerData,
+        }),
+      });
+
+      if (!res.ok) throw new Error("HTTP " + res.status);
+
+      console.log("✅ Oferta SKD zapisana poprawnie");
+      saveBtn.style.display = "none";
+    } catch (err) {
+      console.error("❌ Błąd zapisu oferty SKD:", err);
+      alert("Nie udało się zapisać oferty SKD.");
+    }
+  });
+}
+window.initSkdOffer = initSkdOffer_v2;
+// nadpisujemy starą nazwę funkcji, żeby wszystko używało v2
+try {
+  initSkdOffer = initSkdOffer_v2;
+} catch (e) {
+  console.warn("Nie udało się nadpisać initSkdOffer:", e);
+}
+
 } // ← domknięcie brakującego bloku, np. funkcji lub DOMContentLoaded
 
