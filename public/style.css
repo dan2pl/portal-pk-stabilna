@@ -532,3 +532,30 @@ body[data-role="admin"]  #clientPreferenceBlock { display: none !important; }
 
 /* helper do filtrowania wariantów */
 .hidden { display: none !important; }
+
+.actions-row {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-start;
+  align-items: center;
+}
+
+.actions-row .delete-soft {
+  margin-left: auto;              /* → przesuwa tylko ten jeden na prawo */
+  background-color: #ffe5e5;
+  color: #b20000;
+  border: 1px solid #ffcccc;
+  padding: 6px 10px;
+  font-size: 0.85rem;
+  transition: background 0.2s, transform 0.1s;
+}
+
+.actions-row .delete-soft:hover {
+  background-color: #ffcccc;
+  transform: scale(1.02);
+}
+
+.actions-row .delete-soft:active {
+  background-color: #ffb3b3;
+  transform: scale(0.98);
+}

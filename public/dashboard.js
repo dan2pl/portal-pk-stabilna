@@ -2355,7 +2355,7 @@ function refreshVariantAvailabilityFromEligibility() {
       const buyoutPct = parseNumber(buyoutPctInput?.value); // "10" → 10
       const futureInterestVal = parseNumber(futureInterestInput?.value);
       const p = buyoutPct != null ? buyoutPct / 100 : 0.1;  // domyślnie 10%
-      const clientShare = 1 - p;                            // np. 90%
+      const clientShare = p;                            // np. 90%
 
       now = baseWps * clientShare;
       later = 0;
@@ -2750,7 +2750,28 @@ let lastWpsBasic = null;
     const n = Number(raw);
     return Number.isFinite(n) ? n : null;
   };
+const interestInput = document.getElementById("wpsInterestInput");
 
+if (interestInput && installmentRealInput) {
+  interestInput.addEventListener("input", () => {
+    const interest = parseNumber(interestInput);
+    const total = parseNumber(loanTotalInput);
+    const term  = parseNumber(termInput);
+
+    if (!interest || !total || !term) return;
+
+    // oprocentowanie nominalne w skali roku → miesięczne
+    const r = (interest / 100) / 12;
+
+    // rata annuitetowa
+    const monthly =
+      total * (r / (1 - Math.pow(1 + r, -term)));
+
+    if (Number.isFinite(monthly)) {
+      installmentRealInput.value = monthly.toFixed(2);
+    }
+  });
+}
   // 1) PRZELICZ WPS
     btnCalc.addEventListener("click", () => {
     const loan_amount_net = parseNumber(loanNetInput);
@@ -2886,7 +2907,42 @@ if (btnSave) {
     }
   });
 }
+(function setupCaseDelete() {
+  const btn = document.getElementById("deleteCaseBtn");
+  if (!btn) return;
 
+  btn.addEventListener("click", async () => {
+    if (!window.currentCaseId) {
+      alert("Brak ID sprawy – nie mogę usunąć.");
+      return;
+    }
+
+    // Potrójne potwierdzenie
+    if (!confirm("Czy na pewno chcesz usunąć tę sprawę?")) return;
+    if (!confirm("Ta operacja jest nieodwracalna. Usunąć?")) return;
+
+
+    try {
+      const res = await fetch(`/api/cases/${window.currentCaseId}`, {
+        method: "DELETE",
+        headers: {
+          "Content-Type": "application/json",
+        },
+      });
+
+      if (!res.ok) {
+        alert("Błąd podczas usuwania sprawy.");
+        return;
+      }
+
+      alert("Sprawa została trwale usunięta.");
+      window.location.href = "/dashboard.html"; // powrót po usunięciu
+    } catch (e) {
+      console.error("Błąd DELETE:", e);
+      alert("Nie udało się usunąć sprawy.");
+    }
+  });
+})();
 
   // 3) UŻYJ WPS W OFERCIE SKD
   if (btnApply) {

@@ -304,5 +304,31 @@ app.put("/api/cases/:id/skd-offer", async (req, res) => {
   }
 });
     console.log("➡️ routes: GET/POST/PATCH /api/cases registered");
+      app.delete("/api/cases/:id", async (req, res) => {
+    const idRaw = req.params.id;
+    const id = Number(idRaw);
+
+    if (!Number.isFinite(id)) {
+      return res.status(400).json({ error: "Nieprawidłowe ID sprawy" });
+    }
+
+    try {
+      // HARD DELETE – fizyczne usunięcie z bazy
+      const result = await pool.query(
+        "DELETE FROM cases WHERE id = $1 RETURNING id",
+        [id]
+      );
+
+      if (result.rowCount === 0) {
+        return res.status(404).json({ error: "Sprawa nie istnieje" });
+      }
+
+      console.log("🗑️ Usunięto sprawę id =", id);
+      return res.json({ success: true });
+    } catch (err) {
+      console.error("Błąd przy DELETE /api/cases/:id:", err);
+      return res.status(500).json({ error: "Błąd serwera przy usuwaniu sprawy" });
+    }
+  });
 }
 
