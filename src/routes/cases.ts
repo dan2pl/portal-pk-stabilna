@@ -226,29 +226,81 @@ app.get("/api/cases/:id/skd-offer", async (req, res) => {
     res.status(500).json({ error: "Server error" });
   }
 });
+app.patch("/api/cases/:id/wps-basic", async (req, res) => {
+  try {
+    const caseId = Number(req.params.id);
+    const { wps_basic } = req.body || {};
+
+    if (!caseId || !Number.isFinite(caseId)) {
+      return res.status(400).json({ error: "Nieprawidłowe ID sprawy." });
+    }
+
+    const wpsNumber = Number(wps_basic);
+    if (!Number.isFinite(wpsNumber)) {
+      return res.status(400).json({ error: "Nieprawidłowa wartość WPS." });
+    }
+
+    const result = await pool.query(
+      `UPDATE cases
+         SET wps_basic = $1
+       WHERE id = $2
+       RETURNING id, wps_basic`,
+      [wpsNumber, caseId]
+    );
+
+    if (result.rowCount === 0) {
+      return res.status(404).json({ error: "Nie znaleziono sprawy." });
+    }
+
+    return res.json({
+      ok: true,
+      case: result.rows[0],
+    });
+  } catch (err) {
+    console.error("Błąd PATCH /api/cases/:id/wps-basic:", err);
+    return res.status(500).json({ error: "Błąd serwera przy zapisie WPS." });
+  }
+});
+
 
 // === AKTUALIZACJA OFERTY SKD (PUT /api/cases/:id/skd-offer) ===
 app.put("/api/cases/:id/skd-offer", async (req, res) => {
-  const { id } = req.params;
-  const { wps_forecast, offer_skd } = req.body || {};
-  console.log("PUT /api/cases/:id/skd-offer →", {
-    id,
-    wps_forecast,
-    hasOffer: !!offer_skd,
-  });
   try {
-    await pool.query(
-      `UPDATE cases SET 
-         wps_forecast = $1,
-         wps          = COALESCE($1, wps),
-         offer_skd    = $2
-       WHERE id = $3`,
-      [wps_forecast ?? null, JSON.stringify(offer_skd || {}), id]
+    const caseId = Number(req.params.id);
+    if (!Number.isFinite(caseId)) {
+      return res.status(400).json({ error: "Nieprawidłowe ID sprawy." });
+    }
+
+    const { wps_forecast, offer_skd } = req.body || {};
+
+    console.log("SKD PUT body:", { caseId, wps_forecast, offer_skd });
+
+    // Upewniamy się, że zapisujemy obie rzeczy:
+    const result = await pool.query(
+      `
+        UPDATE cases
+        SET
+          wps_forecast = $1,
+          offer_skd    = $2
+        WHERE id = $3
+        RETURNING id, wps_forecast, offer_skd
+      `,
+      [wps_forecast, offer_skd, caseId]
     );
-    res.json({ ok: true });
+
+    if (result.rowCount === 0) {
+      return res.status(404).json({ error: "Nie znaleziono sprawy." });
+    }
+
+    console.log("SKD PUT result:", result.rows[0]);
+
+    return res.json({
+      ok: true,
+      case: result.rows[0],
+    });
   } catch (err) {
-    console.error("PUT /api/cases/:id/skd-offer error", err);
-    res.status(500).json({ error: "Server error" });
+    console.error("Błąd PUT /api/cases/:id/skd-offer:", err);
+    return res.status(500).json({ error: "Błąd serwera przy zapisie oferty SKD." });
   }
 });
     console.log("➡️ routes: GET/POST/PATCH /api/cases registered");
