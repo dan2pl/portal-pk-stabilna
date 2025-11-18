@@ -559,3 +559,310 @@ body[data-role="admin"]  #clientPreferenceBlock { display: none !important; }
   background-color: #ffb3b3;
   transform: scale(0.98);
 }
+.case-layout {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 16px;
+}
+
+.case-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 24px;
+  align-items: center;
+}
+
+.case-header-main h1 {
+  font-size: 20px;
+  margin-bottom: 4px;
+}
+
+.case-header-sub {
+  margin: 0;
+  color: #666;
+  font-size: 13px;
+}
+
+.case-header-tag {
+  background: #eef2ff;
+  color: #3730a3;
+  border-radius: 999px;
+  padding: 2px 8px;
+  font-size: 11px;
+  margin-left: 8px;
+}
+
+.case-header-kpis {
+  display: flex;
+  gap: 16px;
+}
+
+.case-header-kpis .kpi {
+  text-align: right;
+}
+
+.kpi-label {
+  display: block;
+  font-size: 11px;
+  color: #666;
+}
+
+.kpi-value {
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.kpi-accent {
+  color: #15803d;
+}
+
+.case-columns {
+  display: grid;
+  grid-template-columns: minmax(0, 2.4fr) minmax(260px, 1fr);
+  gap: 16px;
+}
+
+.case-main {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.case-sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.actions-card .actions-row {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.btn-icon-right {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.icon-trash {
+  display: inline-block;
+  margin-left: 6px;
+}
+.modal-header-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+/* Nasz przycisk "Pełny widok" */
+.open-full-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px 14px;
+  border-radius: 999px;
+  font-size: 14px;
+  font-weight: 500;
+  text-decoration: none;
+  border: none;
+
+  /* Żebyś NA PEWNO zobaczył zmianę 😎 */
+  background: #991b1b;
+  color: #f9fafb;
+}
+
+.open-full-btn:hover {
+  opacity: 0.9;
+}
+/* Delikatne podświetlenie zapisanej sekcji */
+.section-saved {
+  animation: sectionSavedPulse 1s ease-out;
+}
+
+@keyframes sectionSavedPulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.6);
+  }
+  100% {
+    box-shadow: 0 0 0 10px rgba(34, 197, 94, 0);
+  }
+}
+
+/* Mały toast w prawym górnym rogu ekranu */
+.save-toast {
+  position: fixed;
+  top: 16px;
+  right: 16px;
+  background: #111827;
+  color: #f9fafb;
+  padding: 8px 16px;
+  border-radius: 999px;
+  font-size: 14px;
+  opacity: 0;
+  transform: translateY(-10px);
+  pointer-events: none;
+  transition: opacity 0.2s ease-out, transform 0.2s ease-out;
+  z-index: 9999;
+}
+
+.save-toast.visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+/* --- DRAG & DROP box --- */
+.file-drop-area {
+  border: 2px dashed #991b1b;
+  border-radius: 8px;
+  padding: 18px;
+  text-align: center;
+  cursor: pointer;
+  transition: background 0.2s, border-color 0.2s;
+  background: #fff7f7;
+  margin-bottom: 8px;
+}
+
+.file-drop-area:hover {
+  background: #f9eaea;
+}
+
+.file-drop-area.dragover {
+  background: #fdeaea;
+  border-color: #b91c1c;
+}
+
+.file-drop-message {
+  font-size: 14px;
+  color: #444;
+}
+
+.file-drop-message .file-browse {
+  color: #991b1b;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+/* Lista wybranych plików */
+.file-list-preview {
+  margin-top: 6px;
+  font-size: 13px;
+  color: #333;
+}
+/* Lista plików + X */
+.file-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: #fafafa;
+  padding: 6px 10px;
+  border-radius: 6px;
+  margin-bottom: 4px;
+  border: 1px solid #eee;
+}
+
+.file-item-name {
+  font-size: 13px;
+  color: #333;
+}
+
+.file-item-remove {
+  color: #b91c1c;
+  cursor: pointer;
+  font-weight: bold;
+  padding: 2px 6px;
+  border-radius: 4px;
+  transition: background 0.15s;
+}
+
+.file-item-remove:hover {
+  background: #fee2e2;
+}
+/* === DOKUMENTY – DRAG & DROP (case.html) === */
+.file-drop-area {
+  border: 2px dashed #991b1b;
+  border-radius: 8px;
+  padding: 18px;
+  text-align: center;
+  cursor: pointer;
+  transition: background 0.2s, border-color 0.2s;
+  background: #fff7f7;
+  margin-bottom: 12px;
+}
+
+.file-drop-area:hover {
+  background: #f9eaea;
+}
+
+.file-drop-area.dragover {
+  background: #fdeaea;
+  border-color: #b91c1c;
+}
+
+.file-drop-message {
+  font-size: 14px;
+  color: #444;
+}
+
+.file-drop-message .file-browse {
+  color: #991b1b;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+/* Lista plików */
+.file-list-wrapper {
+  margin-top: 10px;
+}
+
+.file-list-empty {
+  text-align: center;
+  padding: 12px;
+  color: #666;
+  font-size: 14px;
+}
+
+/* Wiersz pliku */
+.case-file-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: #fafafa;
+  padding: 10px 14px;
+  border-radius: 8px;
+  border: 1px solid #eee;
+  margin-bottom: 6px;
+}
+
+.case-file-name {
+  font-size: 14px;
+  color: #333;
+}
+
+.case-file-actions {
+  display: flex;
+  gap: 12px;
+}
+
+.case-file-download {
+  color: #2563eb;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.case-file-remove {
+  color: #b91c1c;
+  cursor: pointer;
+  font-size: 16px;
+  font-weight: bold;
+  padding: 2px 6px;
+  border-radius: 4px;
+  transition: background 0.15s;
+}
+
+.case-file-remove:hover {
+  background: #fee2e2;
+}

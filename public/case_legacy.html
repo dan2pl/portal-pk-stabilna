@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="pl">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Szczegóły sprawy — Portal PK</title>
+    <link rel="stylesheet" href="/style.css" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+  </head>
+  <body class="case-view">
+    <header class="site-header">
+      <div class="wrap">
+        <button
+          onclick="window.location.href='/dashboard.html'"
+          class="btn btn-light"
+        >
+          ← Lista spraw
+        </button>
+        <h1 id="caseTitle">Sprawa</h1>
+        <div id="caseStatusBadge" class="badge">—</div>
+      </div>
+    </header>
+
+    <main class="case-layout">
+      <!-- GŁÓWNY NAGŁÓWEK SPRAWY -->
+      <header class="case-header">
+        <div class="case-header-main">
+          <h1>
+            Sprawa #<span id="caseId">—</span>
+            <span id="caseStatusBadge" class="badge">
+              <span id="caseStatus">—</span>
+            </span>
+          </h1>
+          <p>
+            <span id="headerClientName">—</span>
+            • <span id="headerBankName">—</span> • Umowa z dnia
+            <span id="headerContractDate">—</span>
+          </p>
+        </div>
+
+        <div class="case-header-kpis">
+          <div class="kpi">
+            <span>WPS (prognoza)</span>
+            <strong id="headerWpsForecast">—</strong>
+          </div>
+          <div class="kpi">
+            <span>WPS (ostateczny)</span>
+            <strong id="headerWpsFinal">—</strong>
+          </div>
+          <div class="kpi">
+            <span>Korzyść klienta</span>
+            <strong id="headerClientBenefit">—</strong>
+          </div>
+        </div>
+      </header>
+
+      <div class="case-columns">
+        <!-- LEWA KOLUMNA: główne dane sprawy -->
+        <section class="case-main">
+          <!-- KARTA: Dane klienta -->
+          <section class="card">
+            <h2>Dane Klienta</h2>
+            <div class="form-grid">
+              <label class="fld">
+                <span>Imię i nazwisko</span>
+                <input id="caseClientInput" type="text" />
+              </label>
+              <label class="fld">
+                <span>Telefon</span>
+                <input id="casePhoneInput" type="text" />
+              </label>
+              <label class="fld">
+                <span>E-mail</span>
+                <input id="caseEmailInput" type="email" />
+              </label>
+              <label class="fld" style="grid-column: 1/-1">
+                <span>Adres</span>
+                <input id="caseAddressInput" type="text" />
+              </label>
+              <label class="fld">
+                <span>PESEL</span>
+                <input id="casePeselInput" type="text" />
+              </label>
+            </div>
+          </section>
+
+          <section class="card">
+            <h2>Parametry umowy</h2>
+            <div class="form-grid">
+              <label class="fld">
+                <span>Kwota kredytu</span>
+                <input id="caseLoanAmountInput" type="number" step="0.01" />
+              </label>
+              <label class="fld">
+                <span>Bank</span>
+                <input id="caseBankInput" type="text" />
+              </label>
+              <label class="fld">
+                <span>Data zawarcia umowy</span>
+                <input id="caseContractDateInput" type="date" />
+              </label>
+            </div>
+
+            <div style="margin-top: 12px; text-align: right">
+              <button id="caseContractSaveBtn" class="btn btn-primary">
+                Zapisz dane umowy
+              </button>
+            </div>
+          </section>
+
+          <!-- KARTA: Dokumenty i pliki -->
+          <section class="card">
+            <h2>Dokumenty</h2>
+            <div id="caseFilesSection">
+              <!-- lista załączników, przyciski dodaj / pobierz / podgląd -->
+            </div>
+          </section>
+
+          <!-- KARTA: Notatki -->
+          <section class="card">
+            <h2>Notatki do sprawy</h2>
+            <div id="caseNotesSection">
+              <!-- textarea / lista notatek + daty / kto dodał -->
+            </div>
+          </section>
+        </section>
+
+        <!-- PRAWA KOLUMNA: akcje i meta -->
+        <aside class="case-sidebar">
+          <!-- KARTA: Szybkie akcje -->
+          <div class="card actions-card">
+            <h3>Szybkie akcje</h3>
+            <div class="actions-row">
+              <button id="actSendMail" class="btn btn-light">
+                Wyślij e-mail
+              </button>
+              <button id="actExportPdf" class="btn btn-light">
+                Eksport PDF
+              </button>
+              <button
+                id="actDelete"
+                class="btn btn-danger btn-icon-right"
+                title="Tej operacji nie można cofnąć"
+              >
+                <span>Usuń sprawę</span>
+                <span class="icon-trash">🗑️</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- KARTA: Status & meta -->
+          <div class="card">
+            <h3>Status sprawy</h3>
+            <div id="caseStatusSection">
+              <!-- etap, odpowiedzialny opiekun, data utworzenia / ostatniej zmiany -->
+            </div>
+          </div>
+
+          <!-- KARTA: Oś czasu / logi (na później) -->
+          <div class="card">
+            <h3>Oś czasu</h3>
+            <div id="caseTimelineSection">
+              <!-- logi / historia akcji, na razie placeholder -->
+            </div>
+          </div>
+        </aside>
+      </div>
+    </main>
+
+    <script src="/case.js"></script>
+  </body>
+</html>

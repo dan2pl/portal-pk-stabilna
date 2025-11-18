@@ -288,6 +288,16 @@
                 <label for="addBank"><span>Bank</span></label>
                 <select id="addBank"></select>
               </div>
+              <div class="file-drop-area" id="fileDropArea">
+  <div class="file-drop-message">
+    📎 Upuść tutaj pliki lub <span class="file-browse">kliknij</span>
+  </div>
+  <input type="file" id="addFiles" multiple hidden />
+</div>
+
+<div id="fileListPreview" class="file-list-preview"></div>
+
+
             </div>
             <input id="addStatus" type="hidden" value="nowa" />
             <div class="form-actions">
@@ -327,6 +337,15 @@
                 <div class="card-title">Oferta SKD</div>
                 <div id="skdOfferSub" class="card-sub">—</div>
               </div>
+              <a
+  id="openFullCase"
+  href="#"
+  target="_blank"
+  class="open-full-btn"
+>
+  Otwórz pełny widok
+</a>
+
               <button
                 id="skdOfferSaveBtn"
                 class="btn btn-primary"
@@ -366,12 +385,12 @@
       </label>
 
       <label class="form-field">
-        <span>Rata faktyczna (z umowy / banku)</span>
+        <span>Rata kredytu (pierwotna lub aktualna)</span>
         <input id="wpsInstallmentReal" type="number" step="0.01" placeholder="np. 980,50" />
       </label>
     </div>
 <label class="fld small-note">
-  <span>Nie znasz raty? Podaj oprocentowanie (%):</span>
+  <span>Nie znasz raty? Podaj oprocentowanie z umowy (%):</span>
   <input id="wpsInterestInput" type="number" step="0.1" placeholder="np. 10" />
 </label>
     <div class="form-actions" style="margin-top: 1rem; display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center;">
@@ -758,12 +777,37 @@
                 </div>
               </div>
 
-              <div style="margin-top: 10px; display: flex; gap: 8px">
-                <a class="btn" href="#" id="openFullCase">
-                  🔎 Otwórz pełny widok
-                </a>
-              </div>
-            </div>
+              <div style="margin-top: 10px; display: flex; gap: 8px">     
+          </div>
+
+<script>
+  // Podczas kliknięcia w wiersz w tabeli zapisujemy ID sprawy jako "aktywne"
+  document.getElementById("caseTableBody")?.addEventListener("click", (ev) => {
+    const tr = ev.target.closest("tr");
+    if (!tr) return;
+
+    const cid = tr.getAttribute("data-id");
+    if (!cid) return;
+
+    // zapisz ID do linka
+    const openBtn = document.getElementById("openFullCase");
+    if (openBtn) {
+      openBtn.dataset.caseId = cid;
+      openBtn.href = `/cases/${cid}`;
+    }
+  });
+
+  // Fallback gdy ktoś kliknie zanim wybierze wiersz
+  document.getElementById("openFullCase")?.addEventListener("click", (ev) => {
+    const link = ev.currentTarget;
+    const cid = link.dataset.caseId;
+
+    if (!cid) {
+      ev.preventDefault();
+      alert("Najpierw wybierz sprawę z listy po lewej.");
+    }
+  });
+</script>
 
             <!-- EDIT -->
             <div class="tabpanel" data-panel="edit">

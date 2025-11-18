@@ -654,45 +654,170 @@ try {
   console.error('WPS KPI re-render error:', e);
 }
 
+// === Dodawanie nowej sprawy + upload plików ===
+let pendingFiles = []; // nasza własna lista plików
 
-  // Dodawanie sprawy (prawa kolumna)
-  const addBtn = document.getElementById("addCaseBtn");
-  const addClientEl = document.getElementById("addClient");
-  const addAmountEl = document.getElementById("addAmount");
-  const addBankEl = document.getElementById("addBank");
+const addBtn = document.getElementById("addCaseBtn");
+const addClientEl = document.getElementById("addClient");
+const addAmountEl = document.getElementById("addAmount");
+const addBankEl = document.getElementById("addBank");
+const addFilesEl = document.getElementById("addFiles"); // input file
+const fileListPreview = document.getElementById("fileListPreview"); // podgląd
+const dropArea = document.getElementById("fileDropArea");
 
-  addBtn?.addEventListener("click", async (e) => {
-    e.preventDefault();
-    const client = addClientEl?.value?.trim() || "";
-    const amountRaw = (addAmountEl?.value || "").replace(",", ".");
-    const amount = parseFloat(amountRaw);
-    const bank = addBankEl?.value || "";
-    if (!client) return alert("Podaj klienta");
-    if (Number.isNaN(amount)) return alert("Podaj poprawną kwotę");
+// --- helper: aktualizuje faktyczne <input type="file"> na podstawie pendingFiles ---
+function syncFilesToInput() {
+  if (!addFilesEl) return;
+  const dt = new DataTransfer();
+  pendingFiles.forEach((f) => dt.items.add(f));
+  addFilesEl.files = dt.files;
+}
 
-    const payload = {
-      client,
-      loan_amount: amount,
-      status: "nowa",
-      bank: bank || null,
-    };
-    try {
-      await fetchJSON("/api/cases", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-      addClientEl.value = "";
-      addAmountEl.value = "";
-      addBankEl.value = "";
-      const flt = document.getElementById("flt_status");
-      if (flt) flt.value = "";
-      await loadCases("");
-    } catch (err) {
-      console.error("Add case error:", err);
-      alert("Nie udało się dodać sprawy: " + (err?.message || ""));
-    }
+// --- helper: rysuje listę plików + X do usunięcia ---
+function renderFilePreview() {
+  if (!fileListPreview) return;
+  fileListPreview.innerHTML = "";
+
+  pendingFiles.forEach((file, index) => {
+    const row = document.createElement("div");
+    row.className = "file-item";
+
+    row.innerHTML = `
+      <div class="file-item-name">
+        📄 ${file.name} (${Math.round(file.size / 1024)} KB)
+      </div>
+      <div class="file-item-remove" data-index="${index}">
+        ✕
+      </div>
+    `;
+
+    fileListPreview.appendChild(row);
   });
+
+  // Obsługa przycisku X (usuń pojedynczy plik)
+  fileListPreview.querySelectorAll(".file-item-remove").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const idx = Number(btn.getAttribute("data-index"));
+      if (Number.isFinite(idx)) {
+        pendingFiles.splice(idx, 1); // usuń z tablicy
+        syncFilesToInput();          // zaktualizuj input
+        renderFilePreview();         // odśwież listę
+      }
+    });
+  });
+}
+
+// --- Drag & Drop + klik ---
+if (dropArea && addFilesEl) {
+  // Klik = otwieranie okna wyboru plików
+  dropArea.addEventListener("click", () => addFilesEl.click());
+
+  // Drag & Drop
+  dropArea.addEventListener("dragover", (e) => {
+    e.preventDefault();
+    dropArea.classList.add("dragover");
+  });
+
+  dropArea.addEventListener("dragleave", () => {
+    dropArea.classList.remove("dragover");
+  });
+
+  dropArea.addEventListener("drop", (e) => {
+    e.preventDefault();
+    dropArea.classList.remove("dragover");
+
+    const dropped = Array.from(e.dataTransfer?.files || []);
+    pendingFiles.push(...dropped);
+    syncFilesToInput();
+    renderFilePreview();
+  });
+
+  // Wybranie plików przez kliknięcie
+  addFilesEl.addEventListener("change", () => {
+    const selected = Array.from(addFilesEl.files || []);
+    pendingFiles.push(...selected);
+    syncFilesToInput();
+    renderFilePreview();
+  });
+}
+
+// --- handler przycisku dodania sprawy (dopisz/zmień u siebie tylko środek) ---
+addBtn?.addEventListener("click", async (e) => {
+  e.preventDefault();
+
+  const client = addClientEl?.value?.trim() || "";
+  const amountRaw = (addAmountEl?.value || "").replace(",", ".");
+  const loanAmount = parseFloat(amountRaw);
+  const bank = addBankEl?.value || null;
+
+  if (!client) return alert("Podaj klienta");
+  if (Number.isNaN(loanAmount)) return alert("Podaj poprawną kwotę");
+
+  try {
+    // 1️⃣ — UTWORZENIE SPRAWY
+    const createRes = await fetch("/api/cases", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        client,
+        loan_amount: loanAmount,
+        bank,
+        status: "nowa",
+      }),
+    });
+
+    if (!createRes.ok) {
+      const text = await createRes.text().catch(() => "");
+      throw new Error("Błąd tworzenia sprawy: " + text);
+    }
+
+    const createdCase = await createRes.json();
+    const caseId = createdCase.id;
+    console.log("🔹 Utworzono sprawę:", createdCase);
+
+    // 2️⃣ — UPLOAD PLIKÓW (jeśli są)
+    if (pendingFiles.length > 0) {
+      const formData = new FormData();
+      pendingFiles.forEach((file) => formData.append("files", file));
+
+      const uploadRes = await fetch(`/api/cases/${caseId}/files`, {
+        method: "POST",
+        body: formData,
+      });
+
+      if (!uploadRes.ok) {
+        console.error(
+          "Błąd uploadu plików:",
+          await uploadRes.text().catch(() => "")
+        );
+        alert("Sprawa została utworzona, ale pliki nie zostały zapisane ❌");
+      } else {
+        console.log("📁 Pliki dodane do sprawy", caseId);
+      }
+    }
+
+    // 3️⃣ — RESET FORMULARZA + plików
+    if (addClientEl) addClientEl.value = "";
+    if (addAmountEl) addAmountEl.value = "";
+    if (addBankEl) addBankEl.value = "";
+    if (addFilesEl) addFilesEl.value = "";
+
+    pendingFiles = [];
+    syncFilesToInput();
+    renderFilePreview();
+
+    const flt = document.getElementById("flt_status");
+if (flt) flt.value = "";
+
+// 4️⃣ — ODSWIEŻ LISTĘ SPRAW
+await loadCases("");
+
+  } catch (err) {
+    console.error("Add case error:", err);
+    alert("Nie udało się dodać sprawy: " + (err?.message || ""));
+  }
+});
+
 
   // Modal — referencje
   const cmModal = document.getElementById("caseModal");

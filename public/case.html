@@ -2,135 +2,1450 @@
 <html lang="pl">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Szczegóły sprawy — Portal PK</title>
-    <link rel="stylesheet" href="/style.css" />
-    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <title>Szczegóły sprawy – Portal PK</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+
+    <!-- Jeśli masz już globalny CSS (np. styles.css / dashboard.css), podłącz go tutaj -->
+    <link rel="stylesheet" href="style.css" />
+
+    <style>
+      /* Minimalne style pod layout – możesz z czasem przenieść do głównego CSS */
+
+      body {
+        margin: 0;
+        font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+          sans-serif;
+        background: #f3f4f6;
+        color: #111827;
+      }
+
+      .page {
+        max-width: 1200px;
+        margin: 0 auto;
+        padding: 16px;
+      }
+
+      .card {
+        background: #ffffff;
+        border-radius: 12px;
+        padding: 16px;
+        box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08);
+        margin-bottom: 16px;
+      }
+
+      .case-header {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+      }
+
+      .case-header-main {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+      }
+
+      .case-title {
+        font-size: 1.25rem;
+        font-weight: 600;
+      }
+
+      .case-subtitle {
+        font-size: 0.9rem;
+        color: #6b7280;
+      }
+
+      .case-tags {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+
+      .tag {
+        font-size: 0.75rem;
+        padding: 4px 8px;
+        border-radius: 999px;
+        background: #e5e7eb;
+        color: #374151;
+      }
+
+      .tag-primary {
+        background: #991b1b;
+        color: #fef2f2;
+      }
+
+      .tag-success {
+        background: #065f46;
+        color: #ecfdf5;
+      }
+
+      .tag-warning {
+        background: #92400e;
+        color: #fffbeb;
+      }
+
+      .case-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+
+      .btn {
+        border: none;
+        border-radius: 999px;
+        padding: 8px 14px;
+        font-size: 0.9rem;
+        cursor: pointer;
+      }
+
+      .btn-primary {
+        background: #991b1b;
+        color: #f9fafb;
+      }
+
+      .btn-outline {
+        background: #ffffff;
+        color: #374151;
+        border: 1px solid #e5e7eb;
+      }
+
+      .case-layout {
+        display: grid;
+        grid-template-columns: minmax(0, 280px) minmax(0, 1fr);
+        gap: 16px;
+      }
+
+      @media (max-width: 900px) {
+        .case-layout {
+          grid-template-columns: minmax(0, 1fr);
+        }
+      }
+
+      .case-sidebar {
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+      }
+
+      .case-sidebar-section-title {
+        font-size: 0.9rem;
+        font-weight: 600;
+        margin-bottom: 8px;
+      }
+
+      .case-sidebar-row {
+        display: flex;
+        justify-content: space-between;
+        font-size: 0.85rem;
+        margin-bottom: 4px;
+      }
+
+      .case-sidebar-label {
+        color: #6b7280;
+      }
+
+      .case-sidebar-value {
+        font-weight: 500;
+      }
+
+      /* Tabs */
+
+      .case-tabs {
+        display: flex;
+        gap: 8px;
+        border-bottom: 1px solid #e5e7eb;
+        margin-bottom: 12px;
+        overflow-x: auto;
+      }
+
+      .case-tab {
+        padding: 8px 12px;
+        font-size: 0.9rem;
+        border-radius: 999px 999px 0 0;
+        cursor: pointer;
+        border: 1px solid transparent;
+        white-space: nowrap;
+      }
+
+      .case-tab.active {
+        background: #ffffff;
+        border-color: #e5e7eb;
+        border-bottom-color: #ffffff;
+        font-weight: 600;
+      }
+
+      .case-tab:not(.active) {
+        color: #6b7280;
+      }
+
+      .tab-panels {
+        padding-top: 4px;
+      }
+
+      .tab-panel {
+        display: none;
+      }
+
+      .tab-panel.active {
+        display: block;
+      }
+
+      /* Accordion */
+
+      .accordion {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+
+      .accordion-item {
+        border-radius: 10px;
+        border: 1px solid #e5e7eb;
+        overflow: hidden;
+        background: #f9fafb;
+      }
+
+      .accordion-header {
+        padding: 10px 12px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        cursor: pointer;
+      }
+
+      .accordion-title {
+        font-size: 0.9rem;
+        font-weight: 500;
+      }
+
+      .accordion-toggle {
+        font-size: 0.9rem;
+        color: #6b7280;
+      }
+
+      .accordion-body {
+        padding: 10px 12px 12px;
+        border-top: 1px solid #e5e7eb;
+        display: none;
+        font-size: 0.85rem;
+      }
+
+      .accordion-item.open .accordion-body {
+        display: block;
+      }
+
+      .accordion-item.open .accordion-toggle {
+        transform: rotate(90deg);
+      }
+
+      .field-row {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+        gap: 10px;
+        margin-bottom: 10px;
+      }
+
+      .field {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+      }
+
+      .field label {
+        font-size: 0.8rem;
+        color: #6b7280;
+      }
+
+      .field input,
+      .field select,
+      .field textarea {
+        border-radius: 8px;
+        border: 1px solid #d1d5db;
+        padding: 6px 8px;
+        font-size: 0.85rem;
+      }
+
+      .field textarea {
+        resize: vertical;
+        min-height: 60px;
+      }
+
+      .section-actions {
+        display: flex;
+        justify-content: flex-end;
+        gap: 8px;
+        margin-top: 8px;
+      }
+
+      .section-actions .btn {
+        font-size: 0.8rem;
+        padding: 6px 10px;
+      }
+    </style>
   </head>
-  <body class="case-view">
-    <header class="site-header">
-      <div class="wrap">
-        <button
-          onclick="window.location.href='/dashboard.html'"
-          class="btn btn-light"
-        >
-          ← Lista spraw
-        </button>
-        <h1 id="caseTitle">Sprawa</h1>
-        <div id="caseStatusBadge" class="badge">—</div>
-      </div>
-    </header>
-
-    <main class="case-layout">
-      <!-- LEWA KOLUMNA -->
-      <section class="col-left">
-        <div class="card summary-card">
-          <h3>Podsumowanie sprawy</h3>
-          <div class="summary-row">
-            <div>WPS:</div>
-            <div id="wpsValue">—</div>
+  <body>
+    <div class="page">
+      <!-- NAGŁÓWEK SPRAWY -->
+      <section class="card case-header" id="caseHeader">
+        <div class="case-header-main">
+          <div class="case-title">
+            Sprawa <span id="caseId">#12345</span> –
+            <span id="caseClientName">Imię Nazwisko</span>
           </div>
-          <div class="summary-row">
-            <div>Kwota kredytu:</div>
-            <div id="loanAmountValue">—</div>
+          <div class="case-subtitle">
+            Utworzono: <span id="caseCreatedAt">01.10.2025</span> · Prowadzący:
+            <span id="caseOwner">Jan Kowalski</span>
           </div>
-          <div class="summary-row">
-            <div>Bank:</div>
-            <div id="bankValue">—</div>
-          </div>
-          <div class="summary-row">
-            <div>Data zawarcia:</div>
-            <div id="contractDateValue">—</div>
+          <div class="case-tags">
+            <span class="tag tag-primary" id="caseStatus">NOWA</span>
+            <span class="tag" id="caseBank">mBank</span>
+            <span class="tag" id="caseProductType">Kredyt gotówkowy</span>
+            <span class="tag tag-success" id="caseSkdTag">SKD aktywna</span>
           </div>
         </div>
-
-        <div class="card notes-card">
-          <div class="card-header">
-            <h3>Notatki i aktywności</h3>
-            <div style="display: flex; gap: 8px; align-items: center">
-              <input
-                id="noteInput"
-                placeholder="Dodaj notatkę…"
-                style="
-                  padding: 8px 10px;
-                  border: 1px solid #e5e7eb;
-                  border-radius: 8px;
-                "
-              />
-              <button id="noteAdd" class="btn btn-small">+ Dodaj</button>
-            </div>
-          </div>
-          <div id="notesList">Brak notatek</div>
-        </div>
-
-        <div class="card attachments-card">
-          <div class="card-header">
-            <h3>Załączniki</h3>
-            <button id="attachAddBtn" class="btn btn-small">
-              + Dodaj plik
-            </button>
-          </div>
-
-          <div id="dropzone" class="dropzone" style="margin-top: 8px">
-            Przeciągnij pliki tutaj lub kliknij, aby wybrać
-          </div>
-          <input id="fileInput" type="file" multiple style="display: none" />
-
-          <div id="attachmentsList" class="list" style="margin-top: 10px">
-            Brak załączników
-          </div>
+        <div class="case-actions">
+          <button class="btn btn-outline" id="btnBack">Powrót</button>
+          <button class="btn btn-primary" id="btnSaveAll">Zapisz zmiany</button>
         </div>
       </section>
 
-      <!-- PRAWA KOLUMNA -->
-      <aside class="col-right">
-        <div class="card client-card">
-          <h3>Dane klienta</h3>
-          <div class="client-info">
-            <div>
-              <strong>Imię i nazwisko:</strong> <span id="clientName">—</span>
+      <section class="case-layout">
+        <!-- LEWY SIDEBAR -->
+        <aside class="case-sidebar">
+          <div class="card">
+            <div class="case-sidebar-section-title">Podsumowanie finansowe</div>
+            <div class="case-sidebar-row">
+              <span class="case-sidebar-label">Kwota kredytu</span>
+              <span class="case-sidebar-value" id="summaryAmount"
+                >50 000 zł</span
+              >
             </div>
-            <div><strong>Telefon:</strong> <span id="clientPhone">—</span></div>
-            <div><strong>E-mail:</strong> <span id="clientEmail">—</span></div>
-            <div><strong>Adres:</strong> <span id="clientAddress">—</span></div>
-            <div><strong>PESEL:</strong> <span id="clientPesel">—</span></div>
-          </div>
-        </div>
-
-        <div class="card meta-card">
-          <h3>Metryka sprawy</h3>
-          <div class="meta-grid">
-            <div><strong>ID:</strong> <span id="caseId">—</span></div>
-            <div><strong>Status:</strong> <span id="caseStatus">—</span></div>
-            <div><strong>Utworzono:</strong> <span id="createdAt">—</span></div>
-            <div>
-              <strong>Aktualizacja:</strong> <span id="updatedAt">—</span>
+            <div class="case-sidebar-row">
+              <span class="case-sidebar-label">Całkowity koszt</span>
+              <span class="case-sidebar-value" id="summaryTotalCost"
+                >20 000 zł</span
+              >
+            </div>
+            <div class="case-sidebar-row">
+              <span class="case-sidebar-label">Potencjał SKD</span>
+              <span class="case-sidebar-value" id="summarySkdPotential"
+                >18 500 zł</span
+              >
+            </div>
+            <div class="case-sidebar-row">
+              <span class="case-sidebar-label">WPS (prognoza)</span>
+              <span class="case-sidebar-value" id="summaryWps">
+                12 300 zł
+              </span>
             </div>
           </div>
-        </div>
 
-        <div class="card actions-card">
-          <h3>Szybkie akcje</h3>
-          <div class="actions-row">
-            <button id="actSendMail" class="btn btn-light">
-              Wyślij e-mail
+          <div class="card">
+            <div class="case-sidebar-section-title">Status sprawy</div>
+            <div class="case-sidebar-row">
+              <span class="case-sidebar-label">Etap</span>
+              <span class="case-sidebar-value" id="summaryStage">
+                Analiza
+              </span>
+            </div>
+            <div class="case-sidebar-row">
+              <span class="case-sidebar-label">Status SKD</span>
+              <span class="case-sidebar-value" id="summarySkdStatus">
+                W przygotowaniu
+              </span>
+            </div>
+            <div class="case-sidebar-row">
+              <span class="case-sidebar-label">Ostatnia zmiana</span>
+              <span class="case-sidebar-value" id="summaryLastUpdate">
+                15.11.2025
+              </span>
+            </div>
+          </div>
+        </aside>
+
+        <!-- PRAWA STRONA: TABS + PANELS -->
+        <main class="card">
+          <!-- TABS -->
+          <div class="case-tabs" id="caseTabs">
+            <button class="case-tab active" data-tab="client">
+              Dane klienta
             </button>
-            <button id="actExportPdf" class="btn btn-light">Eksport PDF</button>
-            <button
-              id="actDelete"
-              class="btn btn-danger btn-danger-soft"
-              type="button"
-              title="Tej operacji nie można cofnąć"
-              style="margin-left: auto"
+            <button class="case-tab" data-tab="credit">Dane kredytu</button>
+            <button class="case-tab" data-tab="skd">SKD</button>
+            <button class="case-tab" data-tab="docs">Dokumenty</button>
+            <button class="case-tab" data-tab="notes">Notatki</button>
+            <button class="case-tab" data-tab="history">Historia zmian</button>
+          </div>
+
+          <!-- PANELS -->
+          <div class="tab-panels">
+            <!-- PANEL: DANE KLIENTA -->
+            <section
+              class="tab-panel active"
+              data-tab-panel="client"
+              id="panelClient"
             >
-              <span aria-hidden="true">🗑️</span>
-              <span class="btn-label">Usuń sprawę</span>
-            </button>
-          </div>
-        </div>
-      </aside>
-    </main>
+              <div class="accordion">
+                <div class="accordion-item open">
+                  <div class="accordion-header">
+                    <div class="accordion-title">Dane podstawowe</div>
+                    <div class="accordion-toggle">▶</div>
+                  </div>
+                  <div class="accordion-body">
+                    <div class="field-row">
+                      <div class="field">
+                        <label for="clientName">Imię i nazwisko</label>
+                        <input type="text" id="clientName" autocomplete="off" />
+                      </div>
+                      <div class="field">
+                        <label for="clientPesel">PESEL</label>
+                        <input
+                          type="text"
+                          id="clientPesel"
+                          autocomplete="off"
+                        />
+                      </div>
+                      <div class="field">
+                        <label for="clientPhone">Telefon</label>
+                        <input
+                          type="text"
+                          id="clientPhone"
+                          autocomplete="off"
+                        />
+                      </div>
+                      <div class="field">
+                        <label for="clientEmail">E-mail</label>
+                        <input
+                          type="email"
+                          id="clientEmail"
+                          autocomplete="off"
+                        />
+                      </div>
+                    </div>
 
-    <script src="/case.js"></script>
+                    <div class="field-row">
+                      <div class="field">
+                        <label for="clientCity">Miasto</label>
+                        <input type="text" id="clientCity" autocomplete="off" />
+                      </div>
+                      <div class="field">
+                        <label for="clientPostcode">Kod pocztowy</label>
+                        <input
+                          type="text"
+                          id="clientPostcode"
+                          autocomplete="off"
+                        />
+                      </div>
+                      <div class="field">
+                        <label for="clientStreet">Ulica i nr</label>
+                        <input
+                          type="text"
+                          id="clientStreet"
+                          autocomplete="off"
+                        />
+                      </div>
+                    </div>
+
+                    <div class="section-actions">
+                      <button class="btn btn-outline" id="btnClientCancel">
+                        Anuluj
+                      </button>
+                      <button class="btn btn-primary" id="btnClientSave">
+                        Zapisz dane klienta
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="accordion-item">
+                  <div class="accordion-header">
+                    <div class="accordion-title">Dodatkowe informacje</div>
+                    <div class="accordion-toggle">▶</div>
+                  </div>
+                  <div class="accordion-body">
+                    <div class="field">
+                      <label for="clientNotes">Uwagi o kliencie</label>
+                      <textarea id="clientNotes"></textarea>
+                    </div>
+                    <div class="section-actions">
+                      <button class="btn btn-outline" id="btnClientNotesCancel">
+                        Anuluj
+                      </button>
+                      <button class="btn btn-primary" id="btnClientNotesSave">
+                        Zapisz uwagi
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            <!-- PANEL: DANE KREDYTU -->
+            <section class="tab-panel" data-tab-panel="credit" id="panelCredit">
+              <div class="accordion">
+                <div class="accordion-item open">
+                  <div class="accordion-header">
+                    <div class="accordion-title">Parametry kredytu</div>
+                    <div class="accordion-toggle">▶</div>
+                  </div>
+                  <div class="accordion-body">
+                    <div class="field-row">
+                      <div class="field">
+                        <label for="creditBank">Bank</label>
+                        <input type="text" id="creditBank" />
+                      </div>
+                      <div class="field">
+                        <label for="creditProduct">Produkt</label>
+                        <input type="text" id="creditProduct" />
+                      </div>
+                      <div class="field">
+                        <label for="creditAmount">Kwota kredytu</label>
+                        <input type="number" id="creditAmount" />
+                      </div>
+                      <div class="field">
+                        <label for="creditTotalCost">Całkowity koszt</label>
+                        <input type="number" id="creditTotalCost" />
+                      </div>
+                    </div>
+
+                    <div class="field-row">
+                      <div class="field">
+                        <label for="creditStartDate">Data uruchomienia</label>
+                        <input type="date" id="creditStartDate" />
+                      </div>
+                      <div class="field">
+                        <label for="creditEndDate">Data zakończenia</label>
+                        <input type="date" id="creditEndDate" />
+                      </div>
+                      <div class="field">
+                        <label for="creditInstallment"> Miesięczna rata </label>
+                        <input type="number" id="creditInstallment" />
+                      </div>
+                    </div>
+
+                    <div class="section-actions">
+                      <button class="btn btn-outline" id="btnCreditCancel">
+                        Anuluj
+                      </button>
+                      <button class="btn btn-primary" id="btnCreditSave">
+                        Zapisz dane kredytu
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="accordion-item">
+                  <div class="accordion-header">
+                    <div class="accordion-title">Uwagi do umowy</div>
+                    <div class="accordion-toggle">▶</div>
+                  </div>
+                  <div class="accordion-body">
+                    <div class="field">
+                      <label for="creditNotes">Uwagi</label>
+                      <textarea id="creditNotes"></textarea>
+                    </div>
+                    <div class="section-actions">
+                      <button class="btn btn-outline" id="btnCreditNotesCancel">
+                        Anuluj
+                      </button>
+                      <button class="btn btn-primary" id="btnCreditNotesSave">
+                        Zapisz uwagi
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            <!-- PANEL: SKD -->
+            <section class="tab-panel" data-tab-panel="skd" id="panelSkd">
+              <div class="accordion">
+                <div class="accordion-item open">
+                  <div class="accordion-header">
+                    <div class="accordion-title">
+                      Status SKD i podstawowe dane
+                    </div>
+                    <div class="accordion-toggle">▶</div>
+                  </div>
+                  <div class="accordion-body">
+                    <div class="field-row">
+                      <div class="field">
+                        <label for="skdStatus">Status SKD</label>
+                        <select id="skdStatus">
+                          <option value="brak">Brak</option>
+                          <option value="analiza">Analiza</option>
+                          <option value="przygotowanie">W przygotowaniu</option>
+                          <option value="wyslane">Wysłane do banku</option>
+                          <option value="uznane">Uznane</option>
+                          <option value="odrzucone">Odrzucone</option>
+                        </select>
+                      </div>
+                      <div class="field">
+                        <label for="skdDate">Data wysłania SKD</label>
+                        <input type="date" id="skdDate" />
+                      </div>
+                      <div class="field">
+                        <label for="skdPotential">Potencjał SKD (szac.)</label>
+                        <input type="number" id="skdPotential" />
+                      </div>
+                    </div>
+
+                    <div class="field-row">
+                      <div class="field">
+                        <label for="skdWpsForecast">Prognoza WPS</label>
+                        <input type="number" id="skdWpsForecast" />
+                      </div>
+                      <div class="field">
+                        <label for="skdOfferVariant">Wariant oferty</label>
+                        <select id="skdOfferVariant">
+                          <option value="prosty">Prosty</option>
+                          <option value="standard">Standard</option>
+                          <option value="premia">
+                            Premia / wypłata z góry
+                          </option>
+                        </select>
+                      </div>
+                    </div>
+
+                    <div class="section-actions">
+                      <button class="btn btn-outline" id="btnSkdCancel">
+                        Anuluj
+                      </button>
+                      <button class="btn btn-primary" id="btnSkdSave">
+                        Zapisz dane SKD
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="accordion-item">
+                  <div class="accordion-header">
+                    <div class="accordion-title">Oferta dla klienta</div>
+                    <div class="accordion-toggle">▶</div>
+                  </div>
+                  <div class="accordion-body">
+                    <div class="field-row">
+                      <div class="field">
+                        <label for="skdOfferText"
+                          >Treść oferty / ustalenia</label
+                        >
+                        <textarea id="skdOfferText"></textarea>
+                      </div>
+                    </div>
+                    <div class="section-actions">
+                      <button class="btn btn-outline" id="btnSkdOfferCancel">
+                        Anuluj
+                      </button>
+                      <button class="btn btn-primary" id="btnSkdOfferSave">
+                        Zapisz ofertę
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            <!-- PANEL: DOKUMENTY -->
+            <section class="tab-panel" data-tab-panel="docs" id="panelDocs">
+              <div class="accordion">
+                <div class="accordion-item open">
+                  <div class="accordion-header">
+                    <div class="accordion-title">Lista dokumentów</div>
+                    <div class="accordion-toggle">▶</div>
+                  </div>
+                  <div class="accordion-body">
+                    <!-- === DOKUMENTY – PREMIUM (dopasowane do accordion) === -->
+                    <div id="documentsSection">
+                      <!-- Drag & Drop -->
+                      <div class="file-drop-area" id="caseFileDropArea">
+                        <div class="file-drop-message">
+                          📎 Upuść tutaj pliki lub
+                          <span class="file-browse">kliknij</span>, aby dodać
+                          dokumenty
+                        </div>
+                        <input type="file" id="caseAddFiles" multiple hidden />
+                      </div>
+
+                      <!-- Lista dokumentów -->
+                      <div id="caseFileList" class="file-list-wrapper">
+                        <div class="file-list-empty">
+                          Brak plików w tej sprawie
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            <!-- PANEL: NOTATKI -->
+            <section class="tab-panel" data-tab-panel="notes" id="panelNotes">
+              <div class="accordion">
+                <div class="accordion-item open">
+                  <div class="accordion-header">
+                    <div class="accordion-title">Notatki wewnętrzne</div>
+                    <div class="accordion-toggle">▶</div>
+                  </div>
+                  <div class="accordion-body">
+                    <div class="field">
+                      <label for="caseNotes">Notatki</label>
+                      <textarea id="caseNotes"></textarea>
+                    </div>
+                    <div class="section-actions">
+                      <button class="btn btn-outline" id="btnCaseNotesCancel">
+                        Anuluj
+                      </button>
+                      <button class="btn btn-primary" id="btnCaseNotesSave">
+                        Zapisz notatki
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            <!-- PANEL: HISTORIA ZMIAN -->
+            <section
+              class="tab-panel"
+              data-tab-panel="history"
+              id="panelHistory"
+            >
+              <div class="accordion">
+                <div class="accordion-item open">
+                  <div class="accordion-header">
+                    <div class="accordion-title">Oś czasu zmian</div>
+                    <div class="accordion-toggle">▶</div>
+                  </div>
+                  <div class="accordion-body">
+                    <!-- Tu w Etapie 14C podłączymy historię z bazy -->
+                    <p>Historia zmian w przygotowaniu...</p>
+                  </div>
+                </div>
+              </div>
+            </section>
+          </div>
+        </main>
+      </section>
+    </div>
+
+    <script>
+      // === KONFIG ===
+      const API_BASE = "/api";
+
+      // === LOGIKA TABS ===
+      const tabButtons = document.querySelectorAll(".case-tab");
+      const tabPanels = document.querySelectorAll(".tab-panel");
+
+      tabButtons.forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const tab = btn.dataset.tab;
+
+          tabButtons.forEach((b) => b.classList.remove("active"));
+          btn.classList.add("active");
+
+          tabPanels.forEach((panel) => {
+            const panelTab = panel.dataset.tabPanel;
+            panel.classList.toggle("active", panelTab === tab);
+          });
+        });
+      });
+
+      // === LOGIKA ACCORDION ===
+      document.querySelectorAll(".accordion-header").forEach((header) => {
+        header.addEventListener("click", () => {
+          const item = header.closest(".accordion-item");
+          const isOpen = item.classList.contains("open");
+          item.classList.toggle("open", !isOpen);
+        });
+      });
+
+      // === POMOCNICZE ===
+
+      function getCaseIdFromUrl() {
+        const params = new URLSearchParams(window.location.search);
+        return params.get("id");
+      }
+
+      function normalizeDateToInput(value) {
+        if (!value) return "";
+        // obsłuż zarówno "2025-11-18", jak i pełne ISO
+        const d = new Date(value);
+        if (isNaN(d.getTime())) return "";
+        const yyyy = d.getFullYear();
+        const mm = String(d.getMonth() + 1).padStart(2, "0");
+        const dd = String(d.getDate()).padStart(2, "0");
+        return `${yyyy}-${mm}-${dd}`;
+      }
+
+      function formatCurrency(value) {
+        if (value == null || value === "") return "—";
+        const num = Number(value);
+        if (isNaN(num)) return String(value);
+        return (
+          num.toLocaleString("pl-PL", {
+            minimumFractionDigits: 0,
+            maximumFractionDigits: 0,
+          }) + " zł"
+        );
+      }
+
+      function $(id) {
+        return document.getElementById(id);
+      }
+
+      // === WYPEŁNIANIE DANYCH Z API ===
+      function fillCaseHeader(data) {
+        const caseId = data.id ?? data.caseId ?? "";
+        const clientName =
+          data.client ??
+          data.clientName ??
+          data.client_name ??
+          data.client_full_name ??
+          "—";
+
+        const createdAt =
+          data.contract_date ?? data.createdAt ?? data.created_at ?? null;
+
+        const owner =
+          data.ownerName ?? data.owner_name ?? data.caseOwner ?? "—";
+
+        const status =
+          data.status ?? data.caseStatus ?? data.case_status ?? "—";
+
+        const bank =
+          data.bank ??
+          data.bankName ??
+          data.bank_name ??
+          data.creditBank ??
+          "—";
+
+        const product =
+          data.productType ?? data.product_type ?? "Kredyt gotówkowy";
+
+        const skdActive =
+          data.skdActive ?? data.skd_active ?? data.hasSkd ?? false;
+
+        $("caseId").textContent = caseId ? `#${caseId}` : "—";
+        $("caseClientName").textContent = clientName;
+        $("caseCreatedAt").textContent = createdAt
+          ? new Date(createdAt).toLocaleDateString("pl-PL")
+          : "—";
+        $("caseOwner").textContent = owner;
+
+        const statusEl = $("caseStatus");
+        statusEl.textContent = status || "—";
+
+        $("caseBank").textContent = bank;
+        $("caseProductType").textContent = product;
+
+        const skdTag = $("caseSkdTag");
+        if (skdActive) {
+          skdTag.textContent = "SKD aktywna";
+          skdTag.classList.add("tag-success");
+        } else {
+          skdTag.textContent = "SKD brak";
+          skdTag.classList.remove("tag-success");
+        }
+      }
+
+      function fillSidebar(data) {
+        const creditAmount =
+          data.loan_amount ??
+          data.creditAmount ??
+          data.credit_amount ??
+          data.loanAmount;
+
+        const totalCost =
+          data.total_cost ??
+          data.creditTotalCost ??
+          data.credit_total_cost ??
+          null; // jeśli jeszcze nie masz tego pola – zostanie "—"
+
+        const skdPotential = data.skd_potential ?? data.skdPotential ?? null;
+
+        const wps = data.wps_forecast ?? data.wps_final ?? data.wps ?? null;
+
+        const stage =
+          data.stage ??
+          data.caseStage ??
+          data.status_stage ??
+          data.status ??
+          "—";
+
+        const skdStatus = data.skd_status ?? data.skdStatus ?? "—";
+
+        const lastUpdate = data.updated_at ?? data.updatedAt ?? null;
+
+        $("summaryAmount").textContent = formatCurrency(creditAmount);
+        $("summaryTotalCost").textContent = formatCurrency(totalCost);
+        $("summarySkdPotential").textContent = formatCurrency(skdPotential);
+        $("summaryWps").textContent = formatCurrency(wps);
+
+        $("summaryStage").textContent = stage;
+        $("summarySkdStatus").textContent = skdStatus;
+        $("summaryLastUpdate").textContent = lastUpdate
+          ? new Date(lastUpdate).toLocaleDateString("pl-PL")
+          : "—";
+      }
+
+      function fillClientSection(data) {
+        $("clientName").value =
+          data.client ??
+          data.clientName ??
+          data.client_name ??
+          data.client_full_name ??
+          "";
+
+        $("clientPesel").value =
+          data.pesel ?? data.clientPesel ?? data.client_pesel ?? "";
+
+        $("clientPhone").value =
+          data.phone ?? data.clientPhone ?? data.client_phone ?? "";
+
+        $("clientEmail").value =
+          data.email ?? data.clientEmail ?? data.client_email ?? "";
+
+        // --- rozbijamy address na: kod, miasto, ulica ---
+        const addr = data.address ?? "";
+        const { street, city, postcode } = splitAddress(addr);
+
+        $("clientStreet").value = street;
+        $("clientCity").value = city;
+        $("clientPostcode").value = postcode;
+
+        $("clientNotes").value = data.clientNotes ?? data.client_notes ?? "";
+      }
+
+      function splitAddress(address) {
+        if (!address) {
+          return { street: "", city: "", postcode: "" };
+        }
+
+        // Oczekiwany format: "XX-XXX Miasto, Ulica 123"
+        const [left, right] = address.split(",").map((s) => s.trim());
+
+        let street = right || "";
+        let city = "";
+        let postcode = "";
+
+        if (left) {
+          const parts = left.split(/\s+/);
+          // jeśli pierwsza część wygląda jak kod pocztowy 00-000
+          if (parts.length > 1 && /^\d{2}-\d{3}$/.test(parts[0])) {
+            postcode = parts[0];
+            city = parts.slice(1).join(" ");
+          } else {
+            // brak kodu – traktujemy całe left jako miasto
+            city = left;
+          }
+        }
+
+        // jeśli nie ma przecinka, załóż że całe address to ulica
+        if (!right && !street) {
+          street = address;
+        }
+
+        return { street, city, postcode };
+      }
+
+      function fillCreditSection(data) {
+        $("creditBank").value =
+          data.bank ?? data.creditBank ?? data.bankName ?? data.bank_name ?? "";
+
+        $("creditProduct").value = data.productType ?? data.product_type ?? "";
+
+        $("creditAmount").value =
+          data.loan_amount ?? data.creditAmount ?? data.credit_amount ?? "";
+
+        $("creditTotalCost").value =
+          data.total_cost ??
+          data.creditTotalCost ??
+          data.credit_total_cost ??
+          "";
+
+        $("creditStartDate").value = normalizeDateToInput(
+          data.contract_date ?? data.creditStartDate ?? data.credit_start_date
+        );
+
+        $("creditEndDate").value = normalizeDateToInput(
+          data.creditEndDate ?? data.credit_end_date
+        );
+
+        $("creditInstallment").value =
+          data.creditInstallment ?? data.credit_installment ?? "";
+
+        $("creditNotes").value = data.creditNotes ?? data.credit_notes ?? "";
+      }
+
+      function fillSkdSection(data) {
+        const skdStatus = data.skdStatus ?? data.skd_status ?? "brak";
+        const skdDate = data.skdDate ?? data.skd_date ?? data.skdSentDate;
+        const skdPotential = data.skdPotential ?? data.skd_potential ?? "";
+        const wps =
+          data.skdWpsForecast ??
+          data.skd_wps_forecast ??
+          data.wpsForecast ??
+          data.wps_forecast ??
+          "";
+        const variant =
+          data.skdOfferVariant ?? data.skd_offer_variant ?? "prosty";
+        const offerText = data.skdOfferText ?? data.skd_offer_text ?? "";
+
+        $("skdStatus").value = skdStatus;
+        $("skdDate").value = normalizeDateToInput(skdDate);
+        $("skdPotential").value = skdPotential;
+        $("skdWpsForecast").value = wps;
+        $("skdOfferVariant").value = variant;
+        $("skdOfferText").value = offerText;
+      }
+
+      function fillNotesSection(data) {
+        $("caseNotes").value =
+          data.notes ?? // główne pole z bazy
+          data.caseNotes ?? // ewentualne stare nazwy
+          data.case_notes ?? // ewentualne pole snake_case
+          "";
+      }
+
+      // === FETCH DANYCH ===
+      async function fetchCaseDetails(caseId) {
+        const res = await fetch(
+          `${API_BASE}/cases/${encodeURIComponent(caseId)}`
+        );
+        if (!res.ok) {
+          throw new Error(`Błąd pobierania danych sprawy: ${res.status}`);
+        }
+        return await res.json();
+      }
+
+      // === REALNE ZAPISY DO BACKENDU – WERSJA NA PATCH /api/cases/:id ===
+      async function saveSection(caseId, section, payload) {
+        let url = null;
+        let method = "PATCH";
+
+        switch (section) {
+          case "client":
+          case "credit":
+          case "skd":
+          case "notes":
+            // wszystko, co dotyczy samej sprawy, idzie na PATCH /api/cases/:id
+            url = `${API_BASE}/cases/${caseId}`;
+            break;
+
+          case "skd-offer":
+            // oferta SKD ma już osobny, działający endpoint
+            url = `${API_BASE}/cases/${caseId}/skd-offer`;
+            method = "PUT";
+            break;
+
+          default:
+            throw new Error(`Nieznana sekcja zapisu: ${section}`);
+        }
+
+        const res = await fetch(url, {
+          method,
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+
+        if (!res.ok) {
+          const text = await res.text().catch(() => "");
+          throw new Error(`Błąd zapisu ${section}: ${res.status} ${text}`);
+        }
+
+        return res.json().catch(() => ({}));
+      }
+      function showSaveToast(message) {
+        const toast = document.createElement("div");
+        toast.className = "save-toast";
+        toast.textContent = message || "Zapisano ✅";
+
+        document.body.appendChild(toast);
+
+        // trigger animacji
+        requestAnimationFrame(() => {
+          toast.classList.add("visible");
+        });
+
+        setTimeout(() => {
+          toast.classList.remove("visible");
+          setTimeout(() => toast.remove(), 300);
+        }, 1800);
+      }
+
+      function highlightSectionForButton(btn) {
+        if (!btn) return;
+        const section =
+          btn.closest(".card") ||
+          btn.closest(".tab-panel") ||
+          btn.closest("section");
+
+        if (!section) return;
+
+        section.classList.add("section-saved");
+        setTimeout(() => {
+          section.classList.remove("section-saved");
+        }, 1200);
+
+        // odśwież "ostatnia aktualizacja" lokalnie
+        const lastUpdateEl = $("summaryLastUpdate");
+        if (lastUpdateEl) {
+          lastUpdateEl.textContent = new Date().toLocaleDateString("pl-PL");
+        }
+      }
+
+      function handleSectionSaved(btn, message) {
+        highlightSectionForButton(btn);
+        showSaveToast(message || "Zapisano zmiany ✅");
+      }
+
+      function attachSaveHandlers(caseId) {
+        // Klient – dane podstawowe
+        const btnClient = $("btnClientSave");
+        btnClient?.addEventListener("click", async () => {
+          const payload = {
+            client: $("clientName").value.trim(),
+            pesel: $("clientPesel").value.trim(),
+            phone: $("clientPhone").value.trim(),
+            email: $("clientEmail").value.trim(),
+            address: `${$("clientPostcode").value.trim()} ${$(
+              "clientCity"
+            ).value.trim()}, ${$("clientStreet").value.trim()}`,
+          };
+
+          try {
+            await saveSection(caseId, "client", payload);
+            handleSectionSaved(btnClient, "Dane klienta zapisane");
+          } catch (e) {
+            console.error(e);
+            showSaveToast("Błąd zapisu danych klienta ❌");
+          }
+        });
+
+        // Klient – notatki
+        $("btnClientNotesSave")?.addEventListener("click", async () => {
+          const payload = {
+            clientNotes: $("clientNotes").value.trim(),
+          };
+          try {
+            await saveSection(caseId, "client-notes", payload);
+            alert("Uwagi o kliencie zapisane (mock) ✅");
+          } catch (e) {
+            console.error(e);
+            alert("Błąd zapisu uwag o kliencie ❌");
+          }
+        });
+
+        // Kredyt
+        const btnCredit = $("btnCreditSave");
+        btnCredit?.addEventListener("click", async () => {
+          const payload = {
+            loan_amount: $("creditAmount").value
+              ? Number($("creditAmount").value)
+              : undefined,
+            contract_date: $("creditStartDate").value || undefined,
+            bank: $("creditBank").value.trim() || undefined,
+          };
+
+          try {
+            await saveSection(caseId, "credit", payload);
+            handleSectionSaved(btnCredit, "Dane kredytu zapisane");
+          } catch (e) {
+            console.error(e);
+            showSaveToast("Błąd zapisu danych kredytu ❌");
+          }
+        });
+
+        // SKD – dane podstawowe
+        $("btnSkdSave")?.addEventListener("click", async () => {
+          const payload = {
+            skdStatus: $("skdStatus").value,
+            skdDate: $("skdDate").value || null,
+            skdPotential: $("skdPotential").value
+              ? Number($("skdPotential").value)
+              : null,
+            skdWpsForecast: $("skdWpsForecast").value
+              ? Number($("skdWpsForecast").value)
+              : null,
+            skdOfferVariant: $("skdOfferVariant").value,
+          };
+          try {
+            await saveSection(caseId, "skd", payload);
+            alert("Dane SKD zapisane (mock) ✅");
+          } catch (e) {
+            console.error(e);
+            alert("Błąd zapisu danych SKD ❌");
+          }
+        });
+
+        // SKD – oferta
+        $("btnSkdOfferSave")?.addEventListener("click", async () => {
+          const payload = {
+            skdOfferText: $("skdOfferText").value.trim(),
+          };
+          try {
+            await saveSection(caseId, "skd-offer", payload);
+            alert("Oferta SKD zapisana (mock) ✅");
+          } catch (e) {
+            console.error(e);
+            alert("Błąd zapisu oferty SKD ❌");
+          }
+        });
+
+        // Notatki sprawy
+        const btnCaseNotes = $("btnCaseNotesSave");
+        btnCaseNotes?.addEventListener("click", async () => {
+          const payload = {
+            notes: $("caseNotes").value.trim() || null,
+          };
+
+          try {
+            await saveSection(caseId, "notes", payload);
+            handleSectionSaved(btnCaseNotes, "Notatki zapisane");
+          } catch (e) {
+            console.error(e);
+            showSaveToast("Błąd zapisu notatek ❌");
+          }
+        });
+
+        // Globalny "Zapisz zmiany" (na razie tylko info)
+        $("btnSaveAll")?.addEventListener("click", () => {
+          alert(
+            "Docelowo tu zrobimy zbiorczy zapis wszystkich sekcji. Na razie używaj przycisków w sekcjach. 🙂"
+          );
+        });
+
+        // Powrót
+        $("btnBack")?.addEventListener("click", () => {
+          window.history.back();
+        });
+      }
+      // === UPLOAD PLIKÓW DOKUMENTÓW DO BACKENDU ===
+      async function uploadCaseFiles(caseId, files) {
+        if (!files || !files.length) return;
+
+        const formData = new FormData();
+        files.forEach((f) => formData.append("files", f));
+
+        try {
+          const res = await fetch(
+            `${API_BASE}/cases/${encodeURIComponent(caseId)}/files`,
+            {
+              method: "POST",
+              body: formData,
+            }
+          );
+
+          if (!res.ok) {
+            const text = await res.text().catch(() => "");
+            console.error("Błąd uploadu plików:", res.status, text);
+            alert("Nie udało się dodać plików ❌");
+            return;
+          }
+
+          const data = await res.json().catch(() => ({}));
+          console.log("📁 Pliki dodane do sprawy:", data);
+        } catch (err) {
+          console.error("Błąd uploadCaseFiles:", err);
+          alert("Nie udało się dodać plików (błąd sieci) ❌");
+        }
+      }
+
+      // === GŁÓWNE ŁADOWANIE SPRAWY ===
+      async function loadCaseDetails() {
+        const caseId = getCaseIdFromUrl();
+
+        if (!caseId) {
+          console.error("Brak parametru id w URL (case.html?id=...)");
+          alert("Brak ID sprawy w adresie URL");
+          return;
+        }
+
+        try {
+          console.log("Pobieram dane sprawy", caseId);
+          const data = await fetchCaseDetails(caseId);
+          console.log("Dane sprawy z API:", data);
+
+          fillCaseHeader(data);
+          fillSidebar(data);
+          fillClientSection(data);
+          fillCreditSection(data);
+          fillSkdSection(data);
+          fillNotesSection(data);
+          await loadCaseFiles(caseId);
+          initCaseDocuments(caseId);
+
+          attachSaveHandlers(caseId);
+        } catch (e) {
+          console.error("Błąd ładowania szczegółów sprawy:", e);
+          alert("Nie udało się załadować danych sprawy ❌");
+        }
+      }
+      // === Pobieranie dokumentów sprawy ===
+      async function loadCaseFiles(caseId) {
+        try {
+          const res = await fetch(`/api/cases/${caseId}/files`);
+          if (!res.ok) {
+            console.error("Błąd pobierania dokumentów:", res.status);
+            return renderCaseFiles([]); // pusta lista
+          }
+
+          const data = await res.json();
+          console.log("LOAD_CASE_FILES RESULT =", data);
+
+          // 🔥 TU MAGIA: data może być tablicą ALBO obiektem z polem files
+          const files = Array.isArray(data) ? data : data.files || [];
+
+          renderCaseFiles(files);
+        } catch (err) {
+          console.error("Błąd loadCaseFiles:", err);
+          renderCaseFiles([]);
+        }
+
+        console.log("LOAD_CASE_FILES → caseId =", caseId);
+        console.log("FETCHING:", `/api/cases/${caseId}/files`);
+      }
+
+      // === Renderowanie listy dokumentów ===
+      function renderCaseFiles(files) {
+        const wrapper = document.getElementById("caseFileList");
+
+        if (!wrapper) return;
+
+        wrapper.innerHTML = "";
+
+        if (!files.length) {
+          wrapper.innerHTML = `<div class="file-list-empty">Brak plików w tej sprawie</div>`;
+          return;
+        }
+
+        files.forEach((f) => {
+          const row = document.createElement("div");
+          row.className = "case-file-item";
+
+          row.innerHTML = `
+      <div class="case-file-name">
+        📄 ${f.original_name} (${Math.round(f.size / 1024)} KB)
+      </div>
+      <div class="case-file-actions">
+        <div class="case-file-download" data-id="${f.id}">Pobierz</div>
+        <div class="case-file-remove" data-id="${f.id}">✕</div>
+      </div>
+    `;
+
+          wrapper.appendChild(row);
+        });
+        console.log("RENDER FILES →", files);
+      }
+      // === DRAG & DROP DOKUMENTÓW ===
+
+      function initCaseDocuments(caseId) {
+        const dropArea = $("caseFileDropArea");
+        const fileInput = $("caseAddFiles");
+        const fileList = $("caseFileList"); // 🔥 nowy uchwyt
+
+        if (!dropArea || !fileInput) {
+          console.warn("❗ Dokumenty: brak elementów dropArea/fileInput");
+          return;
+        }
+
+        // --- KLIK W BOX / TEKST ---
+        dropArea.addEventListener("click", () => fileInput.click());
+
+        // --- WYBÓR PLIKÓW Z OKNA ---
+        let firstInit = true; // strażnik na dziwne pierwsze change
+
+        fileInput.addEventListener("change", async () => {
+          if (firstInit) {
+            firstInit = false;
+            fileInput.value = "";
+            return;
+          }
+
+          const files = Array.from(fileInput.files || []);
+          if (!files.length) return;
+
+          await uploadCaseFiles(caseId, files);
+          await loadCaseFiles(caseId);
+          fileInput.value = "";
+        });
+
+        // --- DRAG & DROP ---
+        dropArea.addEventListener("dragover", (e) => {
+          e.preventDefault();
+          dropArea.classList.add("dragover");
+        });
+
+        dropArea.addEventListener("dragleave", () => {
+          dropArea.classList.remove("dragover");
+        });
+
+        dropArea.addEventListener("drop", async (e) => {
+          e.preventDefault();
+          dropArea.classList.remove("dragover");
+
+          const files = Array.from(e.dataTransfer?.files || []);
+          if (!files.length) return;
+
+          await uploadCaseFiles(caseId, files);
+          await loadCaseFiles(caseId);
+        });
+
+        // --- KLIK NA "POBIERZ" / "✕" (delegacja) ---
+        if (fileList) {
+          fileList.addEventListener("click", async (e) => {
+            const downloadEl = e.target.closest(".case-file-download");
+            const removeEl = e.target.closest(".case-file-remove");
+
+            // Pobierz
+            if (downloadEl) {
+              const fileId = downloadEl.dataset.id;
+              if (!fileId) return;
+
+              // zakładam endpoint: GET /api/files/:fileId
+              window.open(
+                `${API_BASE}/files/${encodeURIComponent(fileId)}`,
+                "_blank"
+              );
+              return;
+            }
+
+            // Usuń
+            if (removeEl) {
+              const fileId = removeEl.dataset.id;
+              if (!fileId) return;
+
+              const ok = confirm("Na pewno usunąć ten plik z tej sprawy?");
+              if (!ok) return;
+
+              try {
+                const res = await fetch(
+                  `${API_BASE}/files/${encodeURIComponent(fileId)}`,
+                  { method: "DELETE" }
+                );
+
+                if (!res.ok) {
+                  const text = await res.text().catch(() => "");
+                  console.error("Błąd usuwania pliku:", res.status, text);
+                  alert("Nie udało się usunąć pliku ❌");
+                  return;
+                }
+
+                await loadCaseFiles(caseId); // odśwież listę
+              } catch (err) {
+                console.error("Błąd przy DELETE pliku:", err);
+                alert("Błąd sieci przy usuwaniu pliku ❌");
+              }
+            }
+          });
+        }
+      }
+
+      // Start
+      loadCaseDetails();
+    </script>
   </body>
 </html>

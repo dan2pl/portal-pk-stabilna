@@ -86,39 +86,221 @@ const makeUrlFromPattern = (pattern, rawId) => {
 const needsCaseIdInBody = (pattern) =>
   !pattern || pattern === 'none' || (!pattern.includes(':id') && !pattern.includes('?case_id=') && !pattern.includes('?caseId='));
 
+
+// Ustala ID sprawy z różnych źródeł (URL / data-attributes)
+function resolveCaseId() {
+  // 1) Jeśli backend kiedyś doda data-case-id na <body>, to też to obsłużymy
+  const fromBody = document.body?.dataset?.caseId;
+  if (fromBody) {
+    return fromBody;
+  }
+
+  // 2) Ścieżka w stylu /cases/123
+  const path = window.location.pathname || "";
+  const m = path.match(/\/cases\/(\d+)/);
+  if (m && m[1]) {
+    return m[1];
+  }
+
+  // 3) Fallback: query param ?id=123 (na wszelki wypadek)
+  const params = new URLSearchParams(window.location.search);
+  const fromQuery = params.get("id");
+  if (fromQuery) {
+    return fromQuery;
+  }
+
+  // 4) Nic nie znaleźliśmy
+  return null;
+}
 // ========== Case details ==========
 async function fetchCaseDetails() {
-  const id = getCaseId();
-  if (!id) { alert('Brak ID sprawy w adresie.'); return; }
+  const caseId = resolveCaseId();
+  if (!caseId) {
+    console.error("Brak poprawnego ID sprawy (resolveCaseId zwróciło null)");
+    alert("Nie udało się ustalić ID sprawy z adresu strony.");
+    return;
+  }
 
   try {
-    const res = await fetch(`/api/cases/${encodeURIComponent(id)}`, { headers: authHeaders() });
-    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const res = await fetch(`/api/cases/${encodeURIComponent(caseId)}`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
     const data = await res.json();
+    console.log("[case] details:", data);
 
-    // Wypełnij dane
-    document.getElementById('caseTitle')     .textContent = data.client || '—';
-    document.getElementById('caseId')        .textContent = data.id || '—';
-    document.getElementById('caseStatus')    .textContent = data.status || '—';
+    // ===== Tytuł + status w nagłówku =====
+    const caseTitleEl  = document.getElementById("caseTitle");
+    const caseIdEl     = document.getElementById("caseId");
+    const caseStatusEl = document.getElementById("caseStatus");
+    const badgeEl      = document.getElementById("caseStatusBadge");
 
-    const b = document.getElementById('caseStatusBadge');
-    if (b) b.className = 'badge badge--' + String(data.status || '').replace(/\s+/g, '');
+    if (caseTitleEl)  caseTitleEl.textContent  = `Sprawa #${data.id ?? "—"}`;
+    if (caseIdEl)     caseIdEl.textContent     = data.id ?? "—";
+    if (caseStatusEl) caseStatusEl.textContent = data.status_label ?? data.status ?? "—";
+    if (badgeEl) {
+      badgeEl.className =
+        "badge badge--" + String(data.status || "").replace(/\s+/g, "");
+    }
 
-    document.getElementById('wpsValue')         .textContent = (data.wps ?? '—');
-    document.getElementById('loanAmountValue')  .textContent = (data.loan_amount ?? '—');
-    document.getElementById('bankValue')        .textContent = data.bank ?? '—';
-    document.getElementById('contractDateValue').textContent = data.contract_date ?? '—';
+    // ===== Linijka pod tytułem =====
+    const headerClientName   = document.getElementById("headerClientName");
+    const headerBankName     = document.getElementById("headerBankName");
+    const headerContractDate = document.getElementById("headerContractDate");
 
-    document.getElementById('clientName')   .textContent = data.client ?? '—';
-    document.getElementById('clientPhone')  .textContent = data.phone ?? '—';
-    document.getElementById('clientEmail')  .textContent = data.email ?? '—';
-    document.getElementById('clientAddress').textContent = data.address ?? '—';
-    document.getElementById('clientPesel')  .textContent = data.pesel ?? '—';
+    if (headerClientName)   headerClientName.textContent   = data.client ?? "—";
+    if (headerBankName)     headerBankName.textContent     = data.bank ?? "—";
+    if (headerContractDate) headerContractDate.textContent = data.contract_date ?? "—";
+
+    // ===== KPIs WPS / korzyść klienta =====
+    const headerWpsForecast   = document.getElementById("headerWpsForecast");
+    const headerWpsFinal      = document.getElementById("headerWpsFinal");
+    const headerClientBenefit = document.getElementById("headerClientBenefit");
+
+    const fmt = (n) =>
+      n == null
+        ? "—"
+        : Number(n).toLocaleString("pl-PL", {
+            minimumFractionDigits: 0,
+            maximumFractionDigits: 0,
+          });
+
+    if (headerWpsForecast) {
+      const v =
+        data.wps_forecast_display ??
+        (data.wps_forecast != null ? fmt(data.wps_forecast) : "—");
+      headerWpsForecast.textContent = v;
+    }
+
+    if (headerWpsFinal) {
+      const v =
+        data.wps_final_display ??
+        (data.wps_final != null ? fmt(data.wps_final) : "—");
+      headerWpsFinal.textContent = v;
+    }
+
+    if (headerClientBenefit) {
+      const v =
+        data.client_benefit_display ??
+        (data.client_benefit != null ? fmt(data.client_benefit) : "—");
+      headerClientBenefit.textContent = v;
+    }
+
+    // ===== Dane klienta (sekcja "Dane klienta") =====
+    const clientNameEl    = document.getElementById("clientName");
+    const clientPhoneEl   = document.getElementById("clientPhone");
+    const clientEmailEl   = document.getElementById("clientEmail");
+    const clientAddressEl = document.getElementById("clientAddress");
+    const clientPeselEl   = document.getElementById("clientPesel");
+
+    if (clientNameEl)    clientNameEl.textContent    = data.client ?? "—";
+    if (clientPhoneEl)   clientPhoneEl.textContent   = data.phone ?? "—";
+    if (clientEmailEl)   clientEmailEl.textContent   = data.email ?? "—";
+    if (clientAddressEl) clientAddressEl.textContent = data.address ?? "—";
+    if (clientPeselEl)   clientPeselEl.textContent   = data.pesel ?? "—";
+    // ===== Wypełnienie formularza "Dane do umowy" =====
+    const clientInp   = document.getElementById("caseClientInput");
+    const phoneInp    = document.getElementById("casePhoneInput");
+    const emailInp    = document.getElementById("caseEmailInput");
+    const addressInp  = document.getElementById("caseAddressInput");
+    const peselInp    = document.getElementById("casePeselInput");
+    const loanInp     = document.getElementById("caseLoanAmountInput");
+    const bankInp     = document.getElementById("caseBankInput");
+    const contractInp = document.getElementById("caseContractDateInput");
+
+    if (clientInp)   clientInp.value   = data.client  ?? "";
+    if (phoneInp)    phoneInp.value    = data.phone   ?? "";
+    if (emailInp)    emailInp.value    = data.email   ?? "";
+    if (addressInp)  addressInp.value  = data.address ?? "";
+    if (peselInp)    peselInp.value    = data.pesel   ?? "";
+    if (loanInp)     loanInp.value     = data.loan_amount != null ? String(data.loan_amount) : "";
+    if (bankInp)     bankInp.value     = data.bank ?? "";
+    if (contractInp) contractInp.value = data.contract_date ?? "";
+// ========== Auto-save "Dane umowy" ==========
+document.addEventListener("input", async (ev) => {
+  const t = ev.target;
+  if (!t.closest("#caseContractSection")) return;
+
+  const payload = {
+    loan_amount: document.getElementById("caseLoanInput")?.value ?? null,
+    bank: document.getElementById("caseBankInput")?.value ?? null,
+    contract_date: document.getElementById("caseContractDateInput")?.value ?? null,
+  };
+
+  try {
+    await fetch(`/api/cases/${caseId}/contract`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+  } catch {}
+});
   } catch (err) {
-    console.error('Case fetch error:', err);
-    alert('Nie udało się pobrać szczegółów sprawy.');
+    console.error("Case fetch error:", err);
+    alert("Nie udało się pobrać szczegółów sprawy.");
   }
 }
+// === ZAPIS DANYCH UMOWY (3B) ===
+document.addEventListener("DOMContentLoaded", async () => {
+  console.log("case.js loaded");
+
+  // 1) Najpierw ładujemy dane sprawy
+  await fetchCaseDetails();
+
+  // 2) Podpinamy klik do "Zapisz dane umowy"
+  const saveBtn = document.getElementById("caseContractSaveBtn");
+  if (!saveBtn) {
+    console.warn("Brak przycisku #caseContractSaveBtn w DOM");
+  } else {
+    saveBtn.addEventListener("click", async () => {
+      console.log("[case] kliknięto Zapisz dane umowy");
+
+      const caseId = resolveCaseId();
+      if (!caseId) {
+        alert("Brak ID sprawy – nie mogę zapisać danych umowy.");
+        return;
+      }
+
+      // TE SAME ID, których używasz wyżej w fetchCaseDetails
+      const clientInp    = document.getElementById("caseClientInput");
+      const phoneInp     = document.getElementById("casePhoneInput");
+      const emailInp     = document.getElementById("caseEmailInput");
+      const addressInp   = document.getElementById("caseAddressInput");
+      const peselInp     = document.getElementById("casePeselInput");
+      const loanInp      = document.getElementById("caseLoanInput");
+      const bankInp      = document.getElementById("caseBankInput");
+      const contractInp  = document.getElementById("caseContractDateInput");
+
+      const payload = {};
+
+      if (clientInp)   payload.client        = clientInp.value || null;
+      if (phoneInp)    payload.phone         = phoneInp.value || null;
+      if (emailInp)    payload.email         = emailInp.value || null;
+      if (addressInp)  payload.address       = addressInp.value || null;
+      if (peselInp)    payload.pesel         = peselInp.value || null;
+      if (loanInp)     payload.loan_amount   = loanInp.value || null;
+      if (bankInp)     payload.bank          = bankInp.value || null;
+      if (contractInp) payload.contract_date = contractInp.value || null;
+
+      try {
+        const res = await fetch(`/api/cases/${encodeURIComponent(caseId)}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+
+        if (!res.ok) throw new Error("HTTP " + res.status);
+
+        console.log("[case] dane umowy zapisane", payload);
+        alert("Dane umowy zostały zapisane.");
+      } catch (err) {
+        console.error("Błąd zapisu danych umowy:", err);
+        alert("Nie udało się zapisać danych umowy. Sprawdź konsolę.");
+      }
+    });
+  }
+
+  console.log("[case] hooks ready");
+});
 
 // ========== Local fallback ==========
 const readNotesLS = (id) => LS.get(lsKeyNotes(id), []);
