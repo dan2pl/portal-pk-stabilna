@@ -5,6 +5,7 @@ import multer from "multer";
 import fs from "fs";
 import fsPromises from "fs/promises";
 import path from "path";
+import { requireAuth } from "../middleware/requireAuth";
 
 const UPLOAD_DIR = path.join(__dirname, "..", "..", "uploads");
 
@@ -176,18 +177,19 @@ export default function casesRoutes(app: Express) {
   }
 
   // === LISTA SPRAW (dla dashboardu) ===
-  app.get("/api/cases", async (_req, res) => {
+  app.get("/api/cases", requireAuth, async (req, res) => {
     try {
       const q = await pool.query(
         `
-        SELECT
+                SELECT
           id,
           client,
           bank,
           loan_amount,
           COALESCE(wps_forecast, wps) AS wps,
           status,
-          contract_date
+          contract_date,
+          agent_id
         FROM cases
         ORDER BY id DESC
         `
@@ -200,7 +202,7 @@ export default function casesRoutes(app: Express) {
   });
 
   // === KPI (opcjonalne) ===
-  app.get("/api/kpi", async (_req, res) => {
+  app.get("/api/kpi", requireAuth, async (_req, res) => {
     try {
       const q = await pool.query(
         `
@@ -234,9 +236,9 @@ export default function casesRoutes(app: Express) {
   });
 
   // === DODAWANIE NOWEJ SPRAWY ===
-  app.post("/api/cases", async (req, res) => {
+    app.post("/api/cases", requireAuth, async (req, res) => {
     try {
-      const { client, loan_amount, status, bank } = req.body || {};
+      const { client, loan_amount, status, bank, agent_id } = req.body || {};
 
       if (!client || typeof loan_amount !== "number") {
         return res
@@ -247,11 +249,17 @@ export default function casesRoutes(app: Express) {
       const normStatus = (status || "nowa").toString();
 
       const sql = `
-        INSERT INTO cases (client, loan_amount, status, bank)
-        VALUES ($1, $2, $3, $4)
-        RETURNING id, client, loan_amount, wps, status, contract_date, bank
+        INSERT INTO cases (client, loan_amount, status, bank, agent_id)
+        VALUES ($1, $2, $3, $4, $5)
+        RETURNING id, client, loan_amount, wps, status, contract_date, bank, agent_id
       `;
-      const params = [client, loan_amount, normStatus, bank ?? null];
+      const params = [
+        client,
+        loan_amount,
+        normStatus,
+        bank ?? null,
+        agent_id ?? null, // tymczasowo – potem nadpiszemy zalogowanym userem
+      ];
 
       const { rows } = await pool.query(sql, params);
       return res.json(rows[0]);
@@ -265,7 +273,7 @@ export default function casesRoutes(app: Express) {
   });
 
   // === SZCZEGÓŁY JEDNEJ SPRAWY (dla case.html) ===
-  app.get("/api/cases/:id", async (req, res) => {
+  app.get("/api/cases/:id", requireAuth, async (req, res) => {
     const rawId = req.params.id;
     const id = Number(rawId);
 
@@ -276,7 +284,7 @@ export default function casesRoutes(app: Express) {
     try {
       const result = await pool.query(
         `
-              SELECT
+                    SELECT
         id,
         client        AS client,
         bank          AS bank,
@@ -290,8 +298,7 @@ export default function casesRoutes(app: Express) {
         wps_forecast,
         wps_final,
         client_benefit,
-        notes,
-        updated_at
+        agent_id
       FROM cases
       WHERE id = $1
 
@@ -312,7 +319,7 @@ export default function casesRoutes(app: Express) {
   });
 
   // === OGÓLNA CZĘŚCIOWA AKTUALIZACJA SPRAWY (legacy / multi-update) ===
-  app.patch("/api/cases/:id", async (req, res) => {
+  app.patch("/api/cases/:id", requireAuth, async (req, res) => {
     const idRaw = req.params.id;
     const id = Number(idRaw);
 
@@ -332,7 +339,7 @@ export default function casesRoutes(app: Express) {
   // === NOWE, CZYTELNE ENDPOINTY SEKCYJNE (pod caseDetails 2.0) ===
 
   // Dane klienta: imię, telefon, email, adres, pesel
-  app.put("/api/cases/:id/client", async (req, res) => {
+  app.put("/api/cases/:id/client", requireAuth, async (req, res) => {
     const idRaw = req.params.id;
     const id = Number(idRaw);
 
@@ -358,7 +365,7 @@ export default function casesRoutes(app: Express) {
   });
 
   // Dane kredytu: kwota, data uruchomienia, bank, status
-  app.put("/api/cases/:id/credit", async (req, res) => {
+  app.put("/api/cases/:id/credit", requireAuth, async (req, res) => {
     const idRaw = req.params.id;
     const id = Number(idRaw);
 
@@ -383,7 +390,7 @@ export default function casesRoutes(app: Express) {
   });
 
   // === ODCZYT OFERTY SKD (GET /api/cases/:id/skd-offer) ===
-  app.get("/api/cases/:id/skd-offer", async (req, res) => {
+  app.get("/api/cases/:id/skd-offer", requireAuth, async (req, res) => {
     const { id } = req.params;
 
     try {
@@ -429,7 +436,7 @@ export default function casesRoutes(app: Express) {
   });
 
   // === ZAPIS WPS BASIC (PATCH /api/cases/:id/wps-basic) ===
-  app.patch("/api/cases/:id/wps-basic", async (req, res) => {
+  app.patch("/api/cases/:id/wps-basic", requireAuth, async (req, res) => {
     try {
       const caseId = Number(req.params.id);
       const { wps_basic } = req.body || {};
@@ -470,7 +477,7 @@ export default function casesRoutes(app: Express) {
   });
 
   // === AKTUALIZACJA OFERTY SKD (PUT /api/cases/:id/skd-offer) ===
-  app.put("/api/cases/:id/skd-offer", async (req, res) => {
+  app.put("/api/cases/:id/skd-offer", requireAuth, async (req, res) => {
     try {
       const caseId = Number(req.params.id);
       if (!Number.isFinite(caseId)) {
@@ -512,7 +519,7 @@ export default function casesRoutes(app: Express) {
   });
 
   // === DOKUMENTY SPRAWY: POBRANIE PLIKU ===
-app.get("/api/files/:fileId", async (req, res) => {
+app.get("/api/files/:fileId", requireAuth, async (req, res) => {
   const rawId = req.params.fileId;
   const fileId = Number(rawId);
 
@@ -556,7 +563,7 @@ app.get("/api/files/:fileId", async (req, res) => {
   }
 });
   // === DOKUMENTY SPRAWY: LISTA PLIKÓW ===
-  app.get("/api/cases/:id/files", async (req, res) => {
+  app.get("/api/cases/:id/files", requireAuth, async (req, res) => {
     const idRaw = req.params.id;
     const id = Number(idRaw);
 
@@ -590,7 +597,7 @@ app.get("/api/files/:fileId", async (req, res) => {
   });
   
 // === USUWANIE PLIKU PO ID ===
-app.delete("/api/files/:fileId", async (req, res) => {
+app.delete("/api/files/:fileId", requireAuth, async (req, res) => {
   const rawId = req.params.fileId;
   const fileId = Number(rawId);
 
@@ -634,7 +641,7 @@ app.delete("/api/files/:fileId", async (req, res) => {
   }
 });
  // === UPLOAD PLIKÓW DO SPRAWY ===
-app.post("/api/cases/:id/files", upload.array("files"), async (req, res) => {
+app.post("/api/cases/:id/files", requireAuth, upload.array("files"), async (req, res) => {
   const rawId = req.params.id;
   const caseId = Number(rawId);
 
@@ -697,7 +704,7 @@ app.post("/api/cases/:id/files", upload.array("files"), async (req, res) => {
   
 
   // === USUWANIE SPRAWY (DELETE) ===
-  app.delete("/api/cases/:id", async (req, res) => {
+  app.delete("/api/cases/:id", requireAuth, async (req, res) => {
     const idRaw = req.params.id;
     const id = Number(idRaw);
 
