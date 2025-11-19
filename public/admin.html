@@ -4,6 +4,7 @@
     <meta charset="UTF-8" />
     <title>Panel Administratora – Pokonaj Kredyt</title>
     <link rel="stylesheet" href="style.css" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <style>
       .admin-header {
         font-size: 26px;
@@ -179,43 +180,96 @@
 
       <!-- PANEL: Sprawy -->
       <div class="admin-panel" data-panel="cases">
-        <p>Lista wszystkich spraw (wkrótce)…</p>
-      </div>
-
-      <!-- PANEL: Statystyki -->
-      <div class="admin-panel" data-panel="stats">
-        <p>Panel statystyk (opcjonalnie)…</p>
-      </div>
-    </div>
-
-    <!-- === MODAL: Dodawanie użytkownika === -->
-    <div id="addUserModal" class="modal">
-      <div class="modal-content">
-        <h3>Dodaj użytkownika</h3>
-
-        <label>Email:</label>
-        <input type="email" id="newUserEmail" />
-
-        <label>Imię:</label>
-        <input type="text" id="newUserName" />
-
-        <label>Hasło:</label>
-        <input type="password" id="newUserPassword" />
-
-        <label>Rola:</label>
-        <select id="newUserRole">
-          <option value="agent">Agent</option>
-          <option value="admin">Admin</option>
-        </select>
-
-        <div class="modal-buttons">
-          <button id="cancelNewUser">Anuluj</button>
-          <button id="saveNewUser">Zapisz</button>
+        <div class="card">
+          <header class="card-h">
+            <div class="card-title">Lista wszystkich spraw</div>
+          </header>
+          <div class="card-b">
+            <div id="adminCasesEmpty" class="table-empty">
+              Brak spraw w systemie
+            </div>
+            <div class="table-wrapper">
+              <table class="table" id="adminCasesTable">
+                <thead>
+                  <tr>
+                    <th>#</th>
+                    <th>Klient</th>
+                    <th>Bank</th>
+                    <th>Kwota</th>
+                    <th>Status</th>
+                    <th>Owner</th>
+                    <th>Utworzono</th>
+                  </tr>
+                </thead>
+                <tbody></tbody>
+              </table>
+            </div>
+          </div>
         </div>
       </div>
-    </div>
 
-    <!-- SKRYPT NA SAMYM KOŃCU -->
-    <script src="admin.js"></script>
+      <!-- PANEL: STATYSTYKI -->
+<div class="admin-panel" data-panel="stats">
+  <h2>Statystyki</h2>
+
+  <!-- Główne KPI -->
+  <div id="adminStatsKpi" class="stats-grid">
+    <!-- JS wstawi kafelki -->
+  </div>
+
+  <h3>Najpopularniejsze banki</h3>
+  <div id="adminStatsBanks" class="stats-box">
+    <!-- lista banków -->
+  </div>
+
+  <h3>Najaktywniejsi agenci</h3>
+  <div id="adminStatsAgents" class="stats-box">
+    <!-- lista agentów -->
+  </div>
+
+  <h3>Sprawy w ostatnich 7 dniach</h3>
+  <div id="adminStatsLast7" class="stats-box">
+    <!-- prosty pseudo-wykres słupkowy -->
+  </div>
+</div>
+    <!-- === MODAL: Dodawanie użytkownika === -->
+<div id="addUserModal" class="modal">
+  <div class="modal-content">
+    <h3>Dodaj użytkownika</h3>
+
+    <form id="addUserForm" onsubmit="return false;">
+      <label>Email:</label>
+      <input type="email" id="newUserEmail" autocomplete="username" />
+
+      <label>Imię:</label>
+      <input 
+  type="text" 
+  id="newUserName" 
+  autocomplete="username" 
+/>
+
+      <label>Hasło:</label>
+      <input type="password" id="newUserPassword" autocomplete="new-password" />
+
+      <label>Rola:</label>
+      <select id="newUserRole">
+        <option value="agent">Agent</option>
+        <option value="admin">Admin</option>
+      </select>
+
+      <div class="modal-actions">
+        <button type="button" class="btn btn-outline" id="cancelNewUser">
+          Anuluj
+        </button>
+        <button type="button" class="btn btn-primary" id="saveNewUser">
+          Zapisz
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- SKRYPT NA SAMYM KOŃCU -->
+<script src="admin.js"></script>
   </body>
 </html>

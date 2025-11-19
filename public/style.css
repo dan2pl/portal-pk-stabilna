@@ -866,3 +866,83 @@ body[data-role="admin"]  #clientPreferenceBlock { display: none !important; }
 .case-file-remove:hover {
   background: #fee2e2;
 }
+/* === ADMIN STATS === */
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.stats-card {
+  background: #ffffff;
+  border-radius: 12px;
+  padding: 12px 16px;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08);
+}
+
+.stats-card-label {
+  font-size: 13px;
+  color: #6b7280;
+  margin-bottom: 4px;
+}
+
+.stats-card-value {
+  font-size: 18px;
+  font-weight: 600;
+  color: #111827;
+}
+
+.stats-card-sub {
+  font-size: 12px;
+  color: #9ca3af;
+}
+
+/* listy */
+.stats-box {
+  background: #ffffff;
+  border-radius: 12px;
+  padding: 12px 16px;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06);
+  margin-bottom: 16px;
+}
+
+.stats-list-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 4px 0;
+  font-size: 14px;
+  border-bottom: 1px solid #f3f4f6;
+}
+
+.stats-list-row:last-child {
+  border-bottom: none;
+}
+
+/* pseudo-wykres */
+.stats-bar-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+  font-size: 13px;
+}
+
+.stats-bar-label {
+  width: 80px;
+  color: #6b7280;
+}
+
+.stats-bar-track {
+  flex: 1;
+  height: 8px;
+  border-radius: 999px;
+  background: #e5e7eb;
+  overflow: hidden;
+}
+
+.stats-bar-fill {
+  height: 100%;
+  border-radius: inherit;
+  background: #ef4444; /* czerwony PK */
+}
