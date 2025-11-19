@@ -227,10 +227,20 @@ export default function casesRoutes(app: Express) {
     }
   });
 
-  // === KPI (opcjonalne) ===
-  app.get("/api/kpi", requireAuth, async (_req, res) => {
-    try {
-      const q = await pool.query(
+  // === KPI (per user / admin) ===
+app.get("/api/kpi", requireAuth, async (req, res) => {
+  const user = (req as any).user;
+
+  if (!user) {
+    return res.status(401).json({ error: "Brak dostępu – zaloguj się" });
+  }
+
+  try {
+    let q;
+
+    if (user.role === "admin") {
+      // ADMIN → KPI z wszystkich spraw
+      q = await pool.query(
         `
         SELECT
           COUNT(*)::int AS total_cases,
@@ -240,27 +250,41 @@ export default function casesRoutes(app: Express) {
         FROM cases
         `
       );
-
-      const r =
-        q.rows[0] || {
-          total_cases: 0,
-          open_cases: 0,
-          new_cases: 0,
-          wps_total: 0,
-        };
-
-      res.json({
-        totalCases: r.total_cases,
-        openCases: r.open_cases,
-        newCases: r.new_cases,
-        wpsTotal: r.wps_total,
-      });
-    } catch (err) {
-      console.error("GET /api/kpi error", err);
-      res.status(500).json({ error: "Server error" });
+    } else {
+      // AGENT → KPI tylko z jego spraw
+      q = await pool.query(
+        `
+        SELECT
+          COUNT(*)::int AS total_cases,
+          COUNT(*) FILTER (WHERE status NOT IN ('zamknieta','zamknięta','archiwum'))::int AS open_cases,
+          COUNT(*) FILTER (WHERE status IN ('nowa','analiza','w toku'))::int              AS new_cases,
+          COALESCE(SUM(wps), 0)::numeric AS wps_total
+        FROM cases
+        WHERE owner_id = $1
+        `,
+        [user.id]
+      );
     }
-  });
 
+    const r =
+      q.rows[0] || {
+        total_cases: 0,
+        open_cases: 0,
+        new_cases: 0,
+        wps_total: 0,
+      };
+
+    res.json({
+      totalCases: r.total_cases,
+      openCases: r.open_cases,
+      newCases: r.new_cases,
+      wpsTotal: r.wps_total,
+    });
+  } catch (err) {
+    console.error("GET /api/kpi error", err);
+    res.status(500).json({ error: "Server error" });
+  }
+});
   // === DODAWANIE NOWEJ SPRAWY ===
   app.post("/api/cases", requireAuth, async (req, res) => {
     const user = (req as any).user;
@@ -615,53 +639,66 @@ export default function casesRoutes(app: Express) {
     }
   });
 
-  // === DOKUMENTY SPRAWY: POBRANIE PLIKU ===
-  app.get("/api/files/:fileId", requireAuth, async (req, res) => {
-    const user = (req as any).user;
-    const rawId = req.params.fileId;
-    const fileId = Number(rawId);
+  // === DOKUMENTY SPRAWY: POBRANIE PLIKU (z kontrolą właściciela) ===
+app.get("/api/files/:fileId", requireAuth, async (req, res) => {
+  const user = (req as any).user;
+  const rawId = req.params.fileId;
+  const fileId = Number(rawId);
 
-    if (!Number.isFinite(fileId)) {
-      return res.status(400).json({ error: "Nieprawidłowe ID pliku" });
+  if (!Number.isFinite(fileId)) {
+    return res.status(400).json({ error: "Nieprawidłowe ID pliku" });
+  }
+
+  try {
+    const q = await pool.query(
+      `
+      SELECT
+        cf.case_id,
+        cf.original_name,
+        cf.stored_name,
+        cf.mime_type,
+        c.owner_id
+      FROM case_files cf
+      JOIN cases c ON c.id = cf.case_id
+      WHERE cf.id = $1
+      `,
+      [fileId]
+    );
+
+    if (q.rowCount === 0) {
+      return res.status(404).json({ error: "Plik nie istnieje" });
     }
 
-    try {
-      const q = await pool.query(
-        "SELECT case_id, original_name, stored_name, mime_type FROM case_files WHERE id = $1",
-        [fileId]
-      );
+    const row = q.rows[0];
 
-      if (q.rowCount === 0) {
-        return res.status(404).json({ error: "Plik nie istnieje" });
-      }
-
-      const row = q.rows[0];
-
-      const allowed = await verifyCaseOwnership(row.case_id, user);
-      if (!allowed) {
-        return res.status(403).json({ error: "Brak dostępu do tej sprawy" });
-      }
-
-      const filePath = path.join(
-        CASES_UPLOAD_ROOT,
-        String(row.case_id),
-        row.stored_name
-      );
-
-      res.setHeader("Content-Type", row.mime_type || "application/octet-stream");
-      res.setHeader(
-        "Content-Disposition",
-        `attachment; filename="${encodeURIComponent(row.original_name)}"`
-      );
-
-      return res.sendFile(filePath);
-    } catch (err) {
-      console.error("GET /api/files/:fileId error:", err);
-      return res
-        .status(500)
-        .json({ error: "Błąd serwera przy pobieraniu pliku" });
+    // 🔒 sprawdzamy uprawnienia
+    if (user.role !== "admin" && row.owner_id !== user.id) {
+      return res.status(403).json({ error: "Brak dostępu do tej sprawy" });
     }
-  });
+
+    // 📂 dopasowane do struktury: uploads/cases/<case_id>/<stored_name>
+    const filePath = path.join(
+      process.cwd(),
+      "uploads",
+      "cases",
+      String(row.case_id),
+      row.stored_name
+    );
+
+    res.setHeader("Content-Type", row.mime_type || "application/octet-stream");
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename="${encodeURIComponent(row.original_name)}"`
+    );
+
+    return res.sendFile(filePath);
+  } catch (err) {
+    console.error("GET /api/files/:fileId error:", err);
+    return res
+      .status(500)
+      .json({ error: "Błąd serwera przy pobieraniu pliku" });
+  }
+});
 
   // === DOKUMENTY SPRAWY: LISTA PLIKÓW ===
   app.get("/api/cases/:id/files", requireAuth, async (req, res) => {
@@ -706,58 +743,72 @@ export default function casesRoutes(app: Express) {
     }
   });
 
-  // === USUWANIE PLIKU PO ID ===
-  app.delete("/api/files/:fileId", requireAuth, async (req, res) => {
-    const user = (req as any).user;
-    const rawId = req.params.fileId;
-    const fileId = Number(rawId);
+  // === USUWANIE PLIKU PO ID (z kontrolą właściciela) ===
+app.delete("/api/files/:fileId", requireAuth, async (req, res) => {
+  const user = (req as any).user;
+  const rawId = req.params.fileId;
+  const fileId = Number(rawId);
 
-    if (!Number.isFinite(fileId)) {
-      return res.status(400).json({ error: "Nieprawidłowe ID pliku" });
+  if (!Number.isFinite(fileId)) {
+    return res.status(400).json({ error: "Nieprawidłowe ID pliku" });
+  }
+
+  try {
+    // 1) Pobieramy info o pliku + właściciela sprawy
+    const q = await pool.query(
+      `
+      SELECT
+        cf.case_id,
+        cf.stored_name,
+        c.owner_id
+      FROM case_files cf
+      JOIN cases c ON c.id = cf.case_id
+      WHERE cf.id = $1
+      `,
+      [fileId]
+    );
+
+    if (q.rowCount === 0) {
+      return res.status(404).json({ error: "Plik nie istnieje" });
     }
+
+    const row = q.rows[0];
+
+    // 2) Sprawdzamy uprawnienia
+    if (user.role !== "admin" && row.owner_id !== user.id) {
+      return res.status(403).json({ error: "Brak dostępu do tej sprawy" });
+    }
+
+    // 3) Usuwamy fizyczny plik z dysku
+    const filePath = path.join(
+      process.cwd(),
+      "uploads",
+      "cases",
+      String(row.case_id),
+      row.stored_name
+    );
 
     try {
-      const q = await pool.query(
-        "SELECT case_id, stored_name FROM case_files WHERE id = $1",
-        [fileId]
-      );
-
-      if (q.rowCount === 0) {
-        return res.status(404).json({ error: "Plik nie istnieje" });
+      await fsPromises.unlink(filePath);
+    } catch (err: any) {
+      if (err.code !== "ENOENT") {
+        console.error("Błąd usuwania pliku z dysku:", err);
       }
-
-      const row = q.rows[0];
-
-      const allowed = await verifyCaseOwnership(row.case_id, user);
-      if (!allowed) {
-        return res.status(403).json({ error: "Brak dostępu do tej sprawy" });
-      }
-
-      const filePath = path.join(
-        CASES_UPLOAD_ROOT,
-        String(row.case_id),
-        row.stored_name
-      );
-
-      try {
-        await fsPromises.unlink(filePath);
-      } catch (err: any) {
-        if (err.code !== "ENOENT") {
-          console.error("Błąd usuwania pliku z dysku:", err);
-        }
-      }
-
-      await pool.query("DELETE FROM case_files WHERE id = $1", [fileId]);
-
-      console.log("🗑️ Usunięto plik id =", fileId);
-      return res.json({ ok: true });
-    } catch (err) {
-      console.error("DELETE /api/files/:fileId error:", err);
-      return res
-        .status(500)
-        .json({ error: "Błąd serwera przy usuwaniu pliku" });
+      // jeśli pliku fizycznie nie ma (ENOENT) – i tak usuwamy rekord z DB
     }
-  });
+
+    // 4) Usuwamy rekord z bazy
+    await pool.query("DELETE FROM case_files WHERE id = $1", [fileId]);
+
+    console.log("🗑️ Usunięto plik id =", fileId);
+    return res.json({ ok: true });
+  } catch (err) {
+    console.error("DELETE /api/files/:fileId error:", err);
+    return res
+      .status(500)
+      .json({ error: "Błąd serwera przy usuwaniu pliku" });
+  }
+});
 
   // === UPLOAD PLIKÓW DO SPRAWY ===
   app.post(
