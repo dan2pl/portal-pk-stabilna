@@ -179,21 +179,33 @@ function filterCasesByLastName(query, sourceArray) {
 // Jeśli nazwy są inne, podmień w bloku B na Twoje.
 
 // Helpers (auth + fetch)
-function authHeaders() {
-  return { Authorization: "Bearer " + localStorage.getItem("pk_token") };
-}
+
 async function fetchJSON(url, opts = {}) {
+  const isFormData = opts.body instanceof FormData;
+
+  const baseHeaders = isFormData
+    ? {}
+    : { 'Content-Type': 'application/json' };
+
   const res = await fetch(url, {
     ...opts,
-    headers: { ...(opts.headers || {}), ...authHeaders() },
+    headers: authHeaders({
+      ...baseHeaders,
+      ...(opts.headers || {}),
+    }),
+    credentials: 'include',  // ważne gdy używasz ciasteczek
   });
+
   if (!res.ok) {
     const t = await res.text().catch(() => "");
     throw new Error(t || res.statusText);
   }
+
   const ct = res.headers.get("content-type") || "";
   return ct.includes("application/json") ? res.json() : res.text();
 }
+
+
 // === Minimalny renderer listy spraw ===
 // Szuka <tbody id="casesTbody">; jeśli go nie ma, tworzy fallback <div id="casesList">
 function ensureCasesContainer() {
@@ -794,16 +806,16 @@ addBtn?.addEventListener("click", async (e) => {
 
   try {
     // 1️⃣ — UTWORZENIE SPRAWY
-    const createRes = await fetch("/api/cases", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        client,
-        loan_amount: loanAmount,
-        bank,
-        status: "nowa",
-      }),
-    });
+    const createRes = await apiFetch("/cases", {
+  method: "POST",
+  body: JSON.stringify({
+    client,
+    loan_amount: loanAmount,
+    bank,
+    status: "nowa",
+  }),
+});
+
 
     if (!createRes.ok) {
       const text = await createRes.text().catch(() => "");
@@ -819,10 +831,11 @@ addBtn?.addEventListener("click", async (e) => {
       const formData = new FormData();
       pendingFiles.forEach((file) => formData.append("files", file));
 
-      const uploadRes = await fetch(`/api/cases/${caseId}/files`, {
-        method: "POST",
-        body: formData,
-      });
+      const uploadRes = await apiFetch(`/cases/${caseId}/files`, {
+  method: "POST",
+  body: formData, // FormData → bez Content-Type
+});
+
 
       if (!uploadRes.ok) {
         console.error(
@@ -1025,11 +1038,11 @@ if (cmSave && cmModal) {
     if (cmBank) payload.bank = cmBank.value || null;
 
     try {
-      await fetchJSON(`/api/cases/${encodeURIComponent(id)}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
+      await apiFetch(`/cases/${encodeURIComponent(id)}`, {
+  method: "PATCH",
+  body: JSON.stringify(payload),
+});
+
       cmModal.style.display = "none";
       await loadCases();
       try {
@@ -1283,20 +1296,46 @@ function initSkdTabs() {
   ensureHost();
 })();
 // === API bootstrap (auth token / csrf / cookies) ===
-window.API = window.API || { base: '/api', authToken: null }; 
-function getCsrf(){ return document.querySelector('meta[name="csrf-token"]')?.content || null; }
+window.API = window.API || { base: '/api', authToken: null };
+function getCsrf() {
+  return document.querySelector('meta[name="csrf-token"]')?.content || null;
+}
 
-async function apiFetch(path, opts={}){
-  const headers = Object.assign({'Content-Type':'application/json'}, opts.headers || {});
-  if (window.API.authToken) headers['Authorization'] = 'Bearer ' + window.API.authToken;
-  const csrf = getCsrf(); if (csrf) headers['X-CSRF-Token'] = csrf;
+async function apiFetch(path, opts = {}) {
+  const isFormData = opts.body instanceof FormData;
+
+  const baseHeaders = isFormData
+    ? {}
+    : { 'Content-Type': 'application/json' };
+
+  let headers = {
+    ...baseHeaders,
+    ...(opts.headers || {}),
+  };
+
+  // globalny token (np. ustawiony przy logowaniu)
+  if (window.API.authToken) {
+    headers.Authorization = 'Bearer ' + window.API.authToken;
+  }
+
+  // lokalny token z getToken()
+  headers = authHeaders(headers);
+
+  const csrf = getCsrf();
+  if (csrf) headers['X-CSRF-Token'] = csrf;
 
   return fetch(`${window.API.base}${path}`, {
     ...opts,
     headers,
-    credentials: 'include',   // ważne przy ciasteczkach
+    credentials: 'include',
   });
 }
+
+// alias legacy (dla starego kodu)
+if (typeof window.apiFetch !== 'function') {
+  window.apiFetch = apiFetch;
+}
+
 
 // === Modal SKD (blok 2/3): zapis (PUT), usuwanie (DELETE), walidacje — z DEV fallback ===
 (function skdPersist(){
@@ -1893,437 +1932,25 @@ function resetSkdOfferForm() {
   }
 }
 
-// ===== SKD Offer – inicjalizacja/logika =====
-function initSkdOffer(caseData) {
-  console.log(
-    '%cinitSkdOffer uruchomione',
-    'color:#fff;background:#900;padding:2px 6px;border-radius:4px;'
-  );
-  console.log('initSkdOffer → caseData.id =', caseData && caseData.id);
-  if (!caseData) {
-    console.warn('initSkdOffer: brak caseData');
-    return;
-  }
-
-  const root = document.getElementById('skdOffer');
-  if (!root) {
-    console.warn('initSkdOffer: brak #skdOffer w DOM');
-    return;
-  }
-// ===== Zbiera wszystkie dane z formularza SKD =====
-function collectSkdOfferFormData() {
-  const root = document.getElementById("skdOffer");
-  if (!root) return {};
-
-  const $ = (sel) => root.querySelector(sel);
-
-  // 1. Eligibility (checkboxy)
-  const eligibility = {
-    sf50: $("#eligSf50")?.checked || false,
-    sf49: $("#eligSf49")?.checked || false,
-    sell: $("#eligSell")?.checked || false,
-  };
-
-  // 2. Preferencja klienta (radio)
-  const clientPref = root.querySelector("input[name='clientPref']:checked");
-  const client_preference = clientPref ? clientPref.value : null;
-
-  // 3. Wybrany wariant SKD (radio)
-  const variantEl = root.querySelector("input[name='skdVariant']:checked");
-  const variant = variantEl ? variantEl.value : null;
-
-  // 4. WPS
-  const wps = {
-    forecast: parseFloat($("#wpsForecastInput")?.value || "0") || 0,
-    final: parseFloat($("#wpsFinalInput")?.value || "0") || 0,
-    future_interest: parseFloat($("#futureInterestInput")?.value || "0") || 0,
-  };
-
-  // 5. Buyout %
-  const buyout_pct =
-    parseFloat($("#buyoutPctInput")?.value || "0") / 100 || 0;
-
-  // 6. Notatka
-  const notes = $("#skdOfferNotes")?.value || "";
-
-  return {
-    eligibility,
-    client_preference,
-    variant,
-    wps,
-    buyout_pct,
-    notes,
-  };
-}
-
-  // jednorazowa inicjalizacja logiki zapisu SKD
-  if (!window.__skdSavingInitialized) {
-    initSkdOfferSaving();
-    window.__skdSavingInitialized = true;
-  }
-
-  const lastId = root.dataset.initedFor;
-  if (lastId && String(lastId) === String(caseData.id || '')) {
-    console.log(
-      '%cinitSkdOffer: pominięto (już aktywne dla tej sprawy)',
-      'color:gray'
-    );
-    return;
-  }
-
-  root.dataset.initedFor = String(caseData.id || '');
-  root.dataset.caseId    = String(caseData.id || '');
-
-  window.currentCaseId = caseData.id;
-  resetSkdOfferForm();
-
-  const $ = (s) => root.querySelector(s);
-
-  const wpsInput   = $('#wpsForecastInput');
-  const copyBtn    = $('#btnCopyWpsToForecast');
-  const saveBtn    = $('#skdOfferSaveBtn');
-  const sub        = $('#skdOfferSub');
-  const notesEl    = $('#skdOfferNotes');
-  const buyoutEl   = $('#buyoutPctInput');
-  const upfrontEl  = $('#upfrontFeeInput');
-  const rads       = root.querySelectorAll('input[name="skdVariant"]');
-  const isAdmin    = (document.body.dataset.role === 'admin');
-
-  const state = normalizeSkdOffer(caseData);
-
-  function initSkdOfferSaving() {
-    console.log("initSkdOfferSaving uruchomione");
-  const root = document.getElementById("skdOffer");
-  const saveBtn = document.getElementById("skdOfferSaveBtn");
-  if (!root || !saveBtn) {
-    console.warn("initSkdOfferSaving: brak #skdOffer albo #skdOfferSaveBtn");
-    return;
-  }
-
-  const markDirty = () => {
-    saveBtn.style.display = "inline-block";
-  };
-
-  root.querySelectorAll("input, textarea, select").forEach((el) => {
-    el.addEventListener("input", markDirty);
-    el.addEventListener("change", markDirty);
-  });
-
-  saveBtn.addEventListener("click", async () => {
-    if (!window.currentCaseId) {
-      alert("Brak ID sprawy – nie mogę zapisać oferty SKD.");
-      return;
-    }
-
-    const offerData = collectSkdOfferFormData();
-
-    const wpsForecast =
-      offerData.wps && typeof offerData.wps.forecast === "number"
-        ? offerData.wps.forecast
-        : null;
-
-    console.log("▶ Zapis SKD dla sprawy", window.currentCaseId, {
-      wps_forecast: wpsForecast,
-      offer_skd: offerData,
-    });
-
-    try {
-      const res = await fetch(
-        `/api/cases/${window.currentCaseId}/skd-offer`,
-        {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            wps_forecast: wpsForecast,
-            offer_skd: offerData,
-          }),
-        }
-      );
-
-      if (!res.ok) {
-        throw new Error("HTTP " + res.status);
-      }
-
-      console.log("✅ Oferta SKD zapisana poprawnie");
-      saveBtn.style.display = "none";
-    } catch (err) {
-      console.error("❌ Błąd zapisu oferty SKD:", err);
-      alert("Nie udało się zapisać oferty SKD. Sprawdź konsolę (F12).");
-    }
-  });
-}
-
-  // ======================
-// ŁADOWANIE ZAPISANYCH DANYCH SKD
-const offerSkd = state.offer_skd || state.skd_offer || null;
-
-if (offerSkd) {
-  console.log("SKD: wczytywanie istniejącej oferty z backendu:", offerSkd);
-  populateSkdOfferForm(offerSkd);
-} else {
-  console.log("SKD: brak zapisanej oferty — czysty formularz");
-}
-
-const fallbackWps = Number(caseData?.wps || 0);
-if (isAdmin && (!state.wps_forecast || Number(state.wps_forecast) === 0) && fallbackWps > 0) {
-  state.wps_forecast = fallbackWps;
-  wpsInput && (wpsInput.value = String(fallbackWps));
-}
-  const eligBox  = $('#skdEligibilityGroup');
-  const prefBox  = $('#clientPreferenceBlock');
-  if (isAdmin) {
-    if (eligBox) eligBox.style.display = '';
-    if (prefBox) prefBox.style.display = 'none';
-    if (saveBtn) saveBtn.style.display = 'inline-block';
-  } else {
-    if (eligBox) eligBox.style.display = 'none';
-    if (prefBox) prefBox.style.display = '';
-    if (saveBtn) saveBtn.style.display = 'none';
-  }
-
-  const chkSf50 = $('#eligSf50');
-  const chkSf49 = $('#eligSf49');
-  const chkSell = $('#eligSell');
-  const currentElig = (state.offer_skd && state.offer_skd.eligibility) || { sf50:true, sf49:true, sell:true };
-  if (chkSf50) chkSf50.checked = !!currentElig.sf50;
-  if (chkSf49) chkSf49.checked = !!currentElig.sf49;
-  if (chkSell) chkSell.checked = !!currentElig.sell;
-
-  function filterVariantsForAgent() {
-    const elig = state.offer_skd?.eligibility || { sf50:true, sf49:true, sell:true };
-    if (isAdmin) {
-      ['sf50','sf49','sell'].forEach(k=>{
-        root.querySelectorAll(`[data-variant="${k}"]`).forEach(b=> b.classList.remove('hidden'));
-      });
-      return;
-    }
-    ['sf50','sf49','sell'].forEach(k=>{
-      const allow = !!elig[k];
-      root.querySelectorAll(`[data-variant="${k}"]`).forEach(b=> b.classList.toggle('hidden', !allow));
-    });
-    const current = state.offer_skd?.variant || null;
-    if (current && !(state.offer_skd?.eligibility||{})[current]) {
-      root.querySelectorAll('input[name="skdVariant"]').forEach(r=> r.checked = false);
-    }
-  }
-  filterVariantsForAgent();
-
-  if (isAdmin && eligBox) {
-    let tSaveElig = null;
-    const scheduleSaveEligibility = () => {
-      clearTimeout(tSaveElig);
-      tSaveElig = setTimeout(async () => {
-        try {
-          state.offer_skd = state.offer_skd || {};
-          state.offer_skd.eligibility = {
-            sf50: !!chkSf50?.checked,
-            sf49: !!chkSf49?.checked,
-            sell: !!chkSell?.checked
-          };
-          await saveSkdOffer(caseData.id, {
-            wps_forecast: toNum(state.wps_forecast),
-            offer_skd: state.offer_skd
-          });
-          filterVariantsForAgent();
-          if (sub) { sub.textContent = 'Zapisano dostępność wariantów'; setTimeout(()=>{ sub.textContent = '—'; }, 1200); }
-        } catch (e) {
-          console.error('save eligibility failed', e);
-          if (sub) sub.textContent = 'Błąd zapisu (401?)';
-        }
-      }, 350);
-    };
-    [chkSf50, chkSf49, chkSell].forEach(el => el?.addEventListener('change', scheduleSaveEligibility));
-  }
-
-  if (wpsInput) wpsInput.value = state.wps_forecast ?? '';
-  if (notesEl)  notesEl.value  = state.offer_skd.notes || '';
-  const initialVariant = state.offer_skd.variant || 'sf50';
-  const initialRadio   = root.querySelector(`input[name="skdVariant"][value="${initialVariant}"]`);
-  if (initialRadio) initialRadio.checked = true;
-  if (state.offer_skd.upfront_fee != null && upfrontEl) upfrontEl.value = num(state.offer_skd.upfront_fee);
-  if (state.offer_skd.buyout_pct != null && buyoutEl)  buyoutEl.value  = pct(state.offer_skd.buyout_pct);
-
-  toggleSection();
-  function filterVariantsForAgent() {
-  const elig = state.offer_skd?.eligibility || { sf50:true, sf49:true, sell:true };
-  ['sf50','sf49','sell'].forEach(k=>{
-    root.querySelectorAll(`[data-variant="${k}"]`).forEach(el=>{
-      el.style.display = elig[k] ? '' : 'none';
-    });
-    root.querySelectorAll(`input[name="skdVariant"][value="${k}"]`).forEach(inp=>{
-      const box = inp.closest('.radio') || inp;
-      box.style.display = elig[k] ? '' : 'none';
-      inp.disabled = !elig[k];
-    });
-  });
-}
-
-
-// po normalize + prefill:
-toggleSection();
-filterVariantsForAgent();  
-  refreshExtrasVisibility(initialVariant);
-  recomputeAndRender();
-
-  wpsInput?.addEventListener('input', ()=>{
-    state.wps_forecast = num(wpsInput.value);
-    toggleSection(); recomputeAndRender(); scheduleSave();
-  });
-  notesEl?.addEventListener('input', ()=>{
-    state.offer_skd.notes = notesEl.value || '';
-    scheduleSave();
-  });
-  rads.forEach(r=>{
-    r.addEventListener('change', ()=>{
-      if(!r.checked) return;
-      state.offer_skd.variant = r.value;
-      refreshExtrasVisibility(r.value);
-      recomputeAndRender();
-      scheduleSave();
-    });
-  });
-  upfrontEl?.addEventListener('input', ()=>{
-    state.offer_skd.upfront_fee = num(upfrontEl.value);
-    recomputeAndRender();
-    scheduleSave();
-  });
-  buyoutEl?.addEventListener('input', ()=>{
-    state.offer_skd.buyout_pct = clamp(num(buyoutEl.value)/100, 0, 1);
-    recomputeAndRender();
-    scheduleSave();
-  });
-  copyBtn?.addEventListener('click', ()=>{
-    const domWps = extractDomWps();
-    if(domWps > 0){
-      if (wpsInput) wpsInput.value = String(domWps);
-      state.wps_forecast = domWps;
-      toggleSection(); recomputeAndRender(); scheduleSave();
-    } else {
-      alert('Brak wartości WPS w podsumowaniu.');
-    }
-  });
-  saveBtn?.addEventListener('click', scheduleSave);
-
-function toggleSection(){
-  const forecast = Number(state.wps_forecast || 0);
-  const baseWps  = Number(caseData?.wps || 0);
-  const show = isAdmin ? true : (forecast > 0 || baseWps > 0);
-  root.style.display = show ? '' : 'none';
-}
-  function refreshExtrasVisibility(v){
-    root.querySelectorAll('[data-extra]').forEach(el=>{
-      el.style.display = (el.getAttribute('data-extra') === v) ? '' : 'none';
-    });
-  }
-  function recomputeAndRender(){
-    const wps = num(state.wps_forecast);
-    const v   = state.offer_skd.variant || 'sf50';
-    let now=0, later=0;
-    if(v==='sf50'){ now=0; later = wps*0.50; }
-    else if(v==='sf49'){ now = -Math.max(0, num(state.offer_skd.upfront_fee)); later = wps*0.51; }
-    else if(v==='sell'){ now = wps*clamp(state.offer_skd.buyout_pct ?? 0.10, 0, 1); later = 0; }
-    // odczyt anulowanych odsetek z pola w UI
-const futureInput = document.getElementById('futureInterestInput');
-const future = futureInput ? Number(futureInput.value || 0) : 0;
-
-const total = now + later + future;
-
-    state.offer_skd.estimates = { client_now: r2(now), client_later: r2(later), total_client: r2(total) };
-    $('#estNow')   && ($('#estNow').textContent   = fmt(state.offer_skd.estimates.client_now));
-    $('#estLater') && ($('#estLater').textContent = fmt(state.offer_skd.estimates.client_later));
-    $('#estTotal') && ($('#estTotal').textContent = fmt(state.offer_skd.estimates.total_client));
-    const labels = { sf50:'SF 50% (bez ryzyka)', sf49:'SF 49% (z opłatą początkową)', sell:'Sprzedaż roszczenia' };
-    if (sub) sub.textContent = `WPS prognoza: ${fmt(wps)} • Wariant: ${labels[v]}`;
-    if (saveBtn) saveBtn.style.display = 'inline-block';
-  }
-
-  let t = null;
-  let blockSaves401 = false;
-  function scheduleSave(){
-    if (blockSaves401) return;
-    clearTimeout(t);
-    t = setTimeout(async ()=>{
-      try{
-        await saveSkdOffer(caseData.id, {
-          wps_forecast: toNum(state.wps_forecast),
-          offer_skd: state.offer_skd
-        });
-        if (saveBtn) saveBtn.style.display = 'none';
-        blockSaves401 = false;
-        window.dispatchEvent(new CustomEvent('case:offerSkdUpdated', { detail:{ caseId: caseData.id } }));
-      }catch(e){
-        console.error(e);
-        if (saveBtn) saveBtn.style.display = 'inline-block';
-        if (String(e.message).includes('401') || String(e).includes('Unauthorized')) {
-          blockSaves401 = true;
-          alert('Nie jesteś zalogowany / brak autoryzacji (401). Zaloguj się i odśwież stronę.');
-        }
-      }
-    }, 450);
-  }
-
-  function normalizeSkdOffer(cd){
-  const rawOffer = cd?.offer_skd || {};
-  const rawElig  = rawOffer.eligibility || {};
-
-  const eligibility = {
-    sf50: rawElig.sf50 ?? true,  // jeśli undefined / null → true, jeśli false → ZOSTAJE false
-    sf49: rawElig.sf49 ?? true,
-    sell: rawElig.sell ?? true,
-  };
-
-  return {
-    wps_forecast: cd?.wps_forecast ? Number(cd.wps_forecast) : 0,
-    offer_skd: {
-      variant: rawOffer.variant || 'sf50',
-      upfront_fee: rawOffer.upfront_fee ?? null,
-      buyout_pct: rawOffer.buyout_pct ?? 0.10,
-      notes: rawOffer.notes || '',
-      eligibility,
-      estimates: rawOffer.estimates || {
-        client_now: 0,
-        client_later: 0,
-        total_client: 0
-      }
-    }
-  };
-}
-
-  function extractDomWps(){
-    const el = document.getElementById('caseWpsValue');
-    if(!el) return 0;
-    return num(el.textContent);
-  }
-  function num(v){ return Number(String(v).replace(/\s/g,'').replace(',', '.')) || 0; }
-  function r2(v){ return Math.round(v*100)/100; }
-  function clamp(v,min,max){ return Math.min(max, Math.max(min, v)); }
-  function fmt(v){
-    const sign = v>=0 ? '' : '−';
-    return sign + Math.abs(v).toLocaleString('pl-PL',{minimumFractionDigits:2, maximumFractionDigits:2}) + ' zł';
-  }
-  function pct(v){ return (Number(v)*100).toFixed(1); }
-  function toNum(v){
-    if (v === '' || v == null) return null;
-    const n = Number(String(v).replace(/\s/g,'').replace(',', '.'));
-    return Number.isFinite(n) ? n : null;
-  }
-}
-
 // ===== API helper =====
 async function saveSkdOffer(caseId, payload) {
-  const res = await fetch(`/api/cases/${caseId}/skd-offer`, {
-  method: 'PUT',
-  headers: authHeaders({ 'Content-Type': 'application/json' }),
-  credentials: 'include',
-  body: JSON.stringify(payload)
-});
-  if (!res.ok) throw new Error(`saveSkdOffer ${res.status}`);
+  const res = await apiFetch(`/cases/${caseId}/skd-offer`, {
+    method: "PUT",
+    body: JSON.stringify(payload),
+  });
+
+  if (!res.ok) {
+    throw new Error(`saveSkdOffer HTTP ${res.status}`);
+  }
+
   try {
     return await res.json();
   } catch {
+    // jeśli backend zwróci pustą odpowiedź / brak JSON → nie wywalaj błędu
     return {};
   }
 }
+
 (function setupCaseFiles() {
   function init() {
     const input = document.getElementById('caseFilesInput');
@@ -2348,10 +1975,6 @@ async function saveSkdOffer(caseId, payload) {
   }
   document.addEventListener('DOMContentLoaded', init);
 })();
-{wps_basic: 9966}
-wps_basic
-: 
-9966
 
 function initSkdOffer_v2(caseData) {
   console.log(
@@ -2653,85 +2276,73 @@ recomputePayoutSimulation();
       el.addEventListener("change", markDirty);
     });
 
-    saveBtn.addEventListener("click", async () => {
-      if (!window.currentCaseId) {
-        alert("Brak ID sprawy – nie mogę zapisać oferty SKD.");
-        return;
+      saveBtn.addEventListener("click", async () => {
+    if (!window.currentCaseId) {
+      alert("Brak ID sprawy – nie mogę zapisać oferty SKD.");
+      return;
+    }
+
+    const forecastVal        = parseNumber(wpsForecastInput?.value);
+    const finalVal           = parseNumber(wpsFinalInput?.value);
+    const futureInterestVal  = parseNumber(futureInterestInput?.value);
+
+    // jeśli jest WPS ostateczny → on rządzi, inaczej prognoza
+    const wpsForecast = finalVal ?? forecastVal ?? null;
+
+    // wariant
+    let selectedVariant = "sf50";
+    const selectedRadio = Array.from(variantRadios || []).find((r) => r.checked);
+    if (selectedRadio) selectedVariant = selectedRadio.value;
+
+    const buyoutPctRaw = parseNumber(buyoutPctInput?.value);
+
+    const offerData = {
+      variant: selectedVariant,
+      upfront_fee: null,
+      buyout_pct: buyoutPctRaw != null ? buyoutPctRaw / 100 : null,
+      notes: notesInput?.value || "",
+      eligibility: {
+        sf50: !!eligSf50?.checked,
+        sf49: !!eligSf49?.checked,
+        sell: !!eligSell?.checked,
+      },
+      wps_final: finalVal,
+      future_interest: futureInterestVal,
+      estimates: {},
+    };
+
+    // 🔥 PODPIĘCIE WPS POD OFERTĘ (jak miałeś wcześniej)
+    if (wpsForecast != null) {
+      offerData.estimates.wps_forecast = wpsForecast;
+
+      if (offerData.buyout_pct != null) {
+        const w = Number(wpsForecast);
+        const p = offerData.buyout_pct;
+
+        offerData.estimates.sell_client_amount = Math.round(w * (1 - p));
+        offerData.estimates.sell_gross         = Math.round(w * p);
       }
+    }
 
-        const forecastVal = parseNumber(wpsForecastInput?.value);
-  const finalVal    = parseNumber(wpsFinalInput?.value);
-  const futureInterestVal = parseNumber(futureInterestInput?.value);
+    console.log("▶ Zapis SKD dla sprawy", window.currentCaseId, {
+      wps_forecast: wpsForecast,
+      offer_skd: offerData,
+    });
 
-  // jeśli jest WPS ostateczny → on rządzi, inaczej prognoza
-  const wpsForecast = finalVal ?? forecastVal ?? null;
-
-  // wariant
-  let selectedVariant = "sf50";
-  const selectedRadio = Array.from(variantRadios || []).find((r) => r.checked);
-  if (selectedRadio) selectedVariant = selectedRadio.value;
-
-  const buyoutPctRaw = parseNumber(buyoutPctInput?.value);
-
-  const offerData = {
-    variant: selectedVariant,
-    upfront_fee: null,
-    buyout_pct: buyoutPctRaw != null ? buyoutPctRaw / 100 : null,
-    notes: notesInput?.value || "",
-    eligibility: {
-      sf50: !!eligSf50?.checked,
-      sf49: !!eligSf49?.checked,
-      sell: !!eligSell?.checked,
-    },
-    // 🔥 TU DODAJEMY TO, CZEGO BRAKOWAŁO:
-    wps_final: finalVal,
-    future_interest: futureInterestVal,
-    estimates: {},
-  };
-
-// 🔥 PODPIĘCIE WPS POD OFERTĘ
-if (wpsForecast != null) {
-  // Zapisz WPS wewnątrz oferty (do dalszych wyliczeń, PDF itd.)
-  offerData.estimates.wps_forecast = wpsForecast;
-
-  // Jeśli mamy procent wykupu (sprzedaż roszczenia),
-  // policz orientacyjnie ile trafia do klienta a ile jako "cena zakupu".
-  if (offerData.buyout_pct != null) {
-    const w = Number(wpsForecast);
-    const p = offerData.buyout_pct; // np. 0.10 = 10%
-
-    // Kwota dla klienta przy sprzedaży roszczenia
-    offerData.estimates.sell_client_amount = Math.round(w * (1 - p));
-
-    // "Cena" roszczenia (nasz przychód brutto z wykupu)
-    offerData.estimates.sell_gross = Math.round(w * p);
-  }
-}
-
-      console.log("▶ Zapis SKD dla sprawy", window.currentCaseId, {
+    try {
+      await saveSkdOffer(window.currentCaseId, {
         wps_forecast: wpsForecast,
         offer_skd: offerData,
       });
 
-      try {
-        const res = await fetch(`/api/cases/${window.currentCaseId}/skd-offer`, {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            wps_forecast: wpsForecast,
-            offer_skd: offerData,
-          }),
-        });
+      console.log("✅ Oferta SKD zapisana poprawnie");
+      saveBtn.style.display = "none";
+    } catch (err) {
+      console.error("❌ Błąd zapisu oferty SKD:", err);
+      alert("Nie udało się zapisać oferty SKD. Sprawdź konsolę.");
+    }
+  });
 
-        if (!res.ok) throw new Error("HTTP " + res.status);
-
-        console.log("✅ Oferta SKD zapisana poprawnie");
-        saveBtn.style.display = "none";
-      } catch (err) {
-        console.error("❌ Błąd zapisu oferty SKD:", err);
-        alert("Nie udało się zapisać oferty SKD. Sprawdź konsolę.");
-      }
-    });
   }
 
   // 🔥 1) ZAŁADUJ DANE Z caseData — BEZ normalizeSkdOffer
