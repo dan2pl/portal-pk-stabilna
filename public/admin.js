@@ -23,13 +23,19 @@ tabs.forEach((tab) => {
 async function loadUsers() {
   try {
     const res = await fetch("/api/admin/users");
-    const data = await res.json();
+const data = await res.json();
 
-    if (!res.ok) {
-      console.error("Błąd ładowania użytkowników:", data);
-      alert("Błąd ładowania użytkowników");
-      return;
-    }
+if (res.status === 403) {
+  alert("Brak uprawnień do panelu administratora.");
+  window.location.href = "/dashboard.html";
+  return;
+}
+
+if (!res.ok) {
+  console.error("Błąd ładowania użytkowników:", data);
+  alert("Błąd ładowania użytkowników");
+  return;
+}
 
     renderUsers(data.users || []);
   } catch (e) {

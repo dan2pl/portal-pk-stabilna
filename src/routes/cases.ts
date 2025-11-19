@@ -6,6 +6,7 @@ import fs from "fs";
 import fsPromises from "fs/promises";
 import path from "path";
 import { requireAuth } from "../middleware/requireAuth";
+import jwt from "jsonwebtoken";
 
 const UPLOAD_DIR = path.join(__dirname, "..", "..", "uploads");
 
@@ -177,29 +178,75 @@ export default function casesRoutes(app: Express) {
   }
 
   // === LISTA SPRAW (dla dashboardu) ===
-  app.get("/api/cases", requireAuth, async (req, res) => {
-    try {
-      const q = await pool.query(
-        `
-                SELECT
-          id,
-          client,
-          bank,
-          loan_amount,
-          COALESCE(wps_forecast, wps) AS wps,
-          status,
-          contract_date,
-          agent_id
-        FROM cases
-        ORDER BY id DESC
-        `
-      );
-      res.json(q.rows);
-    } catch (err) {
-      console.error("GET /api/cases error", err);
-      res.status(500).json({ error: "Server error" });
+app.get("/api/cases", requireAuth, async (req, res) => {
+  try {
+    let me = (req as any).user as any;
+
+    // 🔐 Bezpiecznik: jeśli z jakiegoś powodu req.user jest puste,
+    // spróbujmy jeszcze raz odczytać usera z JWT z cookie.
+    if (!me) {
+      const anyReq = req as any;
+      const cookies = anyReq.cookies || {};
+      const token = cookies.auth_token;
+
+      if (!token) {
+        console.error("❌ /api/cases → brak tokena w cookies");
+        return res
+          .status(401)
+          .json({ error: "Brak dostępu – zaloguj się ponownie" });
+      }
+
+      try {
+        me = jwt.verify(token, process.env.JWT_SECRET || "sekret") as any;
+      } catch (e) {
+        console.error("❌ /api/cases → nieprawidłowy token:", e);
+        return res.status(401).json({ error: "Nieprawidłowy token" });
+      }
     }
-  });
+
+    if (!me) {
+      console.error("❌ /api/cases → nadal brak usera po próbie dekodowania tokena");
+      return res
+        .status(401)
+        .json({ error: "Brak danych użytkownika – zaloguj się ponownie" });
+    }
+
+    const isAdmin = me.role === "admin";
+
+    console.log("📦 /api/cases → user:", me, "| isAdmin =", isAdmin);
+
+    let sql = `
+      SELECT
+        id,
+        client,
+        bank,
+        loan_amount,
+        COALESCE(wps_forecast, wps) AS wps,
+        status,
+        contract_date,
+        owner_id
+      FROM cases
+    `;
+    const params: any[] = [];
+
+    if (!isAdmin) {
+      sql += " WHERE owner_id = $1";
+      params.push(me.id);
+    }
+
+    sql += " ORDER BY id DESC";
+
+    console.log("SQL USED:", sql, "PARAMS:", params);
+
+    const q = await pool.query(sql, params);
+    console.log("ROWS COUNT:", q.rows.length);
+
+    return res.json(q.rows);
+  } catch (err) {
+    console.error("GET /api/cases error", err);
+    return res.status(500).json({ error: "Server error" });
+  }
+});
 
   // === KPI (opcjonalne) ===
   app.get("/api/kpi", requireAuth, async (_req, res) => {
@@ -236,55 +283,52 @@ export default function casesRoutes(app: Express) {
   });
 
   // === DODAWANIE NOWEJ SPRAWY ===
-    app.post("/api/cases", requireAuth, async (req, res) => {
-    try {
-      const { client, loan_amount, status, bank, agent_id } = req.body || {};
+app.post("/api/cases", requireAuth, async (req, res) => {
+  try {
+    const { client, loan_amount, status, bank } = req.body || {};
+    const me = (req as any).user;
 
-      if (!client || typeof loan_amount !== "number") {
-        return res
-          .status(400)
-          .json({ error: "client i loan_amount są wymagane" });
-      }
-
-      const normStatus = (status || "nowa").toString();
-
-      const sql = `
-        INSERT INTO cases (client, loan_amount, status, bank, agent_id)
-        VALUES ($1, $2, $3, $4, $5)
-        RETURNING id, client, loan_amount, wps, status, contract_date, bank, agent_id
-      `;
-      const params = [
-        client,
-        loan_amount,
-        normStatus,
-        bank ?? null,
-        agent_id ?? null, // tymczasowo – potem nadpiszemy zalogowanym userem
-      ];
-
-      const { rows } = await pool.query(sql, params);
-      return res.json(rows[0]);
-    } catch (e: any) {
-      console.error("POST /api/cases error:", e);
-      return res.status(500).json({
-        error: "DB error",
-        detail: e.message || String(e),
-      });
+    if (!client || typeof loan_amount !== "number") {
+      return res
+        .status(400)
+        .json({ error: "client i loan_amount są wymagane" });
     }
-  });
+
+    const normStatus = (status || "nowa").toString();
+
+    const sql = `
+      INSERT INTO cases (client, loan_amount, status, bank, owner_id)
+      VALUES ($1, $2, $3, $4, $5)
+      RETURNING id, client, loan_amount, wps, status, contract_date, bank, owner_id
+    `;
+    const params = [client, loan_amount, normStatus, bank ?? null, me.id];
+
+    const { rows } = await pool.query(sql, params);
+    return res.json(rows[0]);
+  } catch (e: any) {
+    console.error("POST /api/cases error:", e);
+    return res.status(500).json({
+      error: "DB error",
+      detail: e.message || String(e),
+    });
+  }
+});
 
   // === SZCZEGÓŁY JEDNEJ SPRAWY (dla case.html) ===
-  app.get("/api/cases/:id", requireAuth, async (req, res) => {
-    const rawId = req.params.id;
-    const id = Number(rawId);
+app.get("/api/cases/:id", requireAuth, async (req, res) => {
+  const rawId = req.params.id;
+  const id = Number(rawId);
 
-    if (!Number.isFinite(id)) {
-      return res.status(400).json({ error: "Invalid case id" });
-    }
+  if (!Number.isFinite(id)) {
+    return res.status(400).json({ error: "Invalid case id" });
+  }
 
-    try {
-      const result = await pool.query(
-        `
-                    SELECT
+  try {
+    const me = (req as any).user;
+
+    const result = await pool.query(
+      `
+      SELECT
         id,
         client        AS client,
         bank          AS bank,
@@ -298,25 +342,29 @@ export default function casesRoutes(app: Express) {
         wps_forecast,
         wps_final,
         client_benefit,
-        agent_id
+        owner_id
       FROM cases
       WHERE id = $1
+      `,
+      [id]
+    );
 
-        `,
-        [id]
-      );
-
-      if (result.rows.length === 0) {
-        return res.status(404).json({ error: "Case not found" });
-      }
-
-      const row = result.rows[0];
-      return res.json(row);
-    } catch (err) {
-      console.error("GET /api/cases/:id error", err);
-      return res.status(500).json({ error: "Internal Server Error" });
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: "Case not found" });
     }
-  });
+
+    const row = result.rows[0];
+
+    if (me.role !== "admin" && row.owner_id !== me.id) {
+      return res.status(403).json({ error: "Brak dostępu do tej sprawy" });
+    }
+
+    return res.json(row);
+  } catch (err) {
+    console.error("GET /api/cases/:id error", err);
+    return res.status(500).json({ error: "Internal Server Error" });
+  }
+});
 
   // === OGÓLNA CZĘŚCIOWA AKTUALIZACJA SPRAWY (legacy / multi-update) ===
   app.patch("/api/cases/:id", requireAuth, async (req, res) => {

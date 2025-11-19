@@ -182,7 +182,18 @@
           ></span>
         </div>
 
-        <button id="logoutBtn">🚪 Wyloguj</button>
+        <button id="logoutBtn">🚪 Wyloguj</button>\
+        <span id="currentUserLabel" style="margin-right: 16px; font-weight: 500;">
+  <!-- tu wstrzykniemy z JS -->
+</span>
+
+<a
+  href="admin.html"
+  id="adminPanelLink"
+  style="display:none; margin-right: 16px; font-weight: 500; color:#d80032; text-decoration: none;"
+>
+  Panel administratora
+</a>
       </div>
     </header>
 
@@ -201,6 +212,7 @@
           <option value="lost">Odrzucone</option>
         </select>
         <button id="flt_refresh">Odśwież</button>
+        
       </div>
 
       <!-- KPI – ilości spraw -->

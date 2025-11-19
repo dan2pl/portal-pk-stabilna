@@ -112,6 +112,45 @@ function extractLastName(caseRow) {
   }
   return "";
 }
+async function loadCurrentUser() {
+  try {
+    const res = await fetch("/api/me");
+    if (res.status === 401) {
+      window.location.href = "/login.html";
+      return;
+    }
+
+    const data = await res.json();
+    console.log("API /me RAW:", data);
+
+    const user = data.user || data || {};
+
+    const label = document.getElementById("currentUserLabel");
+    const adminLink = document.getElementById("adminPanelLink");
+
+    const name =
+      user.name || user.email || (user.id ? `Użytkownik #${user.id}` : "—");
+
+    const roleRaw = user.role || data.role || "";
+    const roleLabel =
+      roleRaw === "admin"
+        ? "Administrator"
+        : roleRaw === "agent"
+        ? "Agent"
+        : "Użytkownik";
+
+    if (label) {
+      label.textContent = `Zalogowany: ${name} (${roleLabel})`;
+    }
+
+    if (adminLink) {
+      adminLink.style.display = roleRaw === "admin" ? "inline-block" : "none";
+    }
+  } catch (e) {
+    console.error("Błąd /api/me:", e);
+    window.location.href = "/login.html";
+  }
+}
 
 // Szuka w każdym polu tekstowym rekordu (bez polskich znaków)
 function filterCasesByLastName(query, sourceArray) {
@@ -1604,6 +1643,7 @@ function hideDiag() {
 // ===== BOOTSTRAP =====
 document.addEventListener('DOMContentLoaded', async () => {
   try {
+    loadCurrentUser(); 
     showDiag('🚀 Boot: start');
     await step('Auth', initAuth);
     await step('Bank selects', initBanks);
@@ -1612,12 +1652,13 @@ document.addEventListener('DOMContentLoaded', async () => {
     await step('Modal & Logout', bindModalAndLogout);
     showDiag('✅ Dashboard gotowy');
     log('✅ dashboard ready');
+    await loadAndRenderAllCases();
   } catch (e) {
     console.error('[PK:ERR] BOOT FAIL', e);
     showDiag('❌ Boot zatrzymany: ' + (e?.message || e));
   }
 
-    await loadAndRenderAllCases();
+    
 
   // === Szukajka ===
   (function initCaseSearch() {

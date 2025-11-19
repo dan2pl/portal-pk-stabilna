@@ -1,23 +1,27 @@
 // src/routes/auth.ts
+import bcrypt from "bcryptjs";
+import jwt from "jsonwebtoken";
 import { Express, Request, Response } from "express";
 import pool from "../db";
-import bcrypt from "bcryptjs";
+
+// ...
 
 export default function authRoutes(app: Express) {
   console.log("➡️ routes: auth loaded");
 
-  // POST /api/login
+  // === LOGIN ===
   app.post("/api/login", async (req: Request, res: Response) => {
-    const { email, password } = req.body || {};
-
-    if (!email || !password) {
-      return res.status(400).json({ error: "Email i hasło są wymagane" });
-    }
-
     try {
+      const { email, password } = req.body || {};
+
+      if (!email || !password) {
+        return res.status(400).json({ error: "Podaj email i hasło" });
+      }
+
+      // szukamy usera w bazie
       const q = await pool.query(
         `
-        SELECT id, email, name, role, password_hash, is_active
+        SELECT id, email, name, role, password_hash
         FROM users
         WHERE email = $1
         `,
@@ -30,26 +34,40 @@ export default function authRoutes(app: Express) {
 
       const user = q.rows[0];
 
-      if (user.is_active === false) {
-        return res.status(403).json({ error: "Konto jest zablokowane" });
-      }
-
       const ok = await bcrypt.compare(password, user.password_hash);
       if (!ok) {
         return res.status(401).json({ error: "Nieprawidłowe dane logowania" });
       }
 
-      // ✅ zapis do sesji
-      (req.session as any).userId = user.id;
-      (req.session as any).userRole = user.role;
-      (req.session as any).userName = user.name;
+      // 🔐 tworzymy JWT z id/email/name/role
+      const token = jwt.sign(
+        {
+          id: user.id,
+          email: user.email,
+          name: user.name,
+          role: user.role,
+        },
+        process.env.JWT_SECRET || "sekret",
+        {
+          expiresIn: "7d",
+        }
+      );
 
-      // ✅ aktualizacja last_login
+      // 🔐 ustawiamy httpOnly cookie z tokenem
+      res.cookie("auth_token", token, {
+        httpOnly: true,
+        secure: false, // przy HTTPS zmienisz na true
+        sameSite: "lax",
+        maxAge: 1000 * 60 * 60 * 24 * 7, // 7 dni
+      });
+
+      // aktualizacja last_login (opcjonalnie)
       await pool.query(
         "UPDATE users SET last_login = NOW() WHERE id = $1",
         [user.id]
       );
 
+      // odsyłamy dane usera (bez hasła)
       return res.json({
         ok: true,
         user: {
@@ -78,32 +96,39 @@ export default function authRoutes(app: Express) {
     });
   });
 
-  // GET /api/me – info o aktualnym userze
-  app.get("/api/me", async (req, res) => {
-    const userId = (req.session as any).userId;
-    if (!userId) {
+  // === AKTUALNY UŻYTKOWNIK (profil) – na bazie JWT z cookie ===
+app.get("/api/me", async (req, res) => {
+  try {
+    const anyReq = req as any;
+    const cookies = anyReq.cookies || {};
+    const token = cookies.auth_token;
+
+    if (!token) {
       return res.status(401).json({ error: "Nie zalogowano" });
     }
 
+    let payload: any;
     try {
-      const q = await pool.query(
-        `
-        SELECT id, email, name, role, created_at, last_login
-        FROM users
-        WHERE id = $1
-        `,
-        [userId]
-      );
-
-      if (q.rowCount === 0) {
-        return res.status(404).json({ error: "Użytkownik nie istnieje" });
-      }
-
-      const user = q.rows[0];
-      return res.json({ ok: true, user });
-    } catch (err) {
-      console.error("GET /api/me error:", err);
-      return res.status(500).json({ error: "Błąd serwera" });
+      payload = jwt.verify(token, process.env.JWT_SECRET || "sekret");
+    } catch (e) {
+      console.error("GET /api/me → nieprawidłowy token:", e);
+      return res.status(401).json({ error: "Nieprawidłowy token" });
     }
-  });
+
+    const user = payload || {};
+
+    return res.json({
+      ok: true,
+      user: {
+        id: user.id ?? null,
+        email: user.email ?? null,
+        name: user.name ?? null,
+        role: user.role ?? null,
+      },
+    });
+  } catch (err) {
+    console.error("GET /api/me error:", err);
+    return res.status(500).json({ error: "Błąd serwera" });
+  }
+});
 }
