@@ -6,19 +6,23 @@ import fs from "fs";
 import fsPromises from "fs/promises";
 import path from "path";
 import { requireAuth } from "../middleware/requireAuth";
-import jwt from "jsonwebtoken";
 
-const UPLOAD_DIR = path.join(__dirname, "..", "..", "uploads");
+// === ŚCIEŻKI UPLOADÓW ===
+const UPLOAD_ROOT = path.join(process.cwd(), "uploads");
+const CASES_UPLOAD_ROOT = path.join(UPLOAD_ROOT, "cases");
 
-// Upewniamy się, że katalog istnieje
-if (!fs.existsSync(UPLOAD_DIR)) {
-  fs.mkdirSync(UPLOAD_DIR, { recursive: true });
+// upewniamy się, że katalogi istnieją
+if (!fs.existsSync(CASES_UPLOAD_ROOT)) {
+  fs.mkdirSync(CASES_UPLOAD_ROOT, { recursive: true });
 }
 
-// Konfiguracja multer – zapis na dysk do UPLOAD_DIR
+// === KONFIGURACJA MULTERA – zapis do uploads/cases/<caseId>/ ===
 const storage = multer.diskStorage({
-  destination: (_req, _file, cb) => {
-    cb(null, UPLOAD_DIR);
+  destination: (req, _file, cb) => {
+    const caseId = req.params.id || req.body.caseId;
+    const dir = path.join(CASES_UPLOAD_ROOT, String(caseId ?? "unknown"));
+    fs.mkdirSync(dir, { recursive: true });
+    cb(null, dir);
   },
   filename: (_req, file, cb) => {
     const unique = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
@@ -29,54 +33,29 @@ const storage = multer.diskStorage({
 
 const upload = multer({ storage });
 
-export default function casesRoutes(app: Express) {
-  console.log("➡️ routes: cases + KPI loaded");
-  // === UPLOAD PLIKÓW DO SPRAW (konfiguracja) ===
-  const uploadRoot = path.join(process.cwd(), "uploads");
+// === HELPERY DO NORMALIZACJI ===
+const toNum = (v: any): number | undefined => {
+  if (v === undefined || v === null) return undefined;
+  const s = String(v).trim().replace(/\s/g, "").replace(",", ".");
+  if (s === "") return undefined;
+  const n = Number(s);
+  return Number.isFinite(n) ? n : undefined;
+};
 
-  const storage = multer.diskStorage({
-    destination: (req, file, cb) => {
-      const caseId = req.params.id || req.body.caseId;
-      const dir = path.join(uploadRoot, "cases", String(caseId ?? "unknown"));
-      fs.mkdirSync(dir, { recursive: true });
-      cb(null, dir);
-    },
-    filename: (_req, file, cb) => {
-      const unique = Date.now() + "-" + Math.round(Math.random() * 1e9);
-      const ext = path.extname(file.originalname || "");
-      cb(null, unique + ext);
-    },
-  });
+const toStr = (v: any): string | undefined => {
+  if (v === undefined || v === null) return undefined;
+  const s = String(v).trim();
+  return s === "" ? undefined : s;
+};
 
-  const upload = multer({ storage });
+const toISODate = (v: any): string | undefined => {
+  const s = toStr(v);
+  if (s === undefined) return undefined;
+  return /^\d{4}-\d{2}-\d{2}$/.test(s) ? s : undefined;
+};
 
-  // === HELPERY DO NORMALIZACJI DANYCH ===
-
-  const toNum = (v: any): number | undefined => {
-    if (v === undefined || v === null) return undefined;
-    const s = String(v).trim().replace(/\s/g, "").replace(",", ".");
-    if (s === "") return undefined;
-    const n = Number(s);
-    return Number.isFinite(n) ? n : undefined;
-  };
-
-  const toStr = (v: any): string | undefined => {
-    if (v === undefined || v === null) return undefined;
-    const s = String(v).trim();
-    return s === "" ? undefined : s;
-  };
-
-  const toISODate = (v: any): string | undefined => {
-    const s = toStr(v);
-    if (s === undefined) return undefined;
-    return /^\d{4}-\d{2}-\d{2}$/.test(s) ? s : undefined;
-  };
-
-  /**
-   * Wspólna funkcja częściowej aktualizacji pól w tabeli `cases`.
-   * Przyjmuje obiekt z polami, które chcesz zaktualizować.
-   */
-  async function updateCasePartial(id: number, payload: any) {
+// === WSPÓLNA CZĘŚCIOWA AKTUALIZACJA SPRAWY ===
+async function updateCasePartial(id: number, payload: any) {
   let {
     wps,
     status,
@@ -91,162 +70,162 @@ export default function casesRoutes(app: Express) {
     notes,
   } = payload || {};
 
+  const updates: string[] = [];
+  const values: any[] = [];
+  let i = 1;
 
-    const updates: string[] = [];
-    const values: any[] = [];
-    let i = 1;
-
-    const wpsVal = toNum(wps);
-    if (wpsVal !== undefined) {
-      updates.push(`wps = $${i++}`);
-      values.push(wpsVal);
-    }
-
-    const statusVal = toStr(status);
-    if (statusVal !== undefined) {
-      updates.push(`status = $${i++}`);
-      values.push(statusVal);
-    }
-
-    const amountVal = toNum(loan_amount);
-    if (amountVal !== undefined) {
-      updates.push(`loan_amount = $${i++}`);
-      values.push(amountVal);
-    }
-
-    const dateVal = toISODate(contract_date);
-    if (dateVal !== undefined) {
-      updates.push(`contract_date = $${i++}`);
-      values.push(dateVal);
-    }
-
-    const bankVal = toStr(bank);
-    if (bankVal !== undefined) {
-      updates.push(`bank = $${i++}`);
-      values.push(bankVal);
-    }
-
-    const clientVal = toStr(client);
-    if (clientVal !== undefined) {
-      updates.push(`client = $${i++}`);
-      values.push(clientVal);
-    }
-
-    const phoneVal = toStr(phone);
-    if (phoneVal !== undefined) {
-      updates.push(`phone = $${i++}`);
-      values.push(phoneVal);
-    }
-
-    const emailVal = toStr(email);
-    if (emailVal !== undefined) {
-      updates.push(`email = $${i++}`);
-      values.push(emailVal);
-    }
-
-    const addressVal = toStr(address);
-    if (addressVal !== undefined) {
-      updates.push(`address = $${i++}`);
-      values.push(addressVal);
-    }
-
-        const peselVal = toStr(pesel);
-    if (peselVal !== undefined) {
-      updates.push(`pesel = $${i++}`);
-      values.push(peselVal);
-    }
-
-    const notesVal = toStr(notes);
-    if (notesVal !== undefined) {
-      updates.push(`notes = $${i++}`);
-      values.push(notesVal);
-    }
-
-    if (updates.length === 0) {
-      return { ok: true, note: "no fields to update" };
-    }
-
-    // zawsze odświeżamy znacznik czasu
-    updates.push(`updated_at = NOW()`);
-
-
-    const sql = `UPDATE cases SET ${updates.join(", ")} WHERE id = $${i}`;
-    values.push(id);
-
-    await pool.query(sql, values);
-    return { ok: true };
+  const wpsVal = toNum(wps);
+  if (wpsVal !== undefined) {
+    updates.push(`wps = $${i++}`);
+    values.push(wpsVal);
   }
+
+  const statusVal = toStr(status);
+  if (statusVal !== undefined) {
+    updates.push(`status = $${i++}`);
+    values.push(statusVal);
+  }
+
+  const amountVal = toNum(loan_amount);
+  if (amountVal !== undefined) {
+    updates.push(`loan_amount = $${i++}`);
+    values.push(amountVal);
+  }
+
+  const dateVal = toISODate(contract_date);
+  if (dateVal !== undefined) {
+    updates.push(`contract_date = $${i++}`);
+    values.push(dateVal);
+  }
+
+  const bankVal = toStr(bank);
+  if (bankVal !== undefined) {
+    updates.push(`bank = $${i++}`);
+    values.push(bankVal);
+  }
+
+  const clientVal = toStr(client);
+  if (clientVal !== undefined) {
+    updates.push(`client = $${i++}`);
+    values.push(clientVal);
+  }
+
+  const phoneVal = toStr(phone);
+  if (phoneVal !== undefined) {
+    updates.push(`phone = $${i++}`);
+    values.push(phoneVal);
+  }
+
+  const emailVal = toStr(email);
+  if (emailVal !== undefined) {
+    updates.push(`email = $${i++}`);
+    values.push(emailVal);
+  }
+
+  const addressVal = toStr(address);
+  if (addressVal !== undefined) {
+    updates.push(`address = $${i++}`);
+    values.push(addressVal);
+  }
+
+  const peselVal = toStr(pesel);
+  if (peselVal !== undefined) {
+    updates.push(`pesel = $${i++}`);
+    values.push(peselVal);
+  }
+
+  const notesVal = toStr(notes);
+  if (notesVal !== undefined) {
+    updates.push(`notes = $${i++}`);
+    values.push(notesVal);
+  }
+
+  if (updates.length === 0) {
+    return { ok: true, note: "no fields to update" };
+  }
+
+  // zawsze odświeżamy znacznik czasu
+  updates.push(`updated_at = NOW()`);
+
+  const sql = `UPDATE cases SET ${updates.join(", ")} WHERE id = $${i}`;
+  values.push(id);
+
+  await pool.query(sql, values);
+  return { ok: true };
+}
+
+// === WERYFIKACJA WŁAŚCICIELA SPRAWY ===
+async function verifyCaseOwnership(caseId: number, user: any) {
+  const q = await pool.query(
+    "SELECT owner_id FROM cases WHERE id = $1",
+    [caseId]
+  );
+
+  if (q.rowCount === 0) return null;
+
+  const owner_id = q.rows[0].owner_id;
+
+  if (user.role === "admin") return true;
+
+  return owner_id === user.id;
+}
+
+export default function casesRoutes(app: Express) {
+  console.log("➡️ routes: cases + KPI loaded");
 
   // === LISTA SPRAW (dla dashboardu) ===
-app.get("/api/cases", requireAuth, async (req, res) => {
-  try {
-    let me = (req as any).user as any;
+  app.get("/api/cases", requireAuth, async (req, res) => {
+    try {
+      const user = (req as any).user;
 
-    // 🔐 Bezpiecznik: jeśli z jakiegoś powodu req.user jest puste,
-    // spróbujmy jeszcze raz odczytać usera z JWT z cookie.
-    if (!me) {
-      const anyReq = req as any;
-      const cookies = anyReq.cookies || {};
-      const token = cookies.auth_token;
-
-      if (!token) {
-        console.error("❌ /api/cases → brak tokena w cookies");
-        return res
-          .status(401)
-          .json({ error: "Brak dostępu – zaloguj się ponownie" });
+      if (!user) {
+        return res.status(401).json({ error: "Brak dostępu – zaloguj się" });
       }
 
-      try {
-        me = jwt.verify(token, process.env.JWT_SECRET || "sekret") as any;
-      } catch (e) {
-        console.error("❌ /api/cases → nieprawidłowy token:", e);
-        return res.status(401).json({ error: "Nieprawidłowy token" });
+      let q;
+
+      if (user.role === "admin") {
+        // ADMIN → wszystkie sprawy
+        q = await pool.query(`
+          SELECT
+            id,
+            client,
+            bank,
+            loan_amount,
+            COALESCE(wps_forecast, wps) AS wps,
+            status,
+            contract_date,
+            owner_id
+          FROM cases
+          ORDER BY id DESC
+        `);
+      } else {
+        // AGENT → tylko jego sprawy
+        q = await pool.query(
+          `
+          SELECT
+            id,
+            client,
+            bank,
+            loan_amount,
+            COALESCE(wps_forecast, wps) AS wps,
+            status,
+            contract_date,
+            owner_id
+          FROM cases
+          WHERE owner_id = $1
+          ORDER BY id DESC
+          `,
+          [user.id]
+        );
       }
+
+      return res.json(q.rows);
+    } catch (err) {
+      console.error("GET /api/cases error", err);
+      return res.status(500).json({ error: "Server error" });
     }
-
-    if (!me) {
-      console.error("❌ /api/cases → nadal brak usera po próbie dekodowania tokena");
-      return res
-        .status(401)
-        .json({ error: "Brak danych użytkownika – zaloguj się ponownie" });
-    }
-
-    const isAdmin = me.role === "admin";
-
-    console.log("📦 /api/cases → user:", me, "| isAdmin =", isAdmin);
-
-    let sql = `
-      SELECT
-        id,
-        client,
-        bank,
-        loan_amount,
-        COALESCE(wps_forecast, wps) AS wps,
-        status,
-        contract_date,
-        owner_id
-      FROM cases
-    `;
-    const params: any[] = [];
-
-    if (!isAdmin) {
-      sql += " WHERE owner_id = $1";
-      params.push(me.id);
-    }
-
-    sql += " ORDER BY id DESC";
-
-    console.log("SQL USED:", sql, "PARAMS:", params);
-
-    const q = await pool.query(sql, params);
-    console.log("ROWS COUNT:", q.rows.length);
-
-    return res.json(q.rows);
-  } catch (err) {
-    console.error("GET /api/cases error", err);
-    return res.status(500).json({ error: "Server error" });
-  }
-});
+  });
 
   // === KPI (opcjonalne) ===
   app.get("/api/kpi", requireAuth, async (_req, res) => {
@@ -283,96 +262,114 @@ app.get("/api/cases", requireAuth, async (req, res) => {
   });
 
   // === DODAWANIE NOWEJ SPRAWY ===
-app.post("/api/cases", requireAuth, async (req, res) => {
-  try {
-    const { client, loan_amount, status, bank } = req.body || {};
-    const me = (req as any).user;
+  app.post("/api/cases", requireAuth, async (req, res) => {
+    const user = (req as any).user;
 
-    if (!client || typeof loan_amount !== "number") {
-      return res
-        .status(400)
-        .json({ error: "client i loan_amount są wymagane" });
+    if (!user) {
+      return res.status(401).json({ error: "Brak dostępu – zaloguj się" });
     }
 
-    const normStatus = (status || "nowa").toString();
+    const { client, loan_amount, bank } = req.body || {};
 
-    const sql = `
-      INSERT INTO cases (client, loan_amount, status, bank, owner_id)
-      VALUES ($1, $2, $3, $4, $5)
-      RETURNING id, client, loan_amount, wps, status, contract_date, bank, owner_id
-    `;
-    const params = [client, loan_amount, normStatus, bank ?? null, me.id];
+    if (!client || loan_amount == null) {
+      return res.status(400).json({ error: "client i loan_amount są wymagane" });
+    }
 
-    const { rows } = await pool.query(sql, params);
-    return res.json(rows[0]);
-  } catch (e: any) {
-    console.error("POST /api/cases error:", e);
-    return res.status(500).json({
-      error: "DB error",
-      detail: e.message || String(e),
-    });
-  }
-});
+    const amountVal = toNum(loan_amount);
+    if (amountVal === undefined) {
+      return res.status(400).json({ error: "Nieprawidłowa kwota kredytu" });
+    }
+
+    try {
+      const sql = `
+        INSERT INTO cases (client, loan_amount, status, bank, owner_id)
+        VALUES ($1, $2, 'nowa', $3, $4)
+        RETURNING id, client, loan_amount, wps, status, contract_date, bank, owner_id
+      `;
+      const params = [client, amountVal, bank ?? null, user.id];
+
+      const { rows } = await pool.query(sql, params);
+      return res.json(rows[0]);
+    } catch (e: any) {
+      console.error("POST /api/cases error:", e);
+      return res.status(500).json({
+        error: "DB error",
+        detail: e.message || String(e),
+      });
+    }
+  });
 
   // === SZCZEGÓŁY JEDNEJ SPRAWY (dla case.html) ===
-app.get("/api/cases/:id", requireAuth, async (req, res) => {
-  const rawId = req.params.id;
-  const id = Number(rawId);
+  app.get("/api/cases/:id", requireAuth, async (req, res) => {
+    const user = (req as any).user;
+    const rawId = req.params.id;
+    const id = Number(rawId);
 
-  if (!Number.isFinite(id)) {
-    return res.status(400).json({ error: "Invalid case id" });
-  }
-
-  try {
-    const me = (req as any).user;
-
-    const result = await pool.query(
-      `
-      SELECT
-        id,
-        client        AS client,
-        bank          AS bank,
-        loan_amount   AS loan_amount,
-        status        AS status,
-        contract_date AS contract_date,
-        phone,
-        email,
-        address,
-        pesel,
-        wps_forecast,
-        wps_final,
-        client_benefit,
-        owner_id
-      FROM cases
-      WHERE id = $1
-      `,
-      [id]
-    );
-
-    if (result.rows.length === 0) {
-      return res.status(404).json({ error: "Case not found" });
+    if (!Number.isFinite(id)) {
+      return res.status(400).json({ error: "Invalid case id" });
     }
 
-    const row = result.rows[0];
-
-    if (me.role !== "admin" && row.owner_id !== me.id) {
+    const allowed = await verifyCaseOwnership(id, user);
+    if (allowed === null) {
+      return res.status(404).json({ error: "Case not found" });
+    }
+    if (!allowed) {
       return res.status(403).json({ error: "Brak dostępu do tej sprawy" });
     }
 
-    return res.json(row);
-  } catch (err) {
-    console.error("GET /api/cases/:id error", err);
-    return res.status(500).json({ error: "Internal Server Error" });
-  }
-});
+    try {
+      const result = await pool.query(
+        `
+        SELECT
+          id,
+          client        AS client,
+          bank          AS bank,
+          loan_amount   AS loan_amount,
+          status        AS status,
+          contract_date AS contract_date,
+          phone,
+          email,
+          address,
+          pesel,
+          wps_forecast,
+          wps_final,
+          client_benefit,
+          notes,
+          owner_id,
+          updated_at
+        FROM cases
+        WHERE id = $1
+        `,
+        [id]
+      );
 
-  // === OGÓLNA CZĘŚCIOWA AKTUALIZACJA SPRAWY (legacy / multi-update) ===
+      if (result.rows.length === 0) {
+        return res.status(404).json({ error: "Case not found" });
+      }
+
+      return res.json(result.rows[0]);
+    } catch (err) {
+      console.error("GET /api/cases/:id error", err);
+      return res.status(500).json({ error: "Internal Server Error" });
+    }
+  });
+
+  // === OGÓLNA CZĘŚCIOWA AKTUALIZACJA SPRAWY ===
   app.patch("/api/cases/:id", requireAuth, async (req, res) => {
+    const user = (req as any).user;
     const idRaw = req.params.id;
     const id = Number(idRaw);
 
     if (!Number.isFinite(id)) {
       return res.status(400).json({ error: "Nieprawidłowe ID sprawy" });
+    }
+
+    const allowed = await verifyCaseOwnership(id, user);
+    if (allowed === null) {
+      return res.status(404).json({ error: "Sprawa nie istnieje" });
+    }
+    if (!allowed) {
+      return res.status(403).json({ error: "Brak dostępu do tej sprawy" });
     }
 
     try {
@@ -384,15 +381,22 @@ app.get("/api/cases/:id", requireAuth, async (req, res) => {
     }
   });
 
-  // === NOWE, CZYTELNE ENDPOINTY SEKCYJNE (pod caseDetails 2.0) ===
-
-  // Dane klienta: imię, telefon, email, adres, pesel
+  // === DANE KLIENTA ===
   app.put("/api/cases/:id/client", requireAuth, async (req, res) => {
+    const user = (req as any).user;
     const idRaw = req.params.id;
     const id = Number(idRaw);
 
     if (!Number.isFinite(id)) {
       return res.status(400).json({ error: "Nieprawidłowe ID sprawy" });
+    }
+
+    const allowed = await verifyCaseOwnership(id, user);
+    if (allowed === null) {
+      return res.status(404).json({ error: "Sprawa nie istnieje" });
+    }
+    if (!allowed) {
+      return res.status(403).json({ error: "Brak dostępu do tej sprawy" });
     }
 
     const { client, phone, email, address, pesel } = req.body || {};
@@ -412,13 +416,22 @@ app.get("/api/cases/:id", requireAuth, async (req, res) => {
     }
   });
 
-  // Dane kredytu: kwota, data uruchomienia, bank, status
+  // === DANE KREDYTU ===
   app.put("/api/cases/:id/credit", requireAuth, async (req, res) => {
+    const user = (req as any).user;
     const idRaw = req.params.id;
     const id = Number(idRaw);
 
     if (!Number.isFinite(id)) {
       return res.status(400).json({ error: "Nieprawidłowe ID sprawy" });
+    }
+
+    const allowed = await verifyCaseOwnership(id, user);
+    if (allowed === null) {
+      return res.status(404).json({ error: "Sprawa nie istnieje" });
+    }
+    if (!allowed) {
+      return res.status(403).json({ error: "Brak dostępu do tej sprawy" });
     }
 
     const { loan_amount, contract_date, bank, status } = req.body || {};
@@ -437,9 +450,23 @@ app.get("/api/cases/:id", requireAuth, async (req, res) => {
     }
   });
 
-  // === ODCZYT OFERTY SKD (GET /api/cases/:id/skd-offer) ===
+  // === ODCZYT OFERTY SKD ===
   app.get("/api/cases/:id/skd-offer", requireAuth, async (req, res) => {
-    const { id } = req.params;
+    const user = (req as any).user;
+    const idRaw = req.params.id;
+    const id = Number(idRaw);
+
+    if (!Number.isFinite(id)) {
+      return res.status(400).json({ error: "Nieprawidłowe ID sprawy" });
+    }
+
+    const allowed = await verifyCaseOwnership(id, user);
+    if (allowed === null) {
+      return res.status(404).json({ error: "Case not found" });
+    }
+    if (!allowed) {
+      return res.status(403).json({ error: "Brak dostępu do tej sprawy" });
+    }
 
     try {
       const result = await pool.query(
@@ -483,15 +510,26 @@ app.get("/api/cases/:id", requireAuth, async (req, res) => {
     }
   });
 
-  // === ZAPIS WPS BASIC (PATCH /api/cases/:id/wps-basic) ===
+  // === ZAPIS WPS BASIC ===
   app.patch("/api/cases/:id/wps-basic", requireAuth, async (req, res) => {
-    try {
-      const caseId = Number(req.params.id);
-      const { wps_basic } = req.body || {};
+    const user = (req as any).user;
+    const idRaw = req.params.id;
+    const caseId = Number(idRaw);
 
-      if (!Number.isFinite(caseId)) {
-        return res.status(400).json({ error: "Nieprawidłowe ID sprawy." });
-      }
+    if (!Number.isFinite(caseId)) {
+      return res.status(400).json({ error: "Nieprawidłowe ID sprawy." });
+    }
+
+    const allowed = await verifyCaseOwnership(caseId, user);
+    if (allowed === null) {
+      return res.status(404).json({ error: "Nie znaleziono sprawy." });
+    }
+    if (!allowed) {
+      return res.status(403).json({ error: "Brak dostępu do tej sprawy" });
+    }
+
+    try {
+      const { wps_basic } = req.body || {};
 
       const wpsNumber = Number(wps_basic);
       if (!Number.isFinite(wpsNumber)) {
@@ -524,14 +562,25 @@ app.get("/api/cases/:id", requireAuth, async (req, res) => {
     }
   });
 
-  // === AKTUALIZACJA OFERTY SKD (PUT /api/cases/:id/skd-offer) ===
+  // === AKTUALIZACJA OFERTY SKD ===
   app.put("/api/cases/:id/skd-offer", requireAuth, async (req, res) => {
-    try {
-      const caseId = Number(req.params.id);
-      if (!Number.isFinite(caseId)) {
-        return res.status(400).json({ error: "Nieprawidłowe ID sprawy." });
-      }
+    const user = (req as any).user;
+    const idRaw = req.params.id;
+    const caseId = Number(idRaw);
 
+    if (!Number.isFinite(caseId)) {
+      return res.status(400).json({ error: "Nieprawidłowe ID sprawy." });
+    }
+
+    const allowed = await verifyCaseOwnership(caseId, user);
+    if (allowed === null) {
+      return res.status(404).json({ error: "Nie znaleziono sprawy." });
+    }
+    if (!allowed) {
+      return res.status(403).json({ error: "Brak dostępu do tej sprawy" });
+    }
+
+    try {
       const { wps_forecast, offer_skd } = req.body || {};
 
       console.log("SKD PUT body:", { caseId, wps_forecast, offer_skd });
@@ -567,56 +616,69 @@ app.get("/api/cases/:id", requireAuth, async (req, res) => {
   });
 
   // === DOKUMENTY SPRAWY: POBRANIE PLIKU ===
-app.get("/api/files/:fileId", requireAuth, async (req, res) => {
-  const rawId = req.params.fileId;
-  const fileId = Number(rawId);
+  app.get("/api/files/:fileId", requireAuth, async (req, res) => {
+    const user = (req as any).user;
+    const rawId = req.params.fileId;
+    const fileId = Number(rawId);
 
-  if (!Number.isFinite(fileId)) {
-    return res.status(400).json({ error: "Nieprawidłowe ID pliku" });
-  }
-
-  try {
-    const q = await pool.query(
-      "SELECT case_id, original_name, stored_name, mime_type FROM case_files WHERE id = $1",
-      [fileId]
-    );
-
-    if (q.rowCount === 0) {
-      return res.status(404).json({ error: "Plik nie istnieje" });
+    if (!Number.isFinite(fileId)) {
+      return res.status(400).json({ error: "Nieprawidłowe ID pliku" });
     }
 
-    const row = q.rows[0];
+    try {
+      const q = await pool.query(
+        "SELECT case_id, original_name, stored_name, mime_type FROM case_files WHERE id = $1",
+        [fileId]
+      );
 
-    // dopasowane do realnej struktury: uploads/cases/<case_id>/<stored_name>
-    const filePath = path.join(
-      process.cwd(),
-      "uploads",
-      "cases",
-      String(row.case_id),
-      row.stored_name
-    );
+      if (q.rowCount === 0) {
+        return res.status(404).json({ error: "Plik nie istnieje" });
+      }
 
-    res.setHeader("Content-Type", row.mime_type || "application/octet-stream");
-    res.setHeader(
-      "Content-Disposition",
-      `attachment; filename="${encodeURIComponent(row.original_name)}"`
-    );
+      const row = q.rows[0];
 
-    return res.sendFile(filePath);
-  } catch (err) {
-    console.error("GET /api/files/:fileId error:", err);
-    return res
-      .status(500)
-      .json({ error: "Błąd serwera przy pobieraniu pliku" });
-  }
-});
+      const allowed = await verifyCaseOwnership(row.case_id, user);
+      if (!allowed) {
+        return res.status(403).json({ error: "Brak dostępu do tej sprawy" });
+      }
+
+      const filePath = path.join(
+        CASES_UPLOAD_ROOT,
+        String(row.case_id),
+        row.stored_name
+      );
+
+      res.setHeader("Content-Type", row.mime_type || "application/octet-stream");
+      res.setHeader(
+        "Content-Disposition",
+        `attachment; filename="${encodeURIComponent(row.original_name)}"`
+      );
+
+      return res.sendFile(filePath);
+    } catch (err) {
+      console.error("GET /api/files/:fileId error:", err);
+      return res
+        .status(500)
+        .json({ error: "Błąd serwera przy pobieraniu pliku" });
+    }
+  });
+
   // === DOKUMENTY SPRAWY: LISTA PLIKÓW ===
   app.get("/api/cases/:id/files", requireAuth, async (req, res) => {
+    const user = (req as any).user;
     const idRaw = req.params.id;
     const id = Number(idRaw);
 
     if (!Number.isFinite(id)) {
       return res.status(400).json({ error: "Nieprawidłowe ID sprawy" });
+    }
+
+    const allowed = await verifyCaseOwnership(id, user);
+    if (allowed === null) {
+      return res.status(404).json({ error: "Sprawa nie istnieje" });
+    }
+    if (!allowed) {
+      return res.status(403).json({ error: "Brak dostępu do tej sprawy" });
     }
 
     try {
@@ -637,127 +699,157 @@ app.get("/api/files/:fileId", requireAuth, async (req, res) => {
         [id]
       );
 
-      return res.json(result.rows);
+      return res.json({ files: result.rows });
     } catch (err) {
       console.error("GET /api/cases/:id/files error", err);
       return res.status(500).json({ error: "Błąd serwera przy pobieraniu plików" });
     }
   });
-  
-// === USUWANIE PLIKU PO ID ===
-app.delete("/api/files/:fileId", requireAuth, async (req, res) => {
-  const rawId = req.params.fileId;
-  const fileId = Number(rawId);
 
-  if (!Number.isFinite(fileId)) {
-    return res.status(400).json({ error: "Nieprawidłowe ID pliku" });
-  }
+  // === USUWANIE PLIKU PO ID ===
+  app.delete("/api/files/:fileId", requireAuth, async (req, res) => {
+    const user = (req as any).user;
+    const rawId = req.params.fileId;
+    const fileId = Number(rawId);
 
-  try {
-    // 1) pobierz info o pliku
-    const q = await pool.query(
-      "SELECT stored_name FROM case_files WHERE id = $1",
-      [fileId]
-    );
-
-    if (q.rowCount === 0) {
-      return res.status(404).json({ error: "Plik nie istnieje" });
+    if (!Number.isFinite(fileId)) {
+      return res.status(400).json({ error: "Nieprawidłowe ID pliku" });
     }
 
-    const storedName = q.rows[0].stored_name;
-    const filePath = path.join(UPLOAD_DIR, storedName);
-
-    // 2) usuń fizyczny plik
     try {
-      await fsPromises.unlink(filePath);
-    } catch (err: any) {
-      if (err.code !== "ENOENT") {
-        console.error("Błąd usuwania pliku z dysku:", err);
+      const q = await pool.query(
+        "SELECT case_id, stored_name FROM case_files WHERE id = $1",
+        [fileId]
+      );
+
+      if (q.rowCount === 0) {
+        return res.status(404).json({ error: "Plik nie istnieje" });
+      }
+
+      const row = q.rows[0];
+
+      const allowed = await verifyCaseOwnership(row.case_id, user);
+      if (!allowed) {
+        return res.status(403).json({ error: "Brak dostępu do tej sprawy" });
+      }
+
+      const filePath = path.join(
+        CASES_UPLOAD_ROOT,
+        String(row.case_id),
+        row.stored_name
+      );
+
+      try {
+        await fsPromises.unlink(filePath);
+      } catch (err: any) {
+        if (err.code !== "ENOENT") {
+          console.error("Błąd usuwania pliku z dysku:", err);
+        }
+      }
+
+      await pool.query("DELETE FROM case_files WHERE id = $1", [fileId]);
+
+      console.log("🗑️ Usunięto plik id =", fileId);
+      return res.json({ ok: true });
+    } catch (err) {
+      console.error("DELETE /api/files/:fileId error:", err);
+      return res
+        .status(500)
+        .json({ error: "Błąd serwera przy usuwaniu pliku" });
+    }
+  });
+
+  // === UPLOAD PLIKÓW DO SPRAWY ===
+  app.post(
+    "/api/cases/:id/files",
+    requireAuth,
+    upload.array("files"),
+    async (req, res) => {
+      const user = (req as any).user;
+      const idRaw = req.params.id;
+      const caseId = Number(idRaw);
+
+      if (!Number.isFinite(caseId)) {
+        return res.status(400).json({ error: "Nieprawidłowe ID sprawy" });
+      }
+
+      const allowed = await verifyCaseOwnership(caseId, user);
+      if (allowed === null) {
+        return res.status(404).json({ error: "Sprawa nie istnieje" });
+      }
+      if (!allowed) {
+        return res.status(403).json({ error: "Brak dostępu do tej sprawy" });
+      }
+
+      const files = (req.files as Express.Multer.File[]) || [];
+
+      if (!files.length) {
+        return res.status(400).json({ error: "Brak plików do dodania" });
+      }
+
+      try {
+        const values: any[] = [];
+        const placeholders: string[] = [];
+
+        files.forEach((f, index) => {
+          const baseIndex = index * 5;
+          placeholders.push(
+            `($${baseIndex + 1}, $${baseIndex + 2}, $${baseIndex + 3}, $${baseIndex + 4}, $${baseIndex + 5})`
+          );
+          values.push(
+            caseId,
+            f.originalname,
+            f.filename,
+            f.mimetype,
+            f.size
+          );
+        });
+
+        const sql = `
+          INSERT INTO case_files (case_id, original_name, stored_name, mime_type, size)
+          VALUES ${placeholders.join(", ")}
+          RETURNING id, case_id, original_name, stored_name, mime_type, size, uploaded_at
+        `;
+
+        const result = await pool.query(sql, values);
+
+        console.log(
+          "📎 Dodano pliki do sprawy",
+          caseId,
+          "->",
+          result.rowCount,
+          "plików"
+        );
+
+        return res.json({
+          ok: true,
+          files: result.rows,
+        });
+      } catch (err) {
+        console.error("Błąd przy POST /api/cases/:id/files:", err);
+        return res
+          .status(500)
+          .json({ error: "Błąd serwera przy zapisie plików" });
       }
     }
-
-    // 3) usuń rekord z bazy
-    await pool.query("DELETE FROM case_files WHERE id = $1", [fileId]);
-
-    console.log("🗑️ Usunięto plik id =", fileId);
-    return res.json({ ok: true });
-  } catch (err) {
-    console.error("DELETE /api/files/:fileId error:", err);
-    return res
-      .status(500)
-      .json({ error: "Błąd serwera przy usuwaniu pliku" });
-  }
-});
- // === UPLOAD PLIKÓW DO SPRAWY ===
-app.post("/api/cases/:id/files", requireAuth, upload.array("files"), async (req, res) => {
-  const rawId = req.params.id;
-  const caseId = Number(rawId);
-
-  if (!Number.isFinite(caseId)) {
-    return res.status(400).json({ error: "Nieprawidłowe ID sprawy" });
-  }
-
-  const files = (req.files as Express.Multer.File[]) || [];
-
-  if (!files.length) {
-    return res.status(400).json({ error: "Brak plików do dodania" });
-  }
-
-  try {
-    const values: any[] = [];
-    const placeholders: string[] = [];
-
-    files.forEach((f, index) => {
-      // (case_id, original_name, stored_name, mime_type, size)
-      const baseIndex = index * 5;
-      placeholders.push(
-        `($${baseIndex + 1}, $${baseIndex + 2}, $${baseIndex + 3}, $${baseIndex + 4}, $${baseIndex + 5})`
-      );
-      values.push(
-        caseId,
-        f.originalname,
-        f.filename,
-        f.mimetype,
-        f.size
-      );
-    });
-
-    const sql = `
-      INSERT INTO case_files (case_id, original_name, stored_name, mime_type, size)
-      VALUES ${placeholders.join(", ")}
-      RETURNING id, case_id, original_name, stored_name, mime_type, size, uploaded_at
-    `;
-
-    const result = await pool.query(sql, values);
-
-    console.log(
-      "📎 Dodano pliki do sprawy",
-      caseId,
-      "->",
-      result.rowCount,
-      "plików"
-    );
-
-    return res.json({
-      ok: true,
-      files: result.rows,
-    });
-  } catch (err) {
-    console.error("Błąd przy POST /api/cases/:id/files:", err);
-    return res
-      .status(500)
-      .json({ error: "Błąd serwera przy zapisie plików" });
-  }
-});
-  
+  );
 
   // === USUWANIE SPRAWY (DELETE) ===
   app.delete("/api/cases/:id", requireAuth, async (req, res) => {
+    const user = (req as any).user;
     const idRaw = req.params.id;
     const id = Number(idRaw);
 
     if (!Number.isFinite(id)) {
       return res.status(400).json({ error: "Nieprawidłowe ID sprawy" });
+    }
+
+    const allowed = await verifyCaseOwnership(id, user);
+    if (allowed === null) {
+      return res.status(404).json({ error: "Sprawa nie istnieje" });
+    }
+    if (!allowed) {
+      return res.status(403).json({ error: "Brak dostępu do tej sprawy" });
     }
 
     try {

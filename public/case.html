@@ -1015,6 +1015,12 @@
         const res = await fetch(
           `${API_BASE}/cases/${encodeURIComponent(caseId)}`
         );
+        if (res.status === 403) {
+          alert("⛔ Nie masz dostępu do tej sprawy");
+          window.location.href = "dashboard.html";
+          return;
+        }
+
         if (!res.ok) {
           throw new Error(`Błąd pobierania danych sprawy: ${res.status}`);
         }

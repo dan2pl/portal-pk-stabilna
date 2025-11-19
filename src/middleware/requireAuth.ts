@@ -1,6 +1,7 @@
 // src/middleware/requireAuth.ts
 import { Request, Response, NextFunction } from "express";
 import jwt from "jsonwebtoken";
+import pool from "../db";
 
 type AnyReq = Request & {
   cookies?: Record<string, string>;
@@ -82,4 +83,44 @@ export function requireAdmin(
 
     return next();
   });
+  
+}
+export function requireOwnerOrAdmin() {
+  return async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const user = (req as any).user;
+      const caseId = Number(req.params.id);
+
+      if (!user) {
+        return res.status(401).json({ error: "Brak dostępu" });
+      }
+
+      if (user.role === "admin") {
+        return next(); // admin może wszystko
+      }
+
+      if (!Number.isFinite(caseId)) {
+        return res.status(400).json({ error: "Nieprawidłowe ID sprawy" });
+      }
+
+      const q = await pool.query(
+        "SELECT owner_id FROM cases WHERE id = $1",
+        [caseId]
+      );
+
+      if (q.rowCount === 0) {
+        return res.status(404).json({ error: "Sprawa nie istnieje" });
+      }
+
+      const ownerId = q.rows[0].owner_id;
+      if (ownerId !== user.id) {
+        return res.status(403).json({ error: "Brak dostępu do tej sprawy" });
+      }
+
+      return next();
+    } catch (err) {
+      console.error("Auth error:", err);
+      return res.status(500).json({ error: "Błąd autoryzacji" });
+    }
+  };
 }
