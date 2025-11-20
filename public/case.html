@@ -309,6 +309,14 @@
         <div class="case-actions">
           <button class="btn btn-outline" id="btnBack">Powrót</button>
           <button class="btn btn-primary" id="btnSaveAll">Zapisz zmiany</button>
+          <button
+            id="deleteCaseBtn"
+            class="btn btn-danger"
+            type="button"
+            style="margin-left: 8px"
+          >
+            Usuń sprawę
+          </button>
         </div>
       </section>
 
@@ -667,6 +675,16 @@
                           dokumenty
                         </div>
                         <input type="file" id="caseAddFiles" multiple hidden />
+                        <p class="upload-hint">
+                          Możesz dodać maks. 10 plików, każdy do 20 MB.<br />
+                          Dozwolone formaty: PDF, JPG, PNG, DOC, XLS, TXT.<br />
+                          W razie dużych plików użyj kompresji PDF:
+                          <a
+                            href="https://www.ilovepdf.com/compress_pdf"
+                            target="_blank"
+                            >iLovePDF</a
+                          >
+                        </p>
                       </div>
 
                       <!-- Lista dokumentów -->
@@ -1452,6 +1470,108 @@
 
       // Start
       loadCaseDetails();
+    </script>
+    <script>
+      function getCaseIdFromUrl() {
+        const params = new URLSearchParams(window.location.search);
+        const id = params.get("id");
+        return id ? Number(id) : null;
+      }
+      document.addEventListener("DOMContentLoaded", () => {
+        const backBtn = document.getElementById("btnBack");
+        const saveBtn = document.getElementById("btnSaveAll");
+        const deleteBtn = document.getElementById("deleteCaseBtn");
+
+        console.log("[caseWire] init", { backBtn, saveBtn, deleteBtn });
+
+        // ===== POWRÓT =====
+        if (backBtn) {
+          backBtn.addEventListener("click", () => {
+            console.log("[caseWire] back clicked");
+            window.location.href = "/dashboard.html";
+          });
+        }
+
+        // ===== ZAPISZ ZMIANY =====
+        if (saveBtn) {
+          saveBtn.addEventListener("click", async () => {
+            console.log("[caseWire] save clicked");
+            alert(
+              "Tu podpinamy zapis danych case (PATCH /api/cases/:id) — zrobimy to w następnym kroku."
+            );
+          });
+        }
+
+        // ===== USUŃ SPRAWĘ =====
+        if (deleteBtn) {
+          deleteBtn.addEventListener("click", async () => {
+            console.log("[caseWire] delete clicked");
+
+            // 1) ID z URL (?id=40)
+            let caseId = getCaseIdFromUrl();
+            console.log("[caseWire] ID from URL =", caseId);
+
+            // 2) hidden input (fallback)
+            if (!caseId) {
+              const hiddenId = document.getElementById("wpsCaseId");
+              if (hiddenId && hiddenId.value) {
+                const parsed = Number(hiddenId.value);
+                if (Number.isFinite(parsed)) caseId = parsed;
+              }
+            }
+
+            // 3) window.currentCaseId (fallback)
+            if (!caseId && window.currentCaseId) {
+              const parsed = Number(window.currentCaseId);
+              if (Number.isFinite(parsed)) caseId = parsed;
+            }
+
+            // 4) ID z pathname (fallback)
+            if (!caseId) {
+              const matches = window.location.pathname.match(/\d+/g);
+              if (matches && matches.length > 0) {
+                const last = Number(matches[matches.length - 1]);
+                if (Number.isFinite(last)) caseId = last;
+              }
+            }
+
+            console.log("[caseWire] FINAL caseId =", caseId);
+
+            if (!caseId) {
+              alert("Brak ID sprawy – nie mogę usunąć.");
+              return;
+            }
+
+            if (!confirm("Czy na pewno chcesz usunąć tę sprawę?")) return;
+            if (!confirm("Ta operacja jest nieodwracalna. Usunąć?")) return;
+
+            const phrase = prompt("Aby potwierdzić, wpisz słowo: USUŃ");
+            if (!phrase || phrase.trim().toUpperCase() !== "USUŃ") {
+              alert("Nie potwierdziłeś usunięcia.");
+              return;
+            }
+
+            try {
+              const res = await fetch(`/api/cases/${caseId}`, {
+                method: "DELETE",
+                headers: { "Content-Type": "application/json" },
+              });
+
+              if (!res.ok) {
+                console.error("Błąd DELETE:", res.status);
+                alert("Błąd podczas usuwania sprawy.");
+                return;
+              }
+
+              alert("Sprawa została trwale usunięta.");
+              window.location.href = "/dashboard.html";
+            } catch (err) {
+              console.error("Błąd DELETE:", err);
+              alert("Nie udało się usunąć sprawy.");
+            }
+          });
+        }
+      });
     </script>
   </body>
 </html>

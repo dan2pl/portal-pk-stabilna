@@ -643,30 +643,63 @@ async function loadCases(filterStatus = '') {
     return;
   }
 
-  // Render wierszy – z twardą ochroną na błędy
-  try {
-    const rowsHtml = items.map(c => {
-      const clientStr = c.client ?? '—';
-      const bankStr   = c.bank ? String(c.bank) : '—';
-      const amountStr = (c.loan_amount ?? c.amount ?? null) != null ? fmtPL(c.loan_amount ?? c.amount) : '—';
-      const wpsStr    = (c.wps ?? '') !== '' ? fmtPL(c.wps) : '—';
-      const statusStr = String(c.status || '—');
+// Render wierszy – z twardą ochroną na błędy
+try {
+  const rowsHtml = items.map(c => {
+    const clientStr = c.client ?? '—';
+    const bankStr   = c.bank ? String(c.bank) : '—';
+    const amountStr = (c.loan_amount ?? c.amount ?? null) != null ? fmtPL(c.loan_amount ?? c.amount) : '—';
+    const wpsStr    = (c.wps ?? '') !== '' ? fmtPL(c.wps) : '—';
+    const statusStr = String(c.status || '—');
 
-      return `
-<tr data-id="${c.id ?? ''}">
+    const caseNoStr = c.case_number ? String(c.case_number) : '';
+
+    // 🔍 zbierz wszystkie pola, których NAZWA zawiera phone/tel/email
+    const contactBlob = Object.entries(c || {})
+      .filter(([key]) => /phone|tel|email/i.test(key))
+      .map(([, val]) => (val == null ? '' : String(val)))
+      .join(' ');
+
+    // prosty escape cudzysłowów, żeby nie rozwalić HTML-a
+    const esc = (s) => String(s).replace(/"/g, '&quot;');
+
+    // lokalna normalizacja – to samo co w szukajce (małe litery + bez „dziwnych” znaków)
+    const norm = (s) =>
+      (s || "")
+        .toString()
+        .toLowerCase()
+        .normalize("NFKD")
+        .replace(/[^\w\s.-]+/g, "");
+
+    // 🔍 pełny „blob” do wyszukiwania:
+    // klient, bank, kwoty, status, KONTAKT (tel/mail), nr sprawy
+    const searchBlob = norm([
+      clientStr,
+      bankStr,
+      amountStr,
+      wpsStr,
+      statusStr,
+      contactBlob,
+      caseNoStr
+    ].join(" "));
+
+    return `
+<tr data-id="${c.id ?? ''}" data-search="${esc(searchBlob)}">
   <td>${clientStr}</td>
   <td>${bankStr}</td>
   <td>${amountStr}</td>
   <td>${wpsStr}</td>
   <td>${statusStr}</td>
 </tr>`;
-    }).join('');
+  }).join('');
 
-    tBody.innerHTML = rowsHtml;
-  } catch (e) {
-    console.error('Row render fail:', e);
-    tBody.innerHTML = `<tr><td colspan="5">Błąd renderowania tabeli: ${e.message}</td></tr>`;
-  }
+  tBody.innerHTML = rowsHtml;
+} catch (e) {
+  console.error('Row render fail:', e);
+  tBody.innerHTML = `<tr><td colspan="5">Błąd renderowania tabeli: ${e.message}</td></tr>`;
+}
+
+
 
   console.log('loadCases() done');
 }
@@ -907,6 +940,11 @@ if (tbodyEl) {
           wpsCaseIdInput.value = String(numericId);
           console.log("WPS: ustawiam #wpsCaseId.value =", wpsCaseIdInput.value);
         }
+              // 🔥 Wczytaj zapisane dane WPS dla tej sprawy (jeśli są)
+      if (window.PK_WPS && typeof window.PK_WPS.reloadForCurrentCase === "function") {
+        window.PK_WPS.reloadForCurrentCase();
+      }
+
       } else {
         console.warn("WPS: nie udało się ustawić ID sprawy – data.id/caseId nie jest liczbą:", data.id, caseId);
       }
@@ -1730,11 +1768,14 @@ document.addEventListener('DOMContentLoaded', async () => {
 
       let shown = 0;
       rows.forEach(tr => {
-        const txt = normalize(tr.textContent || "");
-        const hit = txt.includes(nq);
-        tr.style.display = hit ? "" : "none";
-        if (hit) shown++;
-      });
+  const blob = tr.dataset.search || "";
+  const hit = blob.includes(nq);  // ← porównujemy gotowe data-search
+  tr.style.display = hit ? "" : "none";
+  if (hit) shown++;
+});
+
+
+
       updateCount(shown, q);
 
           if (shown === 1 && typeof openCaseModal === "function") {
@@ -2519,38 +2560,111 @@ let lastWpsBasic = null;
   const paidInput = document.getElementById("wpsInstallmentsPaid");
   const installmentRealInput = document.getElementById("wpsInstallmentReal");
   const resultEl = document.getElementById("wpsResultValue");
+  const interestInput = document.getElementById("wpsInterestInput");
 
-  const parseNumber = (el) => {
+  // 🔹 ID sprawy – z pola, window.caseData albo URL
+  function resolveCaseId() {
+    let caseId = null;
+
+    const caseIdInput = document.getElementById("wpsCaseId");
+    if (caseIdInput && caseIdInput.value) {
+      const parsed = Number(caseIdInput.value);
+      if (Number.isFinite(parsed)) caseId = parsed;
+    }
+
+    if (!caseId && window.caseData && window.caseData.id) {
+      const parsed = Number(window.caseData.id);
+      if (Number.isFinite(parsed)) caseId = parsed;
+    }
+
+    if (!caseId) {
+      const path = window.location.pathname;
+      const matches = path.match(/\d+/g);
+      if (matches && matches.length > 0) {
+        const last = Number(matches[matches.length - 1]);
+        if (Number.isFinite(last)) caseId = last;
+      }
+    }
+
+    return caseId;
+  }
+
+  function parseNumber(el) {
     if (!el) return null;
     const raw = (el.value || "").toString().replace(",", ".").trim();
     if (!raw) return null;
     const n = Number(raw);
     return Number.isFinite(n) ? n : null;
-  };
-const interestInput = document.getElementById("wpsInterestInput");
+  }
 
-if (interestInput && installmentRealInput) {
-  interestInput.addEventListener("input", () => {
-    const interest = parseNumber(interestInput);
-    const total = parseNumber(loanTotalInput);
-    const term  = parseNumber(termInput);
+  // 🔹 Odczyt parametrów kredytu z localStorage (per sprawa)
+  function loadWpsInputsFromStorage() {
+    const caseId = resolveCaseId();
+    if (!caseId) return;
 
-    if (!interest || !total || !term) return;
+    const raw = localStorage.getItem(`wps_basic_inputs:${caseId}`);
+    if (!raw) return;
 
-    // oprocentowanie nominalne w skali roku → miesięczne
-    const r = (interest / 100) / 12;
-
-    // rata annuitetowa
-    const monthly =
-      total * (r / (1 - Math.pow(1 + r, -term)));
-
-    if (Number.isFinite(monthly)) {
-      installmentRealInput.value = monthly.toFixed(2);
+    try {
+      const data = JSON.parse(raw);
+      if (loanNetInput && data.loan_amount_net != null) loanNetInput.value = data.loan_amount_net;
+      if (loanTotalInput && data.loan_amount_total != null) loanTotalInput.value = data.loan_amount_total;
+      if (termInput && data.loan_term_months != null) termInput.value = data.loan_term_months;
+      if (paidInput && data.installments_paid != null) paidInput.value = data.installments_paid;
+      if (installmentRealInput && data.installment_amount_real != null) installmentRealInput.value = data.installment_amount_real;
+      if (interestInput && data.interest_nominal != null) interestInput.value = data.interest_nominal;
+    } catch (e) {
+      console.warn("WPS: nie udało się odczytać localStorage:", e);
     }
-  });
-}
-  // 1) PRZELICZ WPS
-    btnCalc.addEventListener("click", () => {
+  }
+
+  // 🔹 Zapis parametrów kredytu do localStorage (per sprawa)
+  function saveWpsInputsToStorage() {
+    const caseId = resolveCaseId();
+    if (!caseId) return;
+
+    const payload = {
+      loan_amount_net: loanNetInput?.value || "",
+      loan_amount_total: loanTotalInput?.value || "",
+      loan_term_months: termInput?.value || "",
+      installments_paid: paidInput?.value || "",
+      installment_amount_real: installmentRealInput?.value || "",
+      interest_nominal: interestInput?.value || "",
+    };
+
+    try {
+      localStorage.setItem(`wps_basic_inputs:${caseId}`, JSON.stringify(payload));
+    } catch (e) {
+      console.warn("WPS: nie udało się zapisać localStorage:", e);
+    }
+  }
+  // Udostępniamy helper globalnie, żeby można go było wywołać przy otwarciu modala
+  window.PK_WPS = window.PK_WPS || {};
+  window.PK_WPS.reloadForCurrentCase = loadWpsInputsFromStorage;
+
+  // 🔥 Na starcie spróbuj odtworzyć wpisane wcześniej dane
+  loadWpsInputsFromStorage();
+
+  // 1) wylicz ratę z oprocentowania, jeśli trzeba
+  if (interestInput && installmentRealInput) {
+    interestInput.addEventListener("input", () => {
+      const interest = parseNumber(interestInput);
+      const total = parseNumber(loanTotalInput);
+      const term = parseNumber(termInput);
+
+      if (!interest || !total || !term) return;
+
+      const r = (interest / 100) / 12; // miesięczna stopa
+      const monthly = total * (r / (1 - Math.pow(1 + r, -term)));
+
+      if (Number.isFinite(monthly)) {
+        installmentRealInput.value = monthly.toFixed(2);
+      }
+    });
+  }
+
+  // 2) PRZELICZ WPS
+  btnCalc.addEventListener("click", () => {
     const loan_amount_net = parseNumber(loanNetInput);
     const loan_amount_total = parseNumber(loanTotalInput);
     const loan_term_months = parseNumber(termInput);
@@ -2578,7 +2692,7 @@ if (interestInput && installmentRealInput) {
     if (wps === null) {
       resultEl.textContent = "brak danych";
       lastWpsBasic = null;
-      if (btnSave)  btnSave.disabled = true;
+      if (btnSave) btnSave.disabled = true;
       if (btnApply) btnApply.disabled = true;
       return;
     }
@@ -2591,137 +2705,55 @@ if (interestInput && installmentRealInput) {
     });
     resultEl.textContent = `${formatted} zł`;
 
-    if (btnSave)  btnSave.disabled = false;
+    if (btnSave) btnSave.disabled = false;
     if (btnApply) btnApply.disabled = false;
+
+    // 💾 zapisz wprowadzone dane kredytu dla tej sprawy
+    saveWpsInputsToStorage();
   });
 
-  // 2) ZAPISZ WPS DO SPRAWY
-if (btnSave) {
-  btnSave.addEventListener("click", async () => {
-    if (!lastWpsBasic) {
-      alert("Najpierw przelicz WPS.");
-      return;
-    }
-
-        let caseId = null;
-
-    // 1. Spróbuj ID z ukrytego pola
-    const caseIdInput = document.getElementById("wpsCaseId");
-    if (caseIdInput && caseIdInput.value) {
-      const raw = caseIdInput.value;
-      console.log("WPS: wpsCaseId raw =", raw);
-      const parsed = Number(raw);
-      if (Number.isFinite(parsed)) {
-        caseId = parsed;
+  // 3) ZAPISZ WPS DO SPRAWY (PATCH)
+  if (btnSave) {
+    btnSave.addEventListener("click", async () => {
+      if (!lastWpsBasic) {
+        alert("Najpierw przelicz WPS.");
+        return;
       }
-    }
 
-    // 2. Fallback: window.caseData (jeśli jest)
-    if (!caseId && window.caseData && window.caseData.id) {
-      console.log("WPS: biorę ID z window.caseData.id =", window.caseData.id);
-      const parsed = Number(window.caseData.id);
-      if (Number.isFinite(parsed)) {
-        caseId = parsed;
+      const caseId = resolveCaseId();
+      if (!caseId) {
+        alert("Brak ID sprawy – nie mogę zapisać WPS.");
+        return;
       }
-    }
 
-    // 3. Fallback: wyciągnij ID z adresu URL (ostatnia liczba w ścieżce)
-    if (!caseId) {
-      const path = window.location.pathname; // np. "/cases/123" albo "/dashboard/case/123/edit"
-      console.log("WPS: pathname =", path);
-      const matches = path.match(/\d+/g); // wszystkie ciągi cyfr w ścieżce
-      if (matches && matches.length > 0) {
-        const last = matches[matches.length - 1]; // ostatnia liczba w ścieżce
-        const parsed = Number(last);
-        console.log("WPS: ID z URL (ostatnia liczba) =", parsed);
-        if (Number.isFinite(parsed)) {
-          caseId = parsed;
+      btnSave.disabled = true;
+      btnSave.textContent = "Zapisywanie...";
+
+      try {
+        const res = await fetch(`/api/cases/${caseId}/wps-basic`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ wps_basic: lastWpsBasic }),
+        });
+
+        if (!res.ok) {
+          console.error("Błąd zapisu WPS:", res.status);
+          alert("Nie udało się zapisać WPS. Spróbuj ponownie.");
+          return;
         }
+
+        alert("WPS został zapisany do sprawy.");
+      } catch (err) {
+        console.error("Błąd zapisu WPS:", err);
+        alert("Wystąpił błąd przy zapisie WPS.");
+      } finally {
+        btnSave.disabled = false;
+        btnSave.textContent = "Zapisz WPS do sprawy";
       }
-    }
+    });
+  }
 
-    console.log("WPS: final caseId =", caseId);
-
-    if (!caseId) {
-      alert("Brak ID sprawy – nie mogę zapisać WPS.");
-      return;
-    }
-
-
-    // ... fetch PATCH ...
-
-
-    if (!caseId) {
-      alert("Brak ID sprawy – nie mogę zapisać WPS.");
-      return;
-    }
-
-    btnSave.disabled = true;
-    btnSave.textContent = "Zapisywanie...";
-
-    try {
-      const res = await fetch(`/api/cases/${caseId}/wps-basic`, {
-        method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ wps_basic: lastWpsBasic }),
-      });
-
-      if (!res.ok) {
-        console.error("Błąd zapisu WPS:", res.status);
-        alert("Nie udało się zapisać WPS. Spróbuj ponownie.");
-        return;
-      }
-
-      alert("WPS został zapisany do sprawy.");
-    } catch (err) {
-      console.error("Błąd zapisu WPS:", err);
-      alert("Wystąpił błąd przy zapisie WPS.");
-    } finally {
-      btnSave.disabled = false;
-      btnSave.textContent = "Zapisz WPS do sprawy";
-    }
-  });
-}
-(function setupCaseDelete() {
-  const btn = document.getElementById("deleteCaseBtn");
-  if (!btn) return;
-
-  btn.addEventListener("click", async () => {
-    if (!window.currentCaseId) {
-      alert("Brak ID sprawy – nie mogę usunąć.");
-      return;
-    }
-
-    // Potrójne potwierdzenie
-    if (!confirm("Czy na pewno chcesz usunąć tę sprawę?")) return;
-    if (!confirm("Ta operacja jest nieodwracalna. Usunąć?")) return;
-
-
-    try {
-      const res = await fetch(`/api/cases/${window.currentCaseId}`, {
-        method: "DELETE",
-        headers: {
-          "Content-Type": "application/json",
-        },
-      });
-
-      if (!res.ok) {
-        alert("Błąd podczas usuwania sprawy.");
-        return;
-      }
-
-      alert("Sprawa została trwale usunięta.");
-      window.location.href = "/dashboard.html"; // powrót po usunięciu
-    } catch (e) {
-      console.error("Błąd DELETE:", e);
-      alert("Nie udało się usunąć sprawy.");
-    }
-  });
-})();
-
-  // 3) UŻYJ WPS W OFERCIE SKD
+    // 4) UŻYJ WPS W OFERCIE SKD
   if (btnApply) {
     btnApply.addEventListener("click", () => {
       if (!lastWpsBasic) {
@@ -2751,6 +2783,93 @@ if (btnSave) {
       alert("WPS został przepisany do oferty SKD.");
     });
   }
-})();
+})(); // ← DOMKNIĘCIE IIFE setupWpsBasicUI (BARDZO WAŻNE)
 
+// ===== Ostrzeżenie przy opuszczaniu strony, gdy oferta SKD ma niezapisane zmiany =====
+window.addEventListener("beforeunload", (e) => {
+  try {
+    if (!window.PK_SKD || typeof PK_SKD._getCtx !== "function") return;
+    const ctx = PK_SKD._getCtx();
+    if (!ctx || !ctx.dirty) return;
+
+    e.preventDefault();
+    e.returnValue =
+      "Masz niezapisane zmiany w ofercie SKD. Na pewno chcesz opuścić stronę?";
+  } catch {
+    // w razie czego nie blokujemy wyjścia
+  }
+});
+
+// ==========================================
+//    DELETE CASE (działa w case.html)
+// ==========================================
+document.addEventListener("DOMContentLoaded", () => {
+  const btn = document.getElementById("deleteCaseBtn");
+  console.log("[caseDelete] init, btn =", btn);
+  if (!btn) return;
+
+  btn.addEventListener("click", async () => {
+    console.log("[caseDelete] klik!");
+    let caseId = null;
+
+    // 1) spróbuj z ukrytego pola, jak przy WPS
+    const caseIdInput = document.getElementById("wpsCaseId");
+    if (caseIdInput && caseIdInput.value) {
+      const parsed = Number(caseIdInput.value);
+      if (Number.isFinite(parsed)) caseId = parsed;
+    }
+
+    // 2) fallback: window.currentCaseId
+    if (!caseId && window.currentCaseId) {
+      const parsed = Number(window.currentCaseId);
+      if (Number.isFinite(parsed)) caseId = parsed;
+    }
+
+    // 3) fallback: z URL (ostatnia liczba w ścieżce)
+    if (!caseId) {
+      const path = window.location.pathname;
+      const matches = path.match(/\d+/g);
+      if (matches && matches.length > 0) {
+        const last = Number(matches[matches.length - 1]);
+        if (Number.isFinite(last)) caseId = last;
+      }
+    }
+
+    console.log("[caseDelete] caseId →", caseId);
+
+    if (!caseId) {
+      alert("Brak ID sprawy – nie mogę usunąć.");
+      return;
+    }
+
+    // Potrójne potwierdzenie
+    if (!confirm("Czy na pewno chcesz usunąć tę sprawę?")) return;
+    if (!confirm("Ta operacja jest nieodwracalna. Usunąć?")) return;
+
+    const phrase = prompt('Aby potwierdzić, wpisz słowo: USUŃ');
+    if (!phrase || phrase.trim().toUpperCase() !== "USUŃ") {
+      alert("Nie potwierdziłeś usunięcia.");
+      return;
+    }
+
+    try {
+      const res = await fetch(`/api/cases/${caseId}`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+      });
+
+      if (!res.ok) {
+        console.error("Błąd podczas usuwania sprawy:", res.status);
+        alert("Błąd podczas usuwania sprawy.");
+        return;
+      }
+
+      alert("Sprawa została trwale usunięta.");
+      window.location.href = "/dashboard.html";
+    } catch (e) {
+      console.error("Błąd DELETE:", e);
+      alert("Nie udało się usunąć sprawy.");
+    }
+  });
+});
 

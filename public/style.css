@@ -946,3 +946,20 @@ body[data-role="admin"]  #clientPreferenceBlock { display: none !important; }
   border-radius: inherit;
   background: #ef4444; /* czerwony PK */
 }
+/* Schowanie niepotrzebnych tabów i paneli w modalu SKD */
+#skdOffer .modal-tabs .tab[data-tab="contract"],
+#skdOffer .modal-tabs .tab[data-tab="files"],
+#tab-contract,
+#tab-files {
+  display: none !important;
+}
+.upload-hint {
+  font-size: 12px;
+  color: #666;
+  margin-top: 6px;
+  line-height: 1.4;
+}
+.upload-hint a {
+  color: #8a0d0d; /* burgund PK */
+  text-decoration: underline;
+}
