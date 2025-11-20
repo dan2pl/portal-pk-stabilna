@@ -41,21 +41,127 @@ if (!fs.existsSync(CASES_UPLOAD_ROOT)) {
 }
 
 // === KONFIGURACJA MULTERA – zapis do uploads/cases/<caseId>/ ===
+// 🔢 limit: 20 MB na JEDEN plik
+const MAX_FILE_SIZE = 20 * 1024 * 1024; // 20 MB
+
+// ✅ MIME typy, które dopuszczamy
+const ALLOWED_MIME_TYPES = [
+  "application/pdf",
+
+  "image/jpeg",
+  "image/png",
+
+  "application/msword",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document", // .docx
+
+  "application/vnd.ms-excel",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", // .xlsx
+
+  "text/plain",
+];
+
+// 🚫 Rozszerzenia, których absolutnie NIE przyjmujemy
+const BLOCKED_EXTENSIONS = [
+  ".exe",
+  ".js",
+  ".mjs",
+  ".cjs",
+  ".php",
+  ".phtml",
+  ".phar",
+  ".sh",
+  ".bat",
+  ".cmd",
+  ".com",
+  ".scr",
+  ".msi",
+  ".dll",
+  ".so",
+  ".dylib",
+  ".html",
+  ".htm",
+  ".svg",
+  ".xml",
+];
+
+// 📂 storage: zapisujemy pliki do uploads/cases/<caseId>/
 const storage = multer.diskStorage({
-  destination: (req, _file, cb) => {
-    const caseId = req.params.id || req.body.caseId;
-    const dir = path.join(CASES_UPLOAD_ROOT, String(caseId ?? "unknown"));
-    fs.mkdirSync(dir, { recursive: true });
-    cb(null, dir);
+  destination: (req, file, cb) => {
+    try {
+      const rawId = (req.params && req.params.id) || "unknown";
+      const caseId = String(rawId);
+
+      const baseDir = path.join(process.cwd(), "uploads", "cases", caseId);
+
+      // upewniamy się, że katalog istnieje
+      fs.mkdirSync(baseDir, { recursive: true });
+
+      cb(null, baseDir);
+    } catch (err) {
+      console.error("Błąd przy tworzeniu katalogu uploadu:", err);
+      cb(err as any, path.join(process.cwd(), "uploads", "cases"));
+    }
   },
-  filename: (_req, file, cb) => {
-    const unique = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
-    const ext = path.extname(file.originalname || "");
-    cb(null, `${unique}${ext}`);
+  filename: (req, file, cb) => {
+    const ext = path.extname(file.originalname || "").toLowerCase();
+    const safeBaseName = Date.now() + "-" + Math.round(Math.random() * 1e9);
+    const finalName = safeBaseName + ext;
+    cb(null, finalName);
   },
 });
+function securityLog(msg: string, extra: any = {}) {
+  const stamp = new Date().toISOString();
+  console.log(`🔒 [SECURITY ${stamp}] ${msg}`, extra);
+}
 
-const upload = multer({ storage });
+// 🛡️ Główny filtr bezpieczeństwa uploadu
+function fileFilter(
+  req: Express.Request,
+  file: Express.Multer.File,
+  cb: multer.FileFilterCallback
+) {
+  const mime = (file.mimetype || "").toLowerCase();
+  const ext = path.extname(file.originalname || "").toLowerCase();
+
+  // 1) blokujemy oczywiste syfy po rozszerzeniu
+  if (BLOCKED_EXTENSIONS.includes(ext)) {
+    console.warn("❌ Odrzucono plik po rozszerzeniu:", file.originalname);
+    return cb(
+      new Error(
+        "Ten typ pliku jest niedozwolony do uploadu (rozszerzenie zablokowane)."
+      )
+    );
+  }
+
+  // 2) sprawdzamy MIME type (pdf/jpg/png/doc/xls/txt)
+  if (!ALLOWED_MIME_TYPES.includes(mime)) {
+    console.warn("❌ Odrzucono plik po MIME:", file.originalname, mime);
+    return cb(
+      new Error(
+        "Ten typ pliku nie jest obsługiwany. Dozwolone: PDF, JPG, PNG, DOC, XLS, TXT."
+      )
+    );
+  }
+
+  // 3) dodatkowy „smell test” na HTML/JS w środku (opcjonalnie – tu tylko po nazwie)
+  if (mime === "text/html" || mime === "application/javascript") {
+    return cb(
+      new Error("Nie można wgrywać plików HTML/JS ze względów bezpieczeństwa.")
+    );
+  }
+
+  cb(null, true);
+}
+
+// 🎯 Główny obiekt upload – z limitami i filtrem
+export const upload = multer({
+  storage,
+  limits: {
+    fileSize: MAX_FILE_SIZE, // max 20 MB na plik
+    files: 10,               // max 10 plików na raz
+  },
+  fileFilter,
+});
 
 // === HELPERY DO NORMALIZACJI ===
 const toNum = (v: any): number | undefined => {
@@ -573,8 +679,8 @@ app.get(
   }
 });
 
-  // === OGÓLNA CZĘŚCIOWA AKTUALIZACJA SPRAWY ===
-  app.patch(
+  // === PATCH /api/cases/:id — bezpieczna aktualizacja sprawy ===
+app.patch(
   "/api/cases/:id",
   mediumApiLimit,
   requireAuth,
@@ -588,160 +694,101 @@ app.get(
     "email",
     "address",
     "pesel",
-    "notes"
+    "notes",
   ]),
   async (req, res) => {
-    
     try {
       const user = (req as any).user;
-      const id = Number(req.params.id);
+      const idRaw = req.params.id;
+      const id = Number(idRaw);
 
       if (!Number.isFinite(id)) {
         return res.status(400).json({ error: "Nieprawidłowe ID sprawy" });
       }
 
-      // 🔐 Sprawdzenie uprawnień
-      await loadCaseForUser(id, user);
+      // 1) upewnij się, że użytkownik ma dostęp do tej sprawy
+      const row = await loadCaseForUser(id, user); // rzuca błąd, jeśli brak dostępu / brak sprawy
 
-      // ==============================
-      // 1) WHITELISTA — tylko te pola mogą wejść
-      // ==============================
-      const allowedFields = {
-        client: "string",
-        bank: "string",
-        loan_amount: "number",
-        status: "string",
-        contract_date: "string|null",
-        phone: "string",
-        email: "string",
-        address: "string",
-        pesel: "string",
-        notes: "string",
-      };
+      // 2) wyciągamy tylko dozwolone pola z body (po denyUnknownFields to i tak biała lista)
+      const {
+        client,
+        bank,
+        loan_amount,
+        status,
+        contract_date,
+        phone,
+        email,
+        address,
+        pesel,
+        notes,
+      } = req.body || {};
 
-      // ==============================
-      // 2) Pobranie pól
-      // ==============================
-      const body = req.body || {};
-      const update: any = {};
-
-      for (const key of Object.keys(allowedFields)) {
-        if (body[key] !== undefined) {
-          update[key] = body[key];
-        }
+      // 3) prosta walidacja – np. kwota kredytu musi być liczbą
+      if (loan_amount !== undefined && isNaN(Number(loan_amount))) {
+        return res.status(400).json({ error: "Nieprawidłowa kwota kredytu" });
       }
 
-      if (Object.keys(update).length === 0) {
-        return res.status(400).json({ error: "Brak pól do aktualizacji" });
-      }
-
-      // ==============================
-      // 3) Walidacje — twarde zabezpieczenia
-      // ==============================
-
-      // XSS-cleaner
-      const clean = (v: any) =>
-        typeof v === "string"
-          ? v.replace(/[<>]/g, "").trim()
-          : v;
-
-      // EMAIL
-      if (update.email !== undefined) {
-        const e = clean(update.email);
-        if (e && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e)) {
-          return res.status(400).json({ error: "Nieprawidłowy adres e-mail" });
-        }
-        update.email = e || null;
-      }
-
-      // TELEFON (opcjonalny)
-      if (update.phone !== undefined) {
-        const p = clean(update.phone);
-        if (p && !/^[0-9+\-\s]{5,20}$/.test(p)) {
-          return res.status(400).json({ error: "Nieprawidłowy numer telefonu" });
-        }
-        update.phone = p || null;
-      }
-
-      // PESEL
-      if (update.pesel !== undefined) {
-        const p = clean(update.pesel);
-        if (p && !/^[0-9]{11}$/.test(p)) {
-          return res.status(400).json({ error: "Nieprawidłowy PESEL" });
-        }
-        update.pesel = p || null;
-      }
-
-      // KWOTA
-      if (update.loan_amount !== undefined) {
-        const amount = Number(update.loan_amount);
-        if (!Number.isFinite(amount) || amount < 0 || amount > 5_000_000) {
-          return res.status(400).json({ error: "Nieprawidłowa kwota kredytu" });
-        }
-        update.loan_amount = amount;
-      }
-
-      // DATA
-      if (update.contract_date !== undefined) {
-        const d = update.contract_date;
-        if (d && isNaN(Date.parse(d))) {
-          return res.status(400).json({ error: "Nieprawidłowa data umowy" });
-        }
-        update.contract_date = d || null;
-      }
-
-      // TEKSTY — soft XSS-clean + długości
-      const safeText = (t: any, max: number) =>
-        t ? clean(String(t).slice(0, max)) : null;
-
-      if (update.client) update.client = safeText(update.client, 200);
-      if (update.bank) update.bank = safeText(update.bank, 200);
-      if (update.address) update.address = safeText(update.address, 400);
-      if (update.notes) update.notes = safeText(update.notes, 2000);
-      if (update.status) update.status = safeText(update.status, 100);
-
-      // ==============================
-      // 4) Budowa zapytania SQL (bezpieczna)
-      // ==============================
-      const sqlFields: string[] = [];
+      // 4) budujemy dynamicznego PATCH-a
+      const fields: string[] = [];
       const values: any[] = [];
       let i = 1;
 
-      for (const [k, v] of Object.entries(update)) {
-        sqlFields.push(`${k} = $${i}`);
-        values.push(v);
-        i++;
+      function addField(column: string, value: any) {
+        fields.push(`${column} = $${i++}`);
+        values.push(value);
       }
 
-      // zawsze aktualizuj updated_at
-      sqlFields.push(`updated_at = NOW()`);
+      if (client !== undefined)       addField("client", client);
+      if (bank !== undefined)         addField("bank", bank);
+      if (loan_amount !== undefined)  addField("loan_amount", Number(loan_amount));
+      if (status !== undefined)       addField("status", status);
+      if (contract_date !== undefined) addField("contract_date", contract_date || null);
+      if (phone !== undefined)        addField("phone", phone);
+      if (email !== undefined)        addField("email", email);
+      if (address !== undefined)      addField("address", address);
+      if (pesel !== undefined)        addField("pesel", pesel);
+      if (notes !== undefined)        addField("notes", notes);
+
+      if (!fields.length) {
+        return res.status(400).json({ error: "Brak pól do aktualizacji" });
+      }
+
+      // updated_at zawsze się odświeża
+      fields.push(`updated_at = NOW()`);
 
       values.push(id);
 
-      // ==============================
-      // 5) Wykonanie UPDATE
-      // ==============================
-      const result = await pool.query(
+      const q = await pool.query(
         `UPDATE cases
-         SET ${sqlFields.join(", ")}
+         SET ${fields.join(", ")}
          WHERE id = $${i}
-         RETURNING *`,
+         RETURNING
+           id,
+           client,
+           bank,
+           loan_amount,
+           status,
+           contract_date,
+           phone,
+           email,
+           address,
+           pesel,
+           wps_forecast,
+           wps_final,
+           client_benefit,
+           notes,
+           owner_id,
+           updated_at`,
         values
       );
 
-      if (result.rowCount === 0) {
+      if (!q.rows.length) {
         return res.status(404).json({ error: "Sprawa nie istnieje" });
       }
 
-      // AUDYT
-      console.log(
-        `[PATCH CASE] user=${user.id}, role=${user.role}, case=${id}, updated=${Object.keys(update).join(", ")}`
-      );
-
-      return res.json(result.rows[0]);
+      res.json(q.rows[0]);
     } catch (err) {
-      console.error("PATCH /api/cases/:id ERROR:", err);
-      return res.status(500).json({ error: "Błąd serwera" });
+      sendCaseError(res, err);
     }
   }
 );
@@ -885,6 +932,7 @@ app.get(
   "/api/cases/:id/wps-basic",
   mediumApiLimit,
   requireAuth,
+  denyUnknownFields(["wps_basic"]),
   async (req, res) => {
 
     const user = (req as any).user;
@@ -938,63 +986,144 @@ console.log(`[WPS-BASIC] user=${user.id}, role=${user.role}, case=${caseId}, val
     }
   });
 
-  // === AKTUALIZACJA OFERTY SKD ===
-  app.put(
+// === ZAPIS OFERTY SKD (PUT — twarda walidacja) ===
+app.put(
   "/api/cases/:id/skd-offer",
   mediumApiLimit,
   requireAuth,
+  denyUnknownFields(["wps_forecast", "offer_skd"]),
   async (req, res) => {
-
-    const user = (req as any).user;
-    const idRaw = req.params.id;
-    const caseId = Number(idRaw);
-
-    if (!Number.isFinite(caseId)) {
-      return res.status(400).json({ error: "Nieprawidłowe ID sprawy." });
-    }
-
-    const allowed = await verifyCaseOwnership(caseId, user);
-    if (allowed === null) {
-      return res.status(404).json({ error: "Nie znaleziono sprawy." });
-    }
-    if (!allowed) {
-      return res.status(403).json({ error: "Brak dostępu do tej sprawy" });
-    }
-
     try {
-      const { wps_forecast, offer_skd } = req.body || {};
+      const user = (req as any).user;
+      const caseId = Number(req.params.id);
 
-      console.log("SKD PUT body:", { caseId, wps_forecast, offer_skd });
+      if (!Number.isFinite(caseId)) {
+        return res.status(400).json({ error: "Nieprawidłowe ID sprawy." });
+      }
 
+      // 🔐 Sprawdzenie własności sprawy
+      const allowed = await verifyCaseOwnership(caseId, user);
+      if (allowed === null) return res.status(404).json({ error: "Nie znaleziono sprawy." });
+      if (!allowed)      return res.status(403).json({ error: "Brak dostępu do tej sprawy" });
+
+      // ============================
+      // 1) Pobranie surowych danych
+      // ============================
+      const body = req.body || {};
+      let { wps_forecast, offer_skd } = body;
+
+      // ============================
+      // 2) WPS forecast — twarde granice
+      // ============================
+      const wf = Number(wps_forecast);
+      if (!Number.isFinite(wf) || wf < 0 || wf > 5_000_000) {
+        return res.status(400).json({ error: "Nieprawidłowa wartość WPS forecast." });
+      }
+
+      // ============================
+      // 3) offer_skd — musi być obiektem
+      // ============================
+      if (!offer_skd || typeof offer_skd !== "object") {
+        return res.status(400).json({ error: "offer_skd musi być obiektem." });
+      }
+
+      // ============================
+      // 4) Variant — tylko 3 opcje
+      // ============================
+      const variant = offer_skd.variant;
+      const allowedVariants = ["sf50", "sf49", "sell"];
+      if (!allowedVariants.includes(variant)) {
+        return res.status(400).json({ error: "Nieprawidłowy wariant oferty SKD." });
+      }
+
+      // ============================
+      // 5) buyout_pct — tylko jeśli SELL
+      // ============================
+      let buyout_pct = null;
+
+      if (variant === "sell") {
+        const raw = offer_skd.buyout_pct;
+
+        const pct = Number(raw);
+        if (!Number.isFinite(pct)) {
+          return res.status(400).json({ error: "buyout_pct musi być liczbą." });
+        }
+
+        if (pct < 10 || pct > 15) {
+          return res.status(400).json({
+            error: "buyout_pct musi zawierać się między 10 a 15.",
+          });
+        }
+
+        buyout_pct = pct;
+      }
+
+      // ============================
+      // 6) future_interest — opcjonalne, czyszczone
+      // ============================
+      let future_interest = Number(offer_skd.future_interest || 0);
+      if (!Number.isFinite(future_interest) || future_interest < 0) {
+        future_interest = 0;
+      }
+
+      // ============================
+      // 7) eligibility — twardy boolean-cast
+      // ============================
+      const elig = offer_skd.eligibility || {};
+      const eligibility = {
+        sf50: Boolean(elig.sf50),
+        sf49: Boolean(elig.sf49),
+        sell: Boolean(elig.sell),
+      };
+
+      // ============================
+      // 8) Finalny obiekt zapisowy
+      // ============================
+      const finalOffer = {
+        variant,
+        buyout_pct,
+        future_interest,
+        eligibility,
+      };
+
+      // ============================
+      // 9) Zapis do bazy
+      // ============================
       const result = await pool.query(
         `
         UPDATE cases
         SET
           wps_forecast = $1,
-          offer_skd    = $2
+          offer_skd    = $2,
+          updated_at   = NOW()
         WHERE id = $3
         RETURNING id, wps_forecast, offer_skd
         `,
-        [wps_forecast, offer_skd, caseId]
+        [wf, finalOffer, caseId]
       );
 
-      if (result.rowCount === 0) {
+      if (!result.rowCount) {
         return res.status(404).json({ error: "Nie znaleziono sprawy." });
       }
 
-      console.log("SKD PUT result:", result.rows[0]);
+      // ============================
+      // 10) AUDYT
+      // ============================
+      console.log(
+        `[SKD-PUT] user=${user.id} role=${user.role} case=${caseId} variant=${variant} buyout=${buyout_pct ?? "-"}`
+      );
 
-      return res.json({
-        ok: true,
-        case: result.rows[0],
-      });
+      // ============================
+      // 11) OK
+      // ============================
+      return res.json({ ok: true, case: result.rows[0] });
+
     } catch (err) {
       console.error("Błąd PUT /api/cases/:id/skd-offer:", err);
-      return res
-        .status(500)
-        .json({ error: "Błąd serwera przy zapisie oferty SKD." });
+      return res.status(500).json({ error: "Błąd serwera przy zapisie oferty SKD." });
     }
-  });
+  }
+);
 
   // === DOKUMENTY SPRAWY: POBRANIE PLIKU (z kontrolą właściciela) ===
 app.get("/api/files/:fileId", softApiLimit, requireAuth, async (req, res) => {
@@ -1276,49 +1405,60 @@ app.delete("/api/files/:fileId", hardApiLimit, requireAuth, async (req, res) => 
   }
 );
 
-  // === USUWANIE SPRAWY (DELETE) ===
-  app.delete(
+ // === DELETE SPRAWY ===
+// pełne bezpieczeństwo + audyt
+app.delete(
   "/api/cases/:id",
   hardApiLimit,
   requireAuth,
   async (req, res) => {
-
-    const user = (req as any).user;
-    const idRaw = req.params.id;
-    const id = Number(idRaw);
-
-    console.log(`[DELETE /api/cases/${id}] by user=${user.id}, role=${user.role}`);
-    if (!Number.isFinite(id)) {
-      return res.status(400).json({ error: "Nieprawidłowe ID sprawy" });
-    }
-
-    const allowed = await verifyCaseOwnership(id, user);
-    if (allowed === null) {
-      return res.status(404).json({ error: "Sprawa nie istnieje" });
-    }
-    if (!allowed) {
-      return res.status(403).json({ error: "Brak dostępu do tej sprawy" });
-    }
-
     try {
-      const result = await pool.query(
-        "DELETE FROM cases WHERE id = $1 RETURNING id",
+      const user = (req as any).user;
+      const id = Number(req.params.id);
+
+      if (!Number.isFinite(id)) {
+        return res.status(400).json({ error: "Nieprawidłowe ID sprawy" });
+      }
+
+      // 🔐 Pobierz sprawę i upewnij się, że użytkownik może ją usunąć
+      const row = await loadCaseForUser(id, user);
+
+      // Jeśli chcesz: admin może usuwać wszystko (ON już ma dostęp)
+      // Agent → tylko swoje sprawy
+      if (user.role !== "admin" && row.owner_id !== user.id) {
+        return res.status(403).json({ error: "Brak dostępu do tej sprawy" });
+      }
+
+      // Usuń pliki fizyczne
+      const folder = path.join(process.cwd(), "uploads", "cases", String(id));
+      try {
+        await fsPromises.rm(folder, { recursive: true, force: true });
+      } catch (err) {
+        console.warn("Błąd usuwania folderu sprawy:", err);
+      }
+
+      // Usuń rekordy z bazy
+      await pool.query(
+        "DELETE FROM case_files WHERE case_id = $1",
+        [id]
+      );
+      await pool.query(
+        "DELETE FROM cases WHERE id = $1",
         [id]
       );
 
-      if (result.rowCount === 0) {
-        return res.status(404).json({ error: "Sprawa nie istnieje" });
-      }
+      // AUDYT
+      console.log(
+        `[DELETE CASE] user=${user.id}, role=${user.role}, case=${id} SUCCESS`
+      );
 
-      console.log("🗑️ Usunięto sprawę id =", id);
-      return res.json({ success: true });
+      return res.json({ ok: true });
     } catch (err) {
-      console.error("Błąd przy DELETE /api/cases/:id:", err);
-      return res
-        .status(500)
-        .json({ error: "Błąd serwera przy usuwaniu sprawy" });
+      console.error("DELETE /api/cases/:id error:", err);
+      return res.status(500).json({ error: "Błąd serwera" });
     }
-  });
+  }
+);
 
   console.log("➡️ routes: GET/POST/PATCH/PUT/DELETE /api/cases registered");
 }

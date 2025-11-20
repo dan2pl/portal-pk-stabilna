@@ -2140,72 +2140,89 @@ function refreshVariantAvailabilityFromEligibility() {
   }
 
   // 🔥 GŁÓWNA FUNKCJA SYMULACJI WYPŁAT
-  function recomputePayoutSimulation() {
-    // jeśli nie mamy elementów symulacji w DOM → nic nie rób
-    if (!simNowEl && !simLaterEl && !simTotalEl) return;
+function recomputePayoutSimulation() {
+  // jeśli nie mamy elementów symulacji w DOM → nic nie rób
+  if (!simNowEl && !simLaterEl && !simTotalEl) return;
 
-    // 1) WPS bazowy: najpierw ostateczny, potem prognoza
-    const wpsFinal    = parseNumber(wpsFinalInput?.value);
-    const wpsForecast = parseNumber(wpsForecastInput?.value);
-    const baseWps     = wpsFinal ?? wpsForecast ?? null;
+  // 1) WPS bazowy: najpierw ostateczny, potem prognoza
+  const wpsFinal    = parseNumber(wpsFinalInput?.value);
+  const wpsForecast = parseNumber(wpsForecastInput?.value);
+  const baseWps     = wpsFinal ?? wpsForecast ?? null;
 
-    // 2) Umorzone przyszłe odsetki – zawsze 100% dla klienta
-    const futureInterestRaw = parseNumber(futureInterestInput?.value);
-    const futureInterest    =
-      futureInterestRaw && futureInterestRaw > 0 ? futureInterestRaw : 0;
+  // 2) Umorzone przyszłe odsetki – zawsze 100% dla klienta
+  const futureInterestRaw = parseNumber(futureInterestInput?.value);
+  const futureInterest =
+    futureInterestRaw && futureInterestRaw > 0 ? futureInterestRaw : 0;
 
-    if (!baseWps || !isFinite(baseWps) || baseWps <= 0) {
-      if (simNowEl)   simNowEl.textContent   = "—";
-      if (simLaterEl) simLaterEl.textContent = "—";
-      if (simTotalEl) simTotalEl.textContent = "—";
-      return;
-    }
-
-    // 3) Aktualnie wybrany wariant
-    let currentVariant = "sf50";
-    if (variantRadios && variantRadios.length) {
-      const selected = Array.from(variantRadios).find((r) => r.checked);
-      if (selected) currentVariant = selected.value;
-    }
-
-    // 4) Gotówka dla klienta: teraz / później
-    let now = 0;
-    let later = 0;
-
-    if (currentVariant === "sf50") {
-      // Success Fee 50/50
-      now = 0;
-      later = baseWps * 0.5;
-    } else if (currentVariant === "sf49") {
-      // Success Fee 51% dla klienta
-      now = 0;
-      later = baseWps * 0.51;
-    } else if (currentVariant === "sell") {
-      // Sprzedaż roszczenia – klient dostaje kwotę z góry
-      const buyoutPct = parseNumber(buyoutPctInput?.value); // "10" → 10
-      const futureInterestVal = parseNumber(futureInterestInput?.value);
-      const p = buyoutPct != null ? buyoutPct / 100 : 0.1;  // domyślnie 10%
-      const clientShare = p;                            // np. 90%
-
-      now = baseWps * clientShare;
-      later = 0;
-    } else {
-      // fallback: traktuj jak 50/50
-      now = 0;
-      later = baseWps * 0.5;
-    }
-
-    // 5) Łączna gotówka z WPS:
-    const cashTotal = now + later;
-
-    // 6) SUMA DLA KLIENTA = GOTÓWKA + UMORZONE ODSETKI
-    const totalWithInterest = cashTotal + futureInterest;
-
-    // 7) Wrzucamy do UI (to są Twoje <strong id="...">)
-    if (simNowEl)   simNowEl.textContent   = formatPln(now) + " zł";
-    if (simLaterEl) simLaterEl.textContent = formatPln(later) + " zł";
-    if (simTotalEl) simTotalEl.textContent = formatPln(totalWithInterest) + " zł";
+  if (!baseWps || !isFinite(baseWps) || baseWps <= 0) {
+    if (simNowEl)   simNowEl.textContent   = "—";
+    if (simLaterEl) simLaterEl.textContent = "—";
+    if (simTotalEl) simTotalEl.textContent = "—";
+    return;
   }
+
+  // 3) Aktualnie wybrany wariant
+  let currentVariant = "sf50";
+  if (variantRadios && variantRadios.length) {
+    const selected = Array.from(variantRadios).find((r) => r.checked);
+    if (selected) currentVariant = selected.value;
+  }
+
+  // 4) Gotówka dla klienta: teraz / później
+  let now = 0;
+  let later = 0;
+
+  if (currentVariant === "sf50") {
+    // Success Fee 50/50
+    now = 0;
+    later = baseWps * 0.5;
+  } else if (currentVariant === "sf49") {
+    // Success Fee 51% dla klienta
+    now = 0;
+    later = baseWps * 0.51;
+  } else if (currentVariant === "sell") {
+    // Sprzedaż roszczenia – klient dostaje kwotę z góry
+    const rawPct = parseNumber(buyoutPctInput?.value); // np. 8, 12, 20
+
+    // efektywny procent do obliczeń (twardy zakres 10–15)
+    let effectivePct;
+    if (rawPct != null && isFinite(rawPct)) {
+      effectivePct = Math.min(15, Math.max(10, rawPct));
+    } else {
+      effectivePct = 10; // domyślnie 10%
+    }
+
+    // 🔔 obsługa komunikatu o zakresie
+    const warningEl = document.getElementById("buyoutWarning");
+    if (warningEl) {
+      if (rawPct != null && isFinite(rawPct) && (rawPct < 10 || rawPct > 15)) {
+        warningEl.style.display = "block";
+      } else {
+        warningEl.style.display = "none";
+      }
+    }
+
+    const clientShare = effectivePct / 100; // 0.10–0.15
+
+    now = baseWps * clientShare;
+    later = 0;
+  } else {
+    // fallback: traktuj jak 50/50
+    now = 0;
+    later = baseWps * 0.5;
+  }
+
+  // 5) Łączna gotówka z WPS:
+  const cashTotal = now + later;
+
+  // 6) SUMA DLA KLIENTA = GOTÓWKA + UMORZONE ODSETKI
+  const totalWithInterest = cashTotal + futureInterest;
+
+  // 7) Wrzucamy do UI
+  if (simNowEl)   simNowEl.textContent   = formatPln(now) + " zł";
+  if (simLaterEl) simLaterEl.textContent = formatPln(later) + " zł";
+  if (simTotalEl) simTotalEl.textContent = formatPln(totalWithInterest) + " zł";
+}
 // 🔁 Przeliczanie przy zmianach WPS / odsetek / prowizji / wariantu
 [wpsForecastInput, wpsFinalInput, futureInterestInput, buyoutPctInput].forEach((el) => {
   if (!el) return;
@@ -2596,7 +2613,64 @@ let lastWpsBasic = null;
     const n = Number(raw);
     return Number.isFinite(n) ? n : null;
   }
+async function saveSkdOffer() {
+  const id = currentCaseId;
+  if (!id) return alert("Brak ID sprawy");
 
+  // --- wartości z UI ---
+  const wpsForecast = Number(
+    document.getElementById("wpsForecastInput")?.value || 0
+  );
+
+  // wariant: sf50 / sf49 / sell
+  let variant = "sf50";
+  const radios = document.querySelectorAll("input[name='skdVariant']");
+  radios.forEach((r) => {
+    if (r.checked) variant = r.value;
+  });
+
+  // wartość wykupu (tylko jeśli SELL)
+  let buyout = null;
+  if (variant === "sell") {
+    const pctRaw = Number(
+      document.getElementById("buyoutPctInput")?.value || 0
+    );
+
+    if (pctRaw < 10 || pctRaw > 15) {
+      return alert("Wartość wykupu musi być w zakresie 10–15%");
+    }
+
+    buyout = pctRaw / 100; // np. 12 → 0.12
+  }
+
+  const payload = {
+    wps_forecast: wpsForecast || null,
+    offer_skd: {
+      variant,
+      buyout,
+    },
+  };
+
+  console.log("[SKD PUT] payload:", payload);
+
+  try {
+    const res = await fetch(`/api/cases/${id}/skd-offer`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+
+    if (!res.ok) {
+      const txt = await res.text();
+      throw new Error(txt);
+    }
+
+    alert("Oferta SKD została zapisana.");
+  } catch (err) {
+    console.error("SKD PUT ERROR:", err);
+    alert("Błąd podczas zapisywania oferty SKD.");
+  }
+}
   // 🔹 Odczyt parametrów kredytu z localStorage (per sprawa)
   function loadWpsInputsFromStorage() {
     const caseId = resolveCaseId();

@@ -239,68 +239,6 @@ document.addEventListener("input", async (ev) => {
     alert("Nie udało się pobrać szczegółów sprawy.");
   }
 }
-// === ZAPIS DANYCH UMOWY (3B) ===
-document.addEventListener("DOMContentLoaded", async () => {
-  console.log("case.js loaded");
-
-  // 1) Najpierw ładujemy dane sprawy
-  await fetchCaseDetails();
-
-  // 2) Podpinamy klik do "Zapisz dane umowy"
-  const saveBtn = document.getElementById("caseContractSaveBtn");
-  if (!saveBtn) {
-    console.warn("Brak przycisku #caseContractSaveBtn w DOM");
-  } else {
-    saveBtn.addEventListener("click", async () => {
-      console.log("[case] kliknięto Zapisz dane umowy");
-
-      const caseId = resolveCaseId();
-      if (!caseId) {
-        alert("Brak ID sprawy – nie mogę zapisać danych umowy.");
-        return;
-      }
-
-      // TE SAME ID, których używasz wyżej w fetchCaseDetails
-      const clientInp    = document.getElementById("caseClientInput");
-      const phoneInp     = document.getElementById("casePhoneInput");
-      const emailInp     = document.getElementById("caseEmailInput");
-      const addressInp   = document.getElementById("caseAddressInput");
-      const peselInp     = document.getElementById("casePeselInput");
-      const loanInp      = document.getElementById("caseLoanInput");
-      const bankInp      = document.getElementById("caseBankInput");
-      const contractInp  = document.getElementById("caseContractDateInput");
-
-      const payload = {};
-
-      if (clientInp)   payload.client        = clientInp.value || null;
-      if (phoneInp)    payload.phone         = phoneInp.value || null;
-      if (emailInp)    payload.email         = emailInp.value || null;
-      if (addressInp)  payload.address       = addressInp.value || null;
-      if (peselInp)    payload.pesel         = peselInp.value || null;
-      if (loanInp)     payload.loan_amount   = loanInp.value || null;
-      if (bankInp)     payload.bank          = bankInp.value || null;
-      if (contractInp) payload.contract_date = contractInp.value || null;
-
-      try {
-        const res = await fetch(`/api/cases/${encodeURIComponent(caseId)}`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
-        });
-
-        if (!res.ok) throw new Error("HTTP " + res.status);
-
-        console.log("[case] dane umowy zapisane", payload);
-        alert("Dane umowy zostały zapisane.");
-      } catch (err) {
-        console.error("Błąd zapisu danych umowy:", err);
-        alert("Nie udało się zapisać danych umowy. Sprawdź konsolę.");
-      }
-    });
-  }
-
-  console.log("[case] hooks ready");
-});
 
 // ========== Local fallback ==========
 const readNotesLS = (id) => LS.get(lsKeyNotes(id), []);
@@ -536,93 +474,197 @@ async function deleteFile(caseId, fileId) {
   return true;
 }
 
-// ========== INIT ==========
-document.addEventListener('DOMContentLoaded', async () => {
-  const id = getCaseId();
-  if (!id) { alert('Brak ID sprawy'); return; }
+// ========== INIT: jeden wspólny blok ==========
+document.addEventListener("DOMContentLoaded", async () => {
+  console.log("case.js DOM ready");
 
+  const caseId = resolveCaseId();
+  if (!caseId) {
+    alert("Brak ID sprawy – nie mogę wczytać danych sprawy.");
+    return;
+  }
+
+  // 1) Wczytanie danych sprawy (nagłówek, dane klienta, formularz)
   await fetchCaseDetails();
-  await loadNotes(id);
-  await loadFiles(id);
+
+  // 2) Zapis danych umowy przyciskiem "Zapisz dane umowy"
+  const saveBtn = document.getElementById("caseContractSaveBtn");
+  if (!saveBtn) {
+    console.warn("Brak przycisku #caseContractSaveBtn w DOM");
+  } else {
+    saveBtn.addEventListener("click", async () => {
+      console.log("[case] kliknięto Zapisz dane umowy");
+
+      const clientInp   = document.getElementById("caseClientInput");
+      const phoneInp    = document.getElementById("casePhoneInput");
+      const emailInp    = document.getElementById("caseEmailInput");
+      const addressInp  = document.getElementById("caseAddressInput");
+      const peselInp    = document.getElementById("casePeselInput");
+      const loanInp     = document.getElementById("caseLoanInput");
+      const bankInp     = document.getElementById("caseBankInput");
+      const contractInp = document.getElementById("caseContractDateInput");
+
+      const payload = {};
+
+      if (clientInp)   payload.client        = clientInp.value || null;
+      if (phoneInp)    payload.phone         = phoneInp.value || null;
+      if (emailInp)    payload.email         = emailInp.value || null;
+      if (addressInp)  payload.address       = addressInp.value || null;
+      if (peselInp)    payload.pesel         = peselInp.value || null;
+      if (loanInp)     payload.loan_amount   = loanInp.value || null;
+      if (bankInp)     payload.bank          = bankInp.value || null;
+      if (contractInp) payload.contract_date = contractInp.value || null;
+
+      try {
+        const res = await fetch(`/api/cases/${encodeURIComponent(caseId)}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+
+        if (!res.ok) throw new Error("HTTP " + res.status);
+
+        console.log("[case] dane umowy zapisane", payload);
+        alert("Dane umowy zostały zapisane.");
+      } catch (err) {
+        console.error("Błąd zapisu danych umowy:", err);
+        alert("Nie udało się zapisać danych umowy. Sprawdź konsolę.");
+      }
+    });
+  }
+
+  // 3) Notatki + pliki
+  await loadNotes(caseId);
+  await loadFiles(caseId);
 
   // Dodaj notatkę
-  const noteBtn = document.getElementById('noteAdd');
-  const noteInp = document.getElementById('noteInput');
+  const noteBtn = document.getElementById("noteAdd");
+  const noteInp = document.getElementById("noteInput");
   if (noteBtn && noteInp) {
-    noteBtn.addEventListener('click', async () => {
-      const text = (noteInp.value || '').trim();
+    noteBtn.addEventListener("click", async () => {
+      const text = (noteInp.value || "").trim();
       if (!text) return;
-      const ok = await addNote(id, text);
-      if (ok) { noteInp.value = ''; await loadNotes(id); }
+      const ok = await addNote(caseId, text);
+      if (ok) {
+        noteInp.value = "";
+        await loadNotes(caseId);
+      }
     });
   }
 
   // + Dodaj plik → selektor
-  document.getElementById('attachAddBtn')?.addEventListener('click', () =>
-    document.getElementById('fileInput')?.click()
-  );
+  const attachBtn = document.getElementById("attachAddBtn");
+  const fileInput = document.getElementById("fileInput");
+  if (attachBtn && fileInput) {
+    attachBtn.addEventListener("click", () => fileInput.click());
+  }
 
   // Dropzone
-  const dz = document.getElementById('dropzone');
-  const fi = document.getElementById('fileInput');
+  const dz = document.getElementById("dropzone");
+  const fi = fileInput;
   if (dz && fi) {
-    dz.addEventListener('click', () => fi.click());
-    dz.addEventListener('dragover', (e) => { e.preventDefault(); dz.style.background = '#f3f4f6'; });
-    dz.addEventListener('dragleave', () => { dz.style.background = '#fafafa'; });
-    dz.addEventListener('drop', async (e) => {
-      e.preventDefault(); dz.style.background = '#fafafa';
-      const files = [...(e.dataTransfer?.files || [])];
-      if (!files.length) return;
-      const ok = await uploadFiles(id, files);
-      if (ok) await loadFiles(id);
+    dz.addEventListener("click", () => fi.click());
+    dz.addEventListener("dragover", (e) => {
+      e.preventDefault();
+      dz.style.background = "#f3f4f6";
     });
-    fi.addEventListener('change', async () => {
-      const files = [...(fi.files || [])];
+    dz.addEventListener("dragleave", () => {
+      dz.style.background = "#fafafa";
+    });
+    dz.addEventListener("drop", async (e) => {
+      e.preventDefault();
+      dz.style.background = "#fafafa";
+      const files = Array.from((e.dataTransfer && e.dataTransfer.files) || []);
       if (!files.length) return;
-      const ok = await uploadFiles(id, files);
-      fi.value = '';
-      if (ok) await loadFiles(id);
+      const ok = await uploadFiles(caseId, files);
+      if (ok) await loadFiles(caseId);
+    });
+    fi.addEventListener("change", async () => {
+      const files = Array.from(fi.files || []);
+      if (!files.length) return;
+      const ok = await uploadFiles(caseId, files);
+      fi.value = "";
+      if (ok) await loadFiles(caseId);
     });
   }
 
-  // Delegacje: usuń
-  document.getElementById('notesList')?.addEventListener('click', async (e) => {
-    const btn = e.target.closest('button[data-act="del-note"]');
-    if (!btn) return;
-    const row = btn.closest('.note');
-    const nid = row?.dataset.id;
-    if (!nid) return;
-    const ok = await deleteNote(id, nid);
-    if (!ok) return alert('Nie udało się usunąć notatki');
-    row.remove();
-  });
+  // Delegacje: usuń notatkę
+  const notesList = document.getElementById("notesList");
+  if (notesList) {
+    notesList.addEventListener("click", async (e) => {
+      const target = e.target;
+      if (!target || !target.closest) return;
+      const btn = target.closest('button[data-act="del-note"]');
+      if (!btn) return;
+      const row = btn.closest(".note");
+      const nid = row && row.dataset ? row.dataset.id : null;
+      if (!nid) return;
+      const ok = await deleteNote(caseId, nid);
+      if (!ok) return alert("Nie udało się usunąć notatki");
+      row.remove();
+    });
+  }
 
-  document.getElementById('attachmentsList')?.addEventListener('click', async (e) => {
-    const btn = e.target.closest('button[data-act="del-file"]');
-    if (!btn) return;
-    const row = btn.closest('.file');
-    const fid = row?.dataset.id;
-    if (!fid) return;
-    const ok = await deleteFile(id, fid);
-    if (!ok) return alert('Nie udało się usunąć pliku');
-    row.remove();
-  });
+  // Delegacje: usuń plik
+  const attachmentsList = document.getElementById("attachmentsList");
+  if (attachmentsList) {
+    attachmentsList.addEventListener("click", async (e) => {
+      const target = e.target;
+      if (!target || !target.closest) return;
+      const btn = target.closest('button[data-act="del-file"]');
+      if (!btn) return;
+      const row = btn.closest(".file");
+      const fid = row && row.dataset ? row.dataset.id : null;
+      if (!fid) return;
+      const ok = await deleteFile(caseId, fid);
+      if (!ok) return alert("Nie udało się usunąć pliku");
+      row.remove();
+    });
+  }
 
-  // Szybkie akcje
-  document.getElementById('actSendMail')?.addEventListener('click', () => {
-    const email = document.getElementById('clientEmail')?.textContent || '';
-    if (!email || email === '—') return alert('Brak adresu e-mail klienta.');
-    window.location.href = `mailto:${email}?subject=Sprawa%20${encodeURIComponent(document.getElementById('caseId')?.textContent || '')}`;
-  });
-  document.getElementById('actExportPdf')?.addEventListener('click', () => {
-    window.open(`/api/cases/${encodeURIComponent(id)}/export`, '_blank');
-  });
-  document.getElementById('actDelete')?.addEventListener('click', async () => {
-    if (!confirm('Na pewno usunąć tę sprawę?')) return;
-    const r = await fetch(`/api/cases/${encodeURIComponent(id)}`, { method: 'DELETE', headers: authHeaders() });
-    if (!r.ok) return alert('Nie udało się usunąć sprawy.');
-    location.href = '/dashboard.html';
-  });
+  // 4) Szybkie akcje
+  const actSendMail = document.getElementById("actSendMail");
+  if (actSendMail) {
+    actSendMail.addEventListener("click", () => {
+      const email =
+        (document.getElementById("clientEmail") &&
+          document.getElementById("clientEmail").textContent) ||
+        "";
+      if (!email || email === "—") {
+        return alert("Brak adresu e-mail klienta.");
+      }
+      const cid =
+        (document.getElementById("caseId") &&
+          document.getElementById("caseId").textContent) ||
+        "";
+      window.location.href = `mailto:${email}?subject=Sprawa%20${encodeURIComponent(
+        cid
+      )}`;
+    });
+  }
 
-  console.log('[case] hooks ready');
+  const actExportPdf = document.getElementById("actExportPdf");
+  if (actExportPdf) {
+    actExportPdf.addEventListener("click", () => {
+      window.open(
+        `/api/cases/${encodeURIComponent(caseId)}/export`,
+        "_blank"
+      );
+    });
+  }
+
+  const actDelete = document.getElementById("actDelete");
+  if (actDelete) {
+    actDelete.addEventListener("click", async () => {
+      if (!confirm("Na pewno usunąć tę sprawę?")) return;
+      const r = await fetch(`/api/cases/${encodeURIComponent(caseId)}`, {
+        method: "DELETE",
+        headers: authHeaders(),
+      });
+      if (!r.ok) return alert("Nie udało się usunąć sprawy.");
+      location.href = "/dashboard.html";
+    });
+  }
+
+  console.log("[case] hooks ready (v2, pure JS)");
 });
