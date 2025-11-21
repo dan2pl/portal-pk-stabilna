@@ -50,20 +50,18 @@ const PORT = process.env.PORT || 4000;
 
 app.use(
   helmet({
-    // 🔒 CSP – pozwalamy na skrypty tylko z naszej domeny + inline
-    contentSecurityPolicy: {
-      useDefaults: true,
-      directives: {
-        "default-src": ["'self'"],
-        "script-src": ["'self'", "'unsafe-inline'"],
-        "style-src": ["'self'", "'unsafe-inline'"],
-        "img-src": ["'self'", "data:"],
-      },
-    },
+    hidePoweredBy: true,
+    noSniff: true,
+    frameguard: { action: "deny" },
     referrerPolicy: { policy: "no-referrer" },
+    xssFilter: true,
+
+    // 🔥 tymczasowo wyłączamy CSP,
+    // żeby UI (zakładki, modale, accordion, inline scripts)
+    // działał poprawnie
+    contentSecurityPolicy: false,
   })
 );
-
 // Blokada dostępu do uploads
 app.use("/uploads", (req, res) => {
   return res.status(403).json({ error: "Brak dostępu" });
@@ -104,14 +102,22 @@ app.use(
       pool,
       tableName: "user_sessions",
     }),
+
+    // 🔑 tajny klucz z .env (SESSION_SECRET=...)
     secret: process.env.SESSION_SECRET || "dev-secret-change-me",
+
+    // 🥠 nazwa ciasteczka sesji
+    name: "pk.sid",
+
     resave: false,
     saveUninitialized: false,
-        cookie: {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production", // 🔒 w produkcji tylko po HTTPS
-      sameSite: "lax",
-      maxAge: 1000 * 60 * 60 * 8,
+
+    cookie: {
+      httpOnly: true,                            // JS w przeglądarce nie widzi ciasteczka
+      secure: process.env.NODE_ENV === "production", // w prod tylko po HTTPS
+      sameSite: "lax",                           // sensowny balans bezpieczeństwo/używalność
+      maxAge: 1000 * 60 * 60 * 8,                // 8h
+      path: "/",                                 // cookie ważne dla całej domeny
     },
   })
 );

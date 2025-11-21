@@ -400,7 +400,23 @@ function sendCaseError(res: any, err: any) {
   console.error("CASE API ERROR:", err);
   return res.status(500).json({ error: "Błąd serwera (CASE)" });
 }
+// ————————————————————————————
+// Helper: twarda sanityzacja liczb finansowych
+// ————————————————————————————
+function sanitizeNumberLike(raw: any): number | null {
+  if (raw === null || raw === undefined) return null;
 
+  let s = String(raw)
+    .replace(/\s+/g, "")   // usuń spacje
+    .replace(",", ".")     // zamień przecinek na kropkę
+    .replace(/[^\d.-]/g, ""); // wyrzuć wszystko poza cyframi, - i .
+
+  // Usuń przypadki "--12", "12-", ".", "-", "--", itp:
+  if (s === "" || s === "." || s === "-" || s === "-.") return null;
+
+  const num = Number(s);
+  return Number.isFinite(num) ? num : null;
+}
 // === ULTRA-SAFE LISTA SPRAW (GET /api/cases) ===
 app.get("/api/cases",
   softApiLimit,       // lekkie ograniczenie dla list
@@ -679,7 +695,7 @@ app.get(
   }
 });
 
-  // === PATCH /api/cases/:id — bezpieczna aktualizacja sprawy ===
+// === OGÓLNA CZĘŚCIOWA AKTUALIZACJA SPRAWY ===
 app.patch(
   "/api/cases/:id",
   mediumApiLimit,
@@ -694,101 +710,166 @@ app.patch(
     "email",
     "address",
     "pesel",
-    "notes",
+    "notes"
   ]),
   async (req, res) => {
     try {
       const user = (req as any).user;
-      const idRaw = req.params.id;
-      const id = Number(idRaw);
+      const id = Number(req.params.id);
 
       if (!Number.isFinite(id)) {
         return res.status(400).json({ error: "Nieprawidłowe ID sprawy" });
       }
 
-      // 1) upewnij się, że użytkownik ma dostęp do tej sprawy
-      const row = await loadCaseForUser(id, user); // rzuca błąd, jeśli brak dostępu / brak sprawy
+      // 🔐 Sprawdzenie uprawnień
+      await loadCaseForUser(id, user);
 
-      // 2) wyciągamy tylko dozwolone pola z body (po denyUnknownFields to i tak biała lista)
-      const {
-        client,
-        bank,
-        loan_amount,
-        status,
-        contract_date,
-        phone,
-        email,
-        address,
-        pesel,
-        notes,
-      } = req.body || {};
+      // ==============================
+      // 1) WHITELISTA DOZWOLONYCH PÓL
+      // ==============================
+      const allowedFields = {
+        client: true,
+        bank: true,
+        loan_amount: true,
+        status: true,
+        contract_date: true,
+        phone: true,
+        email: true,
+        address: true,
+        pesel: true,
+        notes: true
+      };
 
-      // 3) prosta walidacja – np. kwota kredytu musi być liczbą
-      if (loan_amount !== undefined && isNaN(Number(loan_amount))) {
-        return res.status(400).json({ error: "Nieprawidłowa kwota kredytu" });
+      // ==============================
+      // 2) Pobranie i wybór pól
+      // ==============================
+      const body = req.body || {};
+      const update: any = {};
+
+      for (const key of Object.keys(body)) {
+        if (allowedFields[key]) {
+          update[key] = body[key];
+        }
       }
 
-      // 4) budujemy dynamicznego PATCH-a
-      const fields: string[] = [];
-      const values: any[] = [];
-      let i = 1;
-
-      function addField(column: string, value: any) {
-        fields.push(`${column} = $${i++}`);
-        values.push(value);
-      }
-
-      if (client !== undefined)       addField("client", client);
-      if (bank !== undefined)         addField("bank", bank);
-      if (loan_amount !== undefined)  addField("loan_amount", Number(loan_amount));
-      if (status !== undefined)       addField("status", status);
-      if (contract_date !== undefined) addField("contract_date", contract_date || null);
-      if (phone !== undefined)        addField("phone", phone);
-      if (email !== undefined)        addField("email", email);
-      if (address !== undefined)      addField("address", address);
-      if (pesel !== undefined)        addField("pesel", pesel);
-      if (notes !== undefined)        addField("notes", notes);
-
-      if (!fields.length) {
+      if (Object.keys(update).length === 0) {
         return res.status(400).json({ error: "Brak pól do aktualizacji" });
       }
 
-      // updated_at zawsze się odświeża
-      fields.push(`updated_at = NOW()`);
+      // 🔧 pomocniczy cleaner tekstu
+      const clean = (v: any) =>
+        typeof v === "string" ? v.replace(/[<>]/g, "").trim() : v;
 
+      // 🔧 sanitizator liczb
+      const sanitizeNumberLike = (raw: any): number | null => {
+        if (raw === null || raw === undefined) return null;
+
+        let s = String(raw)
+          .replace(/\s+/g, "")
+          .replace(",", ".")
+          .replace(/[^\d.-]/g, "");
+
+        if (s === "" || s === "." || s === "-" || s === "-.") return null;
+
+        const num = Number(s);
+        return Number.isFinite(num) ? num : null;
+      };
+
+      // ==============================
+      // 3) WALIDACJE – bezpieczne i twarde
+      // ==============================
+
+      // EMAIL
+      if (update.email !== undefined) {
+        const e = clean(update.email);
+        if (e && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e)) {
+          return res.status(400).json({ error: "Nieprawidłowy adres e-mail" });
+        }
+        update.email = e || null;
+      }
+
+      // TELEFON
+      if (update.phone !== undefined) {
+        const p = clean(update.phone);
+        if (p && !/^[0-9+\-\s]{5,20}$/.test(p)) {
+          return res.status(400).json({ error: "Nieprawidłowy numer telefonu" });
+        }
+        update.phone = p || null;
+      }
+
+      // PESEL
+      if (update.pesel !== undefined) {
+        const p = clean(update.pesel);
+        if (p && !/^[0-9]{11}$/.test(p)) {
+          return res.status(400).json({ error: "Nieprawidłowy PESEL" });
+        }
+        update.pesel = p || null;
+      }
+
+      // KWOTA KREDYTU — ✨ NOWA MOCNA WALIDACJA ✨
+      if (update.loan_amount !== undefined) {
+        const amount = sanitizeNumberLike(update.loan_amount);
+
+        if (amount === null || amount < 0 || amount > 5_000_000) {
+          return res.status(400).json({ error: "Nieprawidłowa kwota kredytu" });
+        }
+
+        update.loan_amount = amount;
+      }
+
+      // DATA
+      if (update.contract_date !== undefined) {
+        const d = clean(update.contract_date);
+        if (d && isNaN(Date.parse(d))) {
+          return res.status(400).json({ error: "Nieprawidłowa data umowy" });
+        }
+        update.contract_date = d || null;
+      }
+
+      // TEKSTY
+      const safeText = (t: any, max: number) =>
+        t ? clean(String(t).slice(0, max)) : null;
+
+      if (update.client) update.client = safeText(update.client, 200);
+      if (update.bank) update.bank = safeText(update.bank, 200);
+      if (update.address) update.address = safeText(update.address, 400);
+      if (update.notes) update.notes = safeText(update.notes, 2000);
+      if (update.status) update.status = safeText(update.status, 100);
+
+      // ==============================
+      // 4) BUDOWANIE UPDATE SQL
+      // ==============================
+      const sqlFields = [];
+      const values = [];
+      let i = 1;
+
+      for (const [k, v] of Object.entries(update)) {
+        sqlFields.push(`${k} = $${i}`);
+        values.push(v);
+        i++;
+      }
+
+      sqlFields.push(`updated_at = NOW()`);
       values.push(id);
 
-      const q = await pool.query(
-        `UPDATE cases
-         SET ${fields.join(", ")}
-         WHERE id = $${i}
-         RETURNING
-           id,
-           client,
-           bank,
-           loan_amount,
-           status,
-           contract_date,
-           phone,
-           email,
-           address,
-           pesel,
-           wps_forecast,
-           wps_final,
-           client_benefit,
-           notes,
-           owner_id,
-           updated_at`,
+      const result = await pool.query(
+        `UPDATE cases SET ${sqlFields.join(", ")} WHERE id = $${i} RETURNING *`,
         values
       );
 
-      if (!q.rows.length) {
+      if (result.rowCount === 0) {
         return res.status(404).json({ error: "Sprawa nie istnieje" });
       }
 
-      res.json(q.rows[0]);
+      // AUDYT
+      console.log(
+        `[PATCH CASE] user=${user.id}, case=${id}, updated=${Object.keys(update).join(", ")}`
+      );
+
+      return res.json(result.rows[0]);
     } catch (err) {
-      sendCaseError(res, err);
+      console.error("PATCH /api/cases/:id ERROR:", err);
+      return res.status(500).json({ error: "Błąd serwera" });
     }
   }
 );
@@ -1016,7 +1097,7 @@ app.put(
       // 2) WPS forecast — twarde granice
       // ============================
       const wf = Number(wps_forecast);
-      if (!Number.isFinite(wf) || wf < 0 || wf > 5_000_000) {
+      if (!Number.isFinite(wf) || wf < 0 || wf > 1_000_000) {
         return res.status(400).json({ error: "Nieprawidłowa wartość WPS forecast." });
       }
 
@@ -1038,33 +1119,39 @@ app.put(
 
       // ============================
       // 5) buyout_pct — tylko jeśli SELL
-      // ============================
-      let buyout_pct = null;
+      // --- BUYOUT (10–15% w UI; 0.10–0.15 w bazie) ---
+let buyout_pct: number | null = null;
 
-      if (variant === "sell") {
-        const raw = offer_skd.buyout_pct;
+if (variant === "sell") {
+  // może przyjść 12, "12", 0.12, "0,12" itd.
+  const raw = sanitizeNumberLike(offer_skd.buyout_pct);
 
-        const pct = Number(raw);
-        if (!Number.isFinite(pct)) {
-          return res.status(400).json({ error: "buyout_pct musi być liczbą." });
-        }
+  if (raw === null) {
+    return res
+      .status(400)
+      .json({ error: "buyout_pct musi być liczbą w zakresie 10–15%." });
+  }
 
-        if (pct < 10 || pct > 15) {
-          return res.status(400).json({
-            error: "buyout_pct musi zawierać się między 10 a 15.",
-          });
-        }
+  // jeśli ktoś poda 12 → zamieniamy na 0.12
+  // jeśli 0.12 → zostawiamy
+  let normalized = raw > 1 ? raw / 100 : raw;
 
-        buyout_pct = pct;
-      }
+  if (normalized < 0.10 || normalized > 0.15) {
+    return res.status(400).json({
+      error: "buyout_pct musi zawierać się między 10 a 15 procent.",
+    });
+  }
+
+  buyout_pct = normalized; // w bazie zawsze 0.10–0.15
+} else {
+  buyout_pct = null;
+}
 
       // ============================
       // 6) future_interest — opcjonalne, czyszczone
       // ============================
-      let future_interest = Number(offer_skd.future_interest || 0);
-      if (!Number.isFinite(future_interest) || future_interest < 0) {
-        future_interest = 0;
-      }
+      let future_interest = sanitizeNumberLike(offer_skd.future_interest) ?? 0;
+if (future_interest < 0) future_interest = 0;
 
       // ============================
       // 7) eligibility — twardy boolean-cast
@@ -1125,66 +1212,102 @@ app.put(
   }
 );
 
-  // === DOKUMENTY SPRAWY: POBRANIE PLIKU (z kontrolą właściciela) ===
-app.get("/api/files/:fileId", softApiLimit, requireAuth, async (req, res) => {
-  const user = (req as any).user;
-  const rawId = req.params.fileId;
-  const fileId = Number(rawId);
+// === POBIERANIE PLIKU (download) ===
+app.get(
+  "/api/files/:fileId",
+  softApiLimit,
+  requireAuth,
+  async (req, res) => {
+    const user = (req as any).user;
+    const rawId = req.params.fileId;
+    const fileId = Number(rawId);
 
-  if (!Number.isFinite(fileId)) {
-    return res.status(400).json({ error: "Nieprawidłowe ID pliku" });
-  }
-
-  try {
-    const q = await pool.query(
-      `
-      SELECT
-        cf.case_id,
-        cf.original_name,
-        cf.stored_name,
-        cf.mime_type,
-        c.owner_id
-      FROM case_files cf
-      JOIN cases c ON c.id = cf.case_id
-      WHERE cf.id = $1
-      `,
-      [fileId]
-    );
-
-    if (q.rowCount === 0) {
-      return res.status(404).json({ error: "Plik nie istnieje" });
+    if (!Number.isFinite(fileId)) {
+      return res.status(400).json({ error: "Nieprawidłowe ID pliku" });
     }
 
-    const row = q.rows[0];
+    try {
+      // 1) Pobieramy info o pliku + właściciela sprawy
+      const q = await pool.query(
+        `
+        SELECT
+          cf.id,
+          cf.case_id,
+          cf.original_name,
+          cf.stored_name,
+          cf.mime_type,
+          cf.size,
+          c.owner_id
+        FROM case_files cf
+        JOIN cases c ON c.id = cf.case_id
+        WHERE cf.id = $1
+        `,
+        [fileId]
+      );
 
-    // 🔒 sprawdzamy uprawnienia
-    if (user.role !== "admin" && row.owner_id !== user.id) {
-      return res.status(403).json({ error: "Brak dostępu do tej sprawy" });
+      if (q.rowCount === 0) {
+        return res.status(404).json({ error: "Plik nie istnieje" });
+      }
+
+      const row = q.rows[0];
+
+      // 2) Sprawdzamy uprawnienia (admin albo właściciel sprawy)
+      if (user.role !== "admin" && row.owner_id !== user.id) {
+        return res.status(403).json({ error: "Brak dostępu do tej sprawy" });
+      }
+
+      // 3) Budujemy bezpieczną ścieżkę do pliku
+      const uploadsRoot = path.join(process.cwd(), "uploads", "cases");
+      const filePath = path.join(
+        uploadsRoot,
+        String(row.case_id),
+        row.stored_name
+      );
+      const resolved = path.resolve(filePath);
+
+      // ⛔ twarda kontrola, żeby ktoś nie wyszedł poza katalog uploads/cases
+      if (!resolved.startsWith(uploadsRoot)) {
+        console.error("Próba wyjścia poza katalog uploads:", resolved);
+        return res.status(400).json({ error: "Nieprawidłowa ścieżka pliku" });
+      }
+
+      // 4) Sprawdź czy plik fizycznie istnieje
+      try {
+        await fsPromises.stat(resolved);
+      } catch (err: any) {
+        if (err.code === "ENOENT") {
+          return res.status(404).json({ error: "Plik nie istnieje na dysku" });
+        }
+        console.error("Błąd stat dla pliku:", err);
+        return res.status(500).json({ error: "Błąd serwera przy odczycie pliku" });
+      }
+
+      // 5) Nagłówki i wysyłka pliku
+      const mime = row.mime_type || "application/octet-stream";
+      const orig = row.original_name || "plik";
+
+      res.setHeader("Content-Type", mime);
+      res.setHeader(
+        "Content-Disposition",
+        `attachment; filename="${encodeURIComponent(orig)}"`
+      );
+
+      return res.sendFile(resolved, (err) => {
+        if (err) {
+          console.error("sendFile error:", err);
+          if (!res.headersSent) {
+            res.status(500).json({ error: "Błąd podczas wysyłania pliku" });
+          }
+        }
+      });
+    } catch (err) {
+      console.error("GET /api/files/:fileId error:", err);
+      return res
+        .status(500)
+        .json({ error: "Błąd serwera przy pobieraniu pliku" });
     }
-
-    // 📂 dopasowane do struktury: uploads/cases/<case_id>/<stored_name>
-    const filePath = path.join(
-      process.cwd(),
-      "uploads",
-      "cases",
-      String(row.case_id),
-      row.stored_name
-    );
-
-    res.setHeader("Content-Type", row.mime_type || "application/octet-stream");
-    res.setHeader(
-      "Content-Disposition",
-      `attachment; filename="${encodeURIComponent(row.original_name)}"`
-    );
-
-    return res.sendFile(filePath);
-  } catch (err) {
-    console.error("GET /api/files/:fileId error:", err);
-    return res
-      .status(500)
-      .json({ error: "Błąd serwera przy pobieraniu pliku" });
   }
-});
+);
 
   // === DOKUMENTY SPRAWY: LISTA PLIKÓW ===
   app.get(
@@ -1405,57 +1528,48 @@ app.delete("/api/files/:fileId", hardApiLimit, requireAuth, async (req, res) => 
   }
 );
 
- // === DELETE SPRAWY ===
-// pełne bezpieczeństwo + audyt
+// === USUWANIE SPRAWY (DELETE) ===
 app.delete(
   "/api/cases/:id",
   hardApiLimit,
   requireAuth,
   async (req, res) => {
+
+    const user = (req as any).user;
+    const idRaw = req.params.id;
+    const id = Number(idRaw);
+
+    console.log(`[DELETE /api/cases/${id}] by user=${user.id}, role=${user.role}`);
+    
+    if (!Number.isFinite(id)) {
+      return res.status(400).json({ error: "Nieprawidłowe ID sprawy" });
+    }
+
+    const allowed = await verifyCaseOwnership(id, user);
+    if (allowed === null) {
+      return res.status(404).json({ error: "Sprawa nie istnieje" });
+    }
+    if (!allowed) {
+      return res.status(403).json({ error: "Brak dostępu do tej sprawy" });
+    }
+
     try {
-      const user = (req as any).user;
-      const id = Number(req.params.id);
-
-      if (!Number.isFinite(id)) {
-        return res.status(400).json({ error: "Nieprawidłowe ID sprawy" });
-      }
-
-      // 🔐 Pobierz sprawę i upewnij się, że użytkownik może ją usunąć
-      const row = await loadCaseForUser(id, user);
-
-      // Jeśli chcesz: admin może usuwać wszystko (ON już ma dostęp)
-      // Agent → tylko swoje sprawy
-      if (user.role !== "admin" && row.owner_id !== user.id) {
-        return res.status(403).json({ error: "Brak dostępu do tej sprawy" });
-      }
-
-      // Usuń pliki fizyczne
-      const folder = path.join(process.cwd(), "uploads", "cases", String(id));
-      try {
-        await fsPromises.rm(folder, { recursive: true, force: true });
-      } catch (err) {
-        console.warn("Błąd usuwania folderu sprawy:", err);
-      }
-
-      // Usuń rekordy z bazy
-      await pool.query(
-        "DELETE FROM case_files WHERE case_id = $1",
-        [id]
-      );
-      await pool.query(
-        "DELETE FROM cases WHERE id = $1",
+      const result = await pool.query(
+        "DELETE FROM cases WHERE id = $1 RETURNING id",
         [id]
       );
 
-      // AUDYT
-      console.log(
-        `[DELETE CASE] user=${user.id}, role=${user.role}, case=${id} SUCCESS`
-      );
+      if (result.rowCount === 0) {
+        return res.status(404).json({ error: "Sprawa nie istnieje" });
+      }
 
-      return res.json({ ok: true });
+      console.log("🗑️ Usunięto sprawę id =", id);
+      return res.json({ success: true });
     } catch (err) {
-      console.error("DELETE /api/cases/:id error:", err);
-      return res.status(500).json({ error: "Błąd serwera" });
+      console.error("Błąd przy DELETE /api/cases/:id:", err);
+      return res
+        .status(500)
+        .json({ error: "Błąd serwera przy usuwaniu sprawy" });
     }
   }
 );

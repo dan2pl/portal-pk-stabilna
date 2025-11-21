@@ -794,7 +794,15 @@ function renderFilePreview() {
 // --- Drag & Drop + klik ---
 if (dropArea && addFilesEl) {
   // Klik = otwieranie okna wyboru plików
-  dropArea.addEventListener("click", () => addFilesEl.click());
+  dropArea.addEventListener("click", (e) => {
+    // Jeśli kliknięto link (np. iLovePDF) – nie otwieramy file pickera
+    if (e.target.closest("a")) {
+      return;
+    }
+
+    // Normalny klik w box → otwórz okno wyboru pliku
+    addFilesEl.click();
+  });
 
   // Drag & Drop
   dropArea.addEventListener("dragover", (e) => {
@@ -811,10 +819,23 @@ if (dropArea && addFilesEl) {
     dropArea.classList.remove("dragover");
 
     const dropped = Array.from(e.dataTransfer?.files || []);
+    if (!dropped.length) return;
+
     pendingFiles.push(...dropped);
     syncFilesToInput();
     renderFilePreview();
   });
+
+  // Wybranie plików przez okno wyboru
+  addFilesEl.addEventListener("change", () => {
+    const selected = Array.from(addFilesEl.files || []);
+    if (!selected.length) return;
+
+    pendingFiles.push(...selected);
+    syncFilesToInput();
+    renderFilePreview();
+  });
+}
 
   // Wybranie plików przez kliknięcie
   addFilesEl.addEventListener("change", () => {
@@ -823,7 +844,7 @@ if (dropArea && addFilesEl) {
     syncFilesToInput();
     renderFilePreview();
   });
-}
+
 
 // --- handler przycisku dodania sprawy (dopisz/zmień u siebie tylko środek) ---
 addBtn?.addEventListener("click", async (e) => {
@@ -845,7 +866,6 @@ addBtn?.addEventListener("click", async (e) => {
     client,
     loan_amount: loanAmount,
     bank,
-    status: "nowa",
   }),
 });
 
