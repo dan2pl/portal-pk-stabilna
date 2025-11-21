@@ -8,288 +8,11 @@
 
     <!-- Jeśli masz już globalny CSS (np. styles.css / dashboard.css), podłącz go tutaj -->
     <link rel="stylesheet" href="style.css" />
-
-    <style>
-      /* Minimalne style pod layout – możesz z czasem przenieść do głównego CSS */
-
-      body {
-        margin: 0;
-        font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
-          sans-serif;
-        background: #f3f4f6;
-        color: #111827;
-      }
-
-      .page {
-        max-width: 1200px;
-        margin: 0 auto;
-        padding: 16px;
-      }
-
-      .card {
-        background: #ffffff;
-        border-radius: 12px;
-        padding: 16px;
-        box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08);
-        margin-bottom: 16px;
-      }
-
-      .case-header {
-        display: flex;
-        flex-wrap: wrap;
-        align-items: center;
-        justify-content: space-between;
-        gap: 12px;
-      }
-
-      .case-header-main {
-        display: flex;
-        flex-direction: column;
-        gap: 4px;
-      }
-
-      .case-title {
-        font-size: 1.25rem;
-        font-weight: 600;
-      }
-
-      .case-subtitle {
-        font-size: 0.9rem;
-        color: #6b7280;
-      }
-
-      .case-tags {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 8px;
-      }
-
-      .tag {
-        font-size: 0.75rem;
-        padding: 4px 8px;
-        border-radius: 999px;
-        background: #e5e7eb;
-        color: #374151;
-      }
-
-      .tag-primary {
-        background: #991b1b;
-        color: #fef2f2;
-      }
-
-      .tag-success {
-        background: #065f46;
-        color: #ecfdf5;
-      }
-
-      .tag-warning {
-        background: #92400e;
-        color: #fffbeb;
-      }
-
-      .case-actions {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 8px;
-      }
-
-      .btn {
-        border: none;
-        border-radius: 999px;
-        padding: 8px 14px;
-        font-size: 0.9rem;
-        cursor: pointer;
-      }
-
-      .btn-primary {
-        background: #991b1b;
-        color: #f9fafb;
-      }
-
-      .btn-outline {
-        background: #ffffff;
-        color: #374151;
-        border: 1px solid #e5e7eb;
-      }
-
-      .case-layout {
-        display: grid;
-        grid-template-columns: minmax(0, 280px) minmax(0, 1fr);
-        gap: 16px;
-      }
-
-      @media (max-width: 900px) {
-        .case-layout {
-          grid-template-columns: minmax(0, 1fr);
-        }
-      }
-
-      .case-sidebar {
-        display: flex;
-        flex-direction: column;
-        gap: 16px;
-      }
-
-      .case-sidebar-section-title {
-        font-size: 0.9rem;
-        font-weight: 600;
-        margin-bottom: 8px;
-      }
-
-      .case-sidebar-row {
-        display: flex;
-        justify-content: space-between;
-        font-size: 0.85rem;
-        margin-bottom: 4px;
-      }
-
-      .case-sidebar-label {
-        color: #6b7280;
-      }
-
-      .case-sidebar-value {
-        font-weight: 500;
-      }
-
-      /* Tabs */
-
-      .case-tabs {
-        display: flex;
-        gap: 8px;
-        border-bottom: 1px solid #e5e7eb;
-        margin-bottom: 12px;
-        overflow-x: auto;
-      }
-
-      .case-tab {
-        padding: 8px 12px;
-        font-size: 0.9rem;
-        border-radius: 999px 999px 0 0;
-        cursor: pointer;
-        border: 1px solid transparent;
-        white-space: nowrap;
-      }
-
-      .case-tab.active {
-        background: #ffffff;
-        border-color: #e5e7eb;
-        border-bottom-color: #ffffff;
-        font-weight: 600;
-      }
-
-      .case-tab:not(.active) {
-        color: #6b7280;
-      }
-
-      .tab-panels {
-        padding-top: 4px;
-      }
-
-      .tab-panel {
-        display: none;
-      }
-
-      .tab-panel.active {
-        display: block;
-      }
-
-      /* Accordion */
-
-      .accordion {
-        display: flex;
-        flex-direction: column;
-        gap: 8px;
-      }
-
-      .accordion-item {
-        border-radius: 10px;
-        border: 1px solid #e5e7eb;
-        overflow: hidden;
-        background: #f9fafb;
-      }
-
-      .accordion-header {
-        padding: 10px 12px;
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        cursor: pointer;
-      }
-
-      .accordion-title {
-        font-size: 0.9rem;
-        font-weight: 500;
-      }
-
-      .accordion-toggle {
-        font-size: 0.9rem;
-        color: #6b7280;
-      }
-
-      .accordion-body {
-        padding: 10px 12px 12px;
-        border-top: 1px solid #e5e7eb;
-        display: none;
-        font-size: 0.85rem;
-      }
-
-      .accordion-item.open .accordion-body {
-        display: block;
-      }
-
-      .accordion-item.open .accordion-toggle {
-        transform: rotate(90deg);
-      }
-
-      .field-row {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-        gap: 10px;
-        margin-bottom: 10px;
-      }
-
-      .field {
-        display: flex;
-        flex-direction: column;
-        gap: 4px;
-      }
-
-      .field label {
-        font-size: 0.8rem;
-        color: #6b7280;
-      }
-
-      .field input,
-      .field select,
-      .field textarea {
-        border-radius: 8px;
-        border: 1px solid #d1d5db;
-        padding: 6px 8px;
-        font-size: 0.85rem;
-      }
-
-      .field textarea {
-        resize: vertical;
-        min-height: 60px;
-      }
-
-      .section-actions {
-        display: flex;
-        justify-content: flex-end;
-        gap: 8px;
-        margin-top: 8px;
-      }
-
-      .section-actions .btn {
-        font-size: 0.8rem;
-        padding: 6px 10px;
-      }
-    </style>
   </head>
   <body>
     <div class="page">
       <!-- NAGŁÓWEK SPRAWY -->
-      <section class="card case-header" id="caseHeader">
+      <section class="card case-header case-card case-anim case-anim-delay-1">
         <div class="case-header-main">
           <div class="case-title">
             Sprawa <span id="caseId">#12345</span> –
@@ -307,11 +30,13 @@
           </div>
         </div>
         <div class="case-actions">
-          <button class="btn btn-outline" id="btnBack">Powrót</button>
-          <button class="btn btn-primary" id="btnSaveAll">Zapisz zmiany</button>
+          <button class="btn btn-outline case-btn" id="btnBack">Powrót</button>
+          <button class="btn btn-primary case-btn" id="btnSaveAll">
+            Zapisz zmiany
+          </button>
           <button
             id="deleteCaseBtn"
-            class="btn btn-danger"
+            class="btn btn-danger case-btn"
             type="button"
             style="margin-left: 8px"
           >
@@ -323,7 +48,7 @@
       <section class="case-layout">
         <!-- LEWY SIDEBAR -->
         <aside class="case-sidebar">
-          <div class="card">
+          <div class="card case-card case-anim case-anim-delay-1">
             <div class="case-sidebar-section-title">Podsumowanie finansowe</div>
             <div class="case-sidebar-row">
               <span class="case-sidebar-label">Kwota kredytu</span>
@@ -351,7 +76,7 @@
             </div>
           </div>
 
-          <div class="card">
+          <div class="card case-details case-card case-anim case-anim-delay-2">
             <div class="case-sidebar-section-title">Status sprawy</div>
             <div class="case-sidebar-row">
               <span class="case-sidebar-label">Etap</span>
@@ -368,14 +93,27 @@
             <div class="case-sidebar-row">
               <span class="case-sidebar-label">Ostatnia zmiana</span>
               <span class="case-sidebar-value" id="summaryLastUpdate">
-                15.11.2025
+                21.11.2025
               </span>
+            </div>
+            <div
+              class="case-sidebar-section-title"
+              style="margin-top: 10px; margin-bottom: 4px"
+            >
+              Postęp sprawy
+            </div>
+            <div class="case-progress-bar">
+              <div
+                id="caseProgressFill"
+                class="case-progress-fill"
+                aria-label="Postęp sprawy"
+              ></div>
             </div>
           </div>
         </aside>
 
         <!-- PRAWA STRONA: TABS + PANELS -->
-        <main class="card">
+        <main class="card case-card case-anim case-anim-delay-2">
           <!-- TABS -->
           <div class="case-tabs" id="caseTabs">
             <button class="case-tab active" data-tab="client">
@@ -392,7 +130,7 @@
           <div class="tab-panels">
             <!-- PANEL: DANE KLIENTA -->
             <section
-              class="tab-panel active"
+              class="tab-panel active case-anim case-anim-delay-1"
               data-tab-panel="client"
               id="panelClient"
             >
@@ -458,10 +196,16 @@
                     </div>
 
                     <div class="section-actions">
-                      <button class="btn btn-outline" id="btnClientCancel">
+                      <button
+                        class="btn btn-outline case-btn"
+                        id="btnClientCancel"
+                      >
                         Anuluj
                       </button>
-                      <button class="btn btn-primary" id="btnClientSave">
+                      <button
+                        class="btn btn-primary case-btn"
+                        id="btnClientSave"
+                      >
                         Zapisz dane klienta
                       </button>
                     </div>
@@ -492,7 +236,11 @@
             </section>
 
             <!-- PANEL: DANE KREDYTU -->
-            <section class="tab-panel" data-tab-panel="credit" id="panelCredit">
+            <section
+              class="tab-panel case-anim case-anim-delay-2"
+              data-tab-panel="credit"
+              id="panelCredit"
+            >
               <div class="accordion">
                 <div class="accordion-item open">
                   <div class="accordion-header">
@@ -569,7 +317,11 @@
             </section>
 
             <!-- PANEL: SKD -->
-            <section class="tab-panel" data-tab-panel="skd" id="panelSkd">
+            <section
+              class="tab-panel case-anim case-anim-delay-3"
+              data-tab-panel="skd"
+              id="panelSkd"
+            >
               <div class="accordion">
                 <div class="accordion-item open">
                   <div class="accordion-header">
@@ -591,6 +343,18 @@
                           <option value="odrzucone">Odrzucone</option>
                         </select>
                       </div>
+                      <div class="field">
+                        <label for="caseStage">Etap sprawy</label>
+                        <select id="caseStage">
+                          <option value="nowa">Nowa</option>
+                          <option value="analiza">Analiza</option>
+                          <option value="przygotowanie">W przygotowaniu</option>
+                          <option value="wyslane">Wysłane do banku</option>
+                          <option value="uznane">Uznane</option>
+                          <option value="odrzucone">Odrzucone</option>
+                        </select>
+                      </div>
+
                       <div class="field">
                         <label for="skdDate">Data wysłania SKD</label>
                         <input type="date" id="skdDate" />
@@ -657,7 +421,11 @@
             </section>
 
             <!-- PANEL: DOKUMENTY -->
-            <section class="tab-panel" data-tab-panel="docs" id="panelDocs">
+            <section
+              class="tab-panel case-anim case-anim-delay-2"
+              data-tab-panel="docs"
+              id="panelDocs"
+            >
               <div class="accordion">
                 <div class="accordion-item open">
                   <div class="accordion-header">
@@ -700,7 +468,11 @@
             </section>
 
             <!-- PANEL: NOTATKI -->
-            <section class="tab-panel" data-tab-panel="notes" id="panelNotes">
+            <section
+              class="tab-panel case-anim case-anim-delay-3"
+              data-tab-panel="notes"
+              id="panelNotes"
+            >
               <div class="accordion">
                 <div class="accordion-item open">
                   <div class="accordion-header">
@@ -727,7 +499,7 @@
 
             <!-- PANEL: HISTORIA ZMIAN -->
             <section
-              class="tab-panel"
+              class="tab-panel case-anim case-anim-delay-4"
               data-tab-panel="history"
               id="panelHistory"
             >
@@ -739,7 +511,48 @@
                   </div>
                   <div class="accordion-body">
                     <!-- Tu w Etapie 14C podłączymy historię z bazy -->
-                    <p>Historia zmian w przygotowaniu...</p>
+                    <div class="case-history-list" id="caseHistoryList">
+                      <!-- Na razie mock – później podmienimy na dane z API -->
+                      <div
+                        class="case-history-item case-anim case-anim-delay-1"
+                      >
+                        <div class="case-history-dot"></div>
+                        <div class="case-history-content">
+                          <div class="case-history-title">Sprawa utworzona</div>
+                          <div class="case-history-meta">
+                            12.10.2025 · system
+                          </div>
+                        </div>
+                      </div>
+
+                      <div
+                        class="case-history-item case-anim case-anim-delay-2"
+                      >
+                        <div class="case-history-dot"></div>
+                        <div class="case-history-content">
+                          <div class="case-history-title">
+                            Dodano dane kredytu
+                          </div>
+                          <div class="case-history-meta">
+                            14.10.2025 · Jan Kowalski
+                          </div>
+                        </div>
+                      </div>
+
+                      <div
+                        class="case-history-item case-anim case-anim-delay-3"
+                      >
+                        <div class="case-history-dot"></div>
+                        <div class="case-history-content">
+                          <div class="case-history-title">
+                            Przygotowanie SKD
+                          </div>
+                          <div class="case-history-meta">
+                            21.10.2025 · Jan Kowalski
+                          </div>
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -789,7 +602,6 @@
 
       function normalizeDateToInput(value) {
         if (!value) return "";
-        // obsłuż zarówno "2025-11-18", jak i pełne ISO
         const d = new Date(value);
         if (isNaN(d.getTime())) return "";
         const yyyy = d.getFullYear();
@@ -814,7 +626,36 @@
         return document.getElementById(id);
       }
 
+      // === PROGRES ETAPU SPRAWY ===
+
+      function stageToProgress(value) {
+        switch (String(value).toLowerCase()) {
+          case "nowa":
+            return 10;
+          case "analiza":
+            return 30;
+          case "przygotowanie":
+            return 45;
+          case "wyslane":
+            return 70;
+          case "uznane":
+            return 100;
+          case "odrzucone":
+            return 0;
+          default:
+            return 0;
+        }
+      }
+
+      function updateCaseProgress(stage) {
+        const fill = document.getElementById("caseProgressFill");
+        if (!fill) return;
+        const percent = stageToProgress(stage);
+        fill.style.width = percent + "%";
+      }
+
       // === WYPEŁNIANIE DANYCH Z API ===
+
       function fillCaseHeader(data) {
         const caseId = data.id ?? data.caseId ?? "";
         const clientName =
@@ -880,7 +721,7 @@
           data.total_cost ??
           data.creditTotalCost ??
           data.credit_total_cost ??
-          null; // jeśli jeszcze nie masz tego pola – zostanie "—"
+          null;
 
         const skdPotential = data.skd_potential ?? data.skdPotential ?? null;
 
@@ -926,7 +767,6 @@
         $("clientEmail").value =
           data.email ?? data.clientEmail ?? data.client_email ?? "";
 
-        // --- rozbijamy address na: kod, miasto, ulica ---
         const addr = data.address ?? "";
         const { street, city, postcode } = splitAddress(addr);
 
@@ -942,7 +782,6 @@
           return { street: "", city: "", postcode: "" };
         }
 
-        // Oczekiwany format: "XX-XXX Miasto, Ulica 123"
         const [left, right] = address.split(",").map((s) => s.trim());
 
         let street = right || "";
@@ -951,17 +790,14 @@
 
         if (left) {
           const parts = left.split(/\s+/);
-          // jeśli pierwsza część wygląda jak kod pocztowy 00-000
           if (parts.length > 1 && /^\d{2}-\d{3}$/.test(parts[0])) {
             postcode = parts[0];
             city = parts.slice(1).join(" ");
           } else {
-            // brak kodu – traktujemy całe left jako miasto
             city = left;
           }
         }
 
-        // jeśli nie ma przecinka, załóż że całe address to ulica
         if (!right && !street) {
           street = address;
         }
@@ -1018,14 +854,18 @@
         $("skdWpsForecast").value = wps;
         $("skdOfferVariant").value = variant;
         $("skdOfferText").value = offerText;
+
+        // 🔥 JEDYNE miejsce, które ustawia etap sprawy (czyli status z backendu)
+        const backendStatus = data.status || "nowa";
+        const normalized = String(backendStatus).toLowerCase();
+
+        $("caseStage").value = normalized;
+        updateCaseProgress(normalized);
       }
 
       function fillNotesSection(data) {
         $("caseNotes").value =
-          data.notes ?? // główne pole z bazy
-          data.caseNotes ?? // ewentualne stare nazwy
-          data.case_notes ?? // ewentualne pole snake_case
-          "";
+          data.notes ?? data.caseNotes ?? data.case_notes ?? "";
       }
 
       // === FETCH DANYCH ===
@@ -1045,7 +885,7 @@
         return await res.json();
       }
 
-      // === REALNE ZAPISY DO BACKENDU – WERSJA NA PATCH /api/cases/:id ===
+      // === ZAPISY DO BACKENDU ===
       async function saveSection(caseId, section, payload) {
         let url = null;
         let method = "PATCH";
@@ -1055,16 +895,12 @@
           case "credit":
           case "skd":
           case "notes":
-            // wszystko, co dotyczy samej sprawy, idzie na PATCH /api/cases/:id
             url = `${API_BASE}/cases/${caseId}`;
             break;
-
           case "skd-offer":
-            // oferta SKD ma już osobny, działający endpoint
             url = `${API_BASE}/cases/${caseId}/skd-offer`;
             method = "PUT";
             break;
-
           default:
             throw new Error(`Nieznana sekcja zapisu: ${section}`);
         }
@@ -1082,52 +918,60 @@
 
         return res.json().catch(() => ({}));
       }
+
       function showSaveToast(message) {
+        const existing = document.querySelector(".case-toast");
+        if (existing) {
+          existing.remove();
+        }
+
         const toast = document.createElement("div");
-        toast.className = "save-toast";
+        toast.className = "case-toast";
         toast.textContent = message || "Zapisano ✅";
 
         document.body.appendChild(toast);
 
-        // trigger animacji
         requestAnimationFrame(() => {
-          toast.classList.add("visible");
+          toast.classList.add("case-toast--visible");
         });
 
         setTimeout(() => {
-          toast.classList.remove("visible");
+          toast.classList.remove("case-toast--visible");
           setTimeout(() => toast.remove(), 300);
         }, 1800);
       }
 
-      function highlightSectionForButton(btn) {
-        if (!btn) return;
-        const section =
-          btn.closest(".card") ||
-          btn.closest(".tab-panel") ||
-          btn.closest("section");
-
-        if (!section) return;
-
-        section.classList.add("section-saved");
-        setTimeout(() => {
-          section.classList.remove("section-saved");
-        }, 1200);
-
-        // odśwież "ostatnia aktualizacja" lokalnie
-        const lastUpdateEl = $("summaryLastUpdate");
-        if (lastUpdateEl) {
-          lastUpdateEl.textContent = new Date().toLocaleDateString("pl-PL");
-        }
-      }
-
       function handleSectionSaved(btn, message) {
-        highlightSectionForButton(btn);
         showSaveToast(message || "Zapisano zmiany ✅");
       }
 
+      function attachFieldChangeMicroFX() {
+        const inputs = document.querySelectorAll(
+          "#panelClient input, #panelClient select, #panelClient textarea," +
+            " #panelCredit input, #panelCredit select, #panelCredit textarea," +
+            " #panelSkd input, #panelSkd select, #panelSkd textarea," +
+            " #panelNotes textarea"
+        );
+
+        inputs.forEach((el) => {
+          let lastValue = el.value;
+          el.addEventListener("change", () => {
+            if (el.value === lastValue) return;
+            lastValue = el.value;
+
+            el.classList.remove("case-input-changed");
+            void el.offsetWidth;
+            el.classList.add("case-input-changed");
+
+            setTimeout(() => {
+              el.classList.remove("case-input-changed");
+            }, 500);
+          });
+        });
+      }
+
       function attachSaveHandlers(caseId) {
-        // Klient – dane podstawowe
+        // === KLIENT – dane podstawowe ===
         const btnClient = $("btnClientSave");
         btnClient?.addEventListener("click", async () => {
           const payload = {
@@ -1149,21 +993,21 @@
           }
         });
 
-        // Klient – notatki
+        // === KLIENT – notatki (jak chcesz, może na razie zostać mockiem) ===
         $("btnClientNotesSave")?.addEventListener("click", async () => {
           const payload = {
             clientNotes: $("clientNotes").value.trim(),
           };
           try {
             await saveSection(caseId, "client-notes", payload);
-            alert("Uwagi o kliencie zapisane (mock) ✅");
+            showSaveToast("Uwagi o kliencie zapisane ✅");
           } catch (e) {
             console.error(e);
-            alert("Błąd zapisu uwag o kliencie ❌");
+            showSaveToast("Błąd zapisu uwag o kliencie ❌");
           }
         });
 
-        // Kredyt
+        // === KREDYT ===
         const btnCredit = $("btnCreditSave");
         btnCredit?.addEventListener("click", async () => {
           const payload = {
@@ -1183,43 +1027,51 @@
           }
         });
 
-        // SKD – dane podstawowe
-        $("btnSkdSave")?.addEventListener("click", async () => {
-          const payload = {
-            skdStatus: $("skdStatus").value,
-            skdDate: $("skdDate").value || null,
-            skdPotential: $("skdPotential").value
-              ? Number($("skdPotential").value)
-              : null,
-            skdWpsForecast: $("skdWpsForecast").value
-              ? Number($("skdWpsForecast").value)
-              : null,
-            skdOfferVariant: $("skdOfferVariant").value,
-          };
+        // === SKD – dane podstawowe (NA RAZIE tylko front, bez zapisu pól SKD) ===
+        $("btnSkdSave")?.addEventListener("click", () => {
+          showSaveToast("Dane SKD zapisane (lokalnie) ✅");
+        });
+
+        // === ETAP SPRAWY – tu ROBIMY PRAWDZIWY ZAPIS (pole status) ===
+        $("caseStage")?.addEventListener("change", async () => {
+          const stageValue = $("caseStage").value;
+
+          // 1) animacja paska
+          updateCaseProgress(stageValue);
+
+          // 2) payload zgodny z backendem – backend zna tylko "status"
+          const payload = { status: stageValue };
+
           try {
             await saveSection(caseId, "skd", payload);
-            alert("Dane SKD zapisane (mock) ✅");
+            showSaveToast("Etap sprawy zapisany ✅");
+
+            // 3) odśwież mini-podsumowanie w sidebarze
+            const summaryStage = $("summaryStage");
+            if (summaryStage) {
+              summaryStage.textContent = stageValue;
+            }
           } catch (e) {
             console.error(e);
-            alert("Błąd zapisu danych SKD ❌");
+            showSaveToast("Błąd zapisu etapu ❌");
           }
         });
 
-        // SKD – oferta
+        // === SKD – oferta ===
         $("btnSkdOfferSave")?.addEventListener("click", async () => {
           const payload = {
             skdOfferText: $("skdOfferText").value.trim(),
           };
           try {
             await saveSection(caseId, "skd-offer", payload);
-            alert("Oferta SKD zapisana (mock) ✅");
+            showSaveToast("Oferta SKD zapisana ✅");
           } catch (e) {
             console.error(e);
-            alert("Błąd zapisu oferty SKD ❌");
+            showSaveToast("Błąd zapisu oferty SKD ❌");
           }
         });
 
-        // Notatki sprawy
+        // === NOTATKI SPRAWY ===
         const btnCaseNotes = $("btnCaseNotesSave");
         btnCaseNotes?.addEventListener("click", async () => {
           const payload = {
@@ -1235,18 +1087,19 @@
           }
         });
 
-        // Globalny "Zapisz zmiany" (na razie tylko info)
+        // === GLOBALNY "ZAPISZ ZMIANY" ===
         $("btnSaveAll")?.addEventListener("click", () => {
           alert(
             "Docelowo tu zrobimy zbiorczy zapis wszystkich sekcji. Na razie używaj przycisków w sekcjach. 🙂"
           );
         });
 
-        // Powrót
+        // === POWRÓT ===
         $("btnBack")?.addEventListener("click", () => {
           window.history.back();
         });
       }
+
       // === UPLOAD PLIKÓW DOKUMENTÓW DO BACKENDU ===
       async function uploadCaseFiles(caseId, files) {
         if (!files || !files.length) return;
@@ -1303,26 +1156,26 @@
           initCaseDocuments(caseId);
 
           attachSaveHandlers(caseId);
+          attachFieldChangeMicroFX();
         } catch (e) {
           console.error("Błąd ładowania szczegółów sprawy:", e);
           alert("Nie udało się załadować danych sprawy ❌");
         }
       }
+
       // === Pobieranie dokumentów sprawy ===
       async function loadCaseFiles(caseId) {
         try {
           const res = await fetch(`/api/cases/${caseId}/files`);
           if (!res.ok) {
             console.error("Błąd pobierania dokumentów:", res.status);
-            return renderCaseFiles([]); // pusta lista
+            return renderCaseFiles([]);
           }
 
           const data = await res.json();
           console.log("LOAD_CASE_FILES RESULT =", data);
 
-          // 🔥 TU MAGIA: data może być tablicą ALBO obiektem z polem files
           const files = Array.isArray(data) ? data : data.files || [];
-
           renderCaseFiles(files);
         } catch (err) {
           console.error("Błąd loadCaseFiles:", err);
@@ -1336,51 +1189,56 @@
       // === Renderowanie listy dokumentów ===
       function renderCaseFiles(files) {
         const wrapper = document.getElementById("caseFileList");
-
         if (!wrapper) return;
 
         wrapper.innerHTML = "";
 
         if (!files.length) {
-          wrapper.innerHTML = `<div class="file-list-empty">Brak plików w tej sprawie</div>`;
+          wrapper.innerHTML =
+            '<div class="file-list-empty">Brak plików w tej sprawie</div>';
           return;
         }
 
         files.forEach((f) => {
           const row = document.createElement("div");
-          row.className = "case-file-item";
+          row.className = "case-file-item case-row";
 
           row.innerHTML = `
-      <div class="case-file-name">
-        📄 ${f.original_name} (${Math.round(f.size / 1024)} KB)
-      </div>
-      <div class="case-file-actions">
-        <div class="case-file-download" data-id="${f.id}">Pobierz</div>
-        <div class="case-file-remove" data-id="${f.id}">✕</div>
-      </div>
-    `;
+        <div class="case-file-name">
+          📄 ${f.original_name} (${Math.round(f.size / 1024)} KB)
+        </div>
+        <div class="case-file-actions">
+          <div class="case-file-download" data-id="${f.id}">Pobierz</div>
+          <div class="case-file-remove" data-id="${f.id}">✕</div>
+        </div>
+      `;
 
           wrapper.appendChild(row);
         });
         console.log("RENDER FILES →", files);
       }
-      // === DRAG & DROP DOKUMENTÓW ===
 
+      // === DRAG & DROP DOKUMENTÓW (case.html) ===
       function initCaseDocuments(caseId) {
-        const dropArea = $("caseFileDropArea");
-        const fileInput = $("caseAddFiles");
-        const fileList = $("caseFileList"); // 🔥 nowy uchwyt
+        const $local = (id) => document.getElementById(id);
+
+        const dropArea = $local("caseFileDropArea");
+        const fileInput = $local("caseAddFiles");
+        const fileList = $local("caseFileList");
 
         if (!dropArea || !fileInput) {
           console.warn("❗ Dokumenty: brak elementów dropArea/fileInput");
           return;
         }
 
-        // --- KLIK W BOX / TEKST ---
-        dropArea.addEventListener("click", () => fileInput.click());
+        dropArea.addEventListener("click", (e) => {
+          if (e.target.closest("a")) {
+            return;
+          }
+          fileInput.click();
+        });
 
-        // --- WYBÓR PLIKÓW Z OKNA ---
-        let firstInit = true; // strażnik na dziwne pierwsze change
+        let firstInit = true;
 
         fileInput.addEventListener("change", async () => {
           if (firstInit) {
@@ -1397,7 +1255,6 @@
           fileInput.value = "";
         });
 
-        // --- DRAG & DROP ---
         dropArea.addEventListener("dragover", (e) => {
           e.preventDefault();
           dropArea.classList.add("dragover");
@@ -1418,26 +1275,18 @@
           await loadCaseFiles(caseId);
         });
 
-        // --- KLIK NA "POBIERZ" / "✕" (delegacja) ---
         if (fileList) {
           fileList.addEventListener("click", async (e) => {
             const downloadEl = e.target.closest(".case-file-download");
             const removeEl = e.target.closest(".case-file-remove");
 
-            // Pobierz
             if (downloadEl) {
               const fileId = downloadEl.dataset.id;
               if (!fileId) return;
-
-              // zakładam endpoint: GET /api/files/:fileId
-              window.open(
-                `${API_BASE}/files/${encodeURIComponent(fileId)}`,
-                "_blank"
-              );
+              window.open(`/api/files/${encodeURIComponent(fileId)}`, "_blank");
               return;
             }
 
-            // Usuń
             if (removeEl) {
               const fileId = removeEl.dataset.id;
               if (!fileId) return;
@@ -1447,7 +1296,7 @@
 
               try {
                 const res = await fetch(
-                  `${API_BASE}/files/${encodeURIComponent(fileId)}`,
+                  `/api/files/${encodeURIComponent(fileId)}`,
                   { method: "DELETE" }
                 );
 
@@ -1458,7 +1307,7 @@
                   return;
                 }
 
-                await loadCaseFiles(caseId); // odśwież listę
+                await loadCaseFiles(caseId);
               } catch (err) {
                 console.error("Błąd przy DELETE pliku:", err);
                 alert("Błąd sieci przy usuwaniu pliku ❌");
@@ -1471,6 +1320,7 @@
       // Start
       loadCaseDetails();
     </script>
+
     <script>
       function getCaseIdFromUrl() {
         const params = new URLSearchParams(window.location.search);
@@ -1572,6 +1422,59 @@
           });
         }
       });
+    </script>
+    <script>
+      (function () {
+        // Jeśli user ma prefers-reduced-motion, nie bawimy się w obserwacje
+        var mq =
+          window.matchMedia &&
+          window.matchMedia("(prefers-reduced-motion: reduce)");
+        if (mq && mq.matches) {
+          document.querySelectorAll(".case-anim").forEach(function (el) {
+            el.classList.add("in-view");
+          });
+          return;
+        }
+
+        var observed = document.querySelectorAll(".case-anim");
+        if (!("IntersectionObserver" in window)) {
+          // Fallback – od razu pokazujemy
+          observed.forEach(function (el) {
+            el.classList.add("in-view");
+          });
+          return;
+        }
+
+        var observer = new IntersectionObserver(
+          function (entries, obs) {
+            entries.forEach(function (entry) {
+              if (entry.isIntersecting) {
+                entry.target.classList.add("in-view");
+                // Po pierwszym wejściu nie musimy dalej obserwować
+                obs.unobserve(entry.target);
+              }
+            });
+          },
+          {
+            threshold: 0.15,
+          }
+        );
+
+        observed.forEach(function (el) {
+          observer.observe(el);
+        });
+
+        // Opcjonalnie: łagodne przewijanie do anchorów w case.html
+        document.querySelectorAll("a[href^='#case-']").forEach(function (link) {
+          link.addEventListener("click", function (e) {
+            var targetId = this.getAttribute("href").slice(1);
+            var target = document.getElementById(targetId);
+            if (!target) return;
+            e.preventDefault();
+            target.scrollIntoView({ behavior: "smooth", block: "start" });
+          });
+        });
+      })();
     </script>
   </body>
 </html>

@@ -679,19 +679,6 @@ body[data-role="admin"]  #clientPreferenceBlock { display: none !important; }
 .open-full-btn:hover {
   opacity: 0.9;
 }
-/* Delikatne podświetlenie zapisanej sekcji */
-.section-saved {
-  animation: sectionSavedPulse 1s ease-out;
-}
-
-@keyframes sectionSavedPulse {
-  0% {
-    box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.6);
-  }
-  100% {
-    box-shadow: 0 0 0 10px rgba(34, 197, 94, 0);
-  }
-}
 
 /* Mały toast w prawym górnym rogu ekranu */
 .save-toast {
@@ -962,4 +949,736 @@ body[data-role="admin"]  #clientPreferenceBlock { display: none !important; }
 .upload-hint a {
   color: #8a0d0d; /* burgund PK */
   text-decoration: underline;
+}
+/* ============================
+   BAZA ANIMACJI CASE VIEW - przeniesione z case.html
+   ============================ */
+
+/* Szanujemy prefers-reduced-motion */
+@media (prefers-reduced-motion: reduce) {
+  * {
+    scroll-behavior: auto !important;
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}
+
+/* Wejście sekcji przy scrollu */
+.case-anim {
+  opacity: 0;
+  transform: translateY(12px);
+  transition:
+    opacity 0.35s ease-out,
+    transform 0.35s ease-out;
+  will-change: opacity, transform;
+}
+
+.case-anim.in-view {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* Delikatne opóźnienia – do nadania w HTML */
+.case-anim-delay-1 { transition-delay: 0.05s; }
+.case-anim-delay-2 { transition-delay: 0.10s; }
+.case-anim-delay-3 { transition-delay: 0.15s; }
+.case-anim-delay-4 { transition-delay: 0.20s; }
+
+/* Karty / boxy w case view */
+.case-card {
+  transition:
+    transform 0.2s ease-out,
+    box-shadow 0.2s ease-out;
+  will-change: transform, box-shadow;
+}
+
+.case-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.08);
+}
+
+/* Klikalne wiersze (np. historia sprawy) */
+.case-row {
+  transition:
+    background-color 0.18s ease-out,
+    transform 0.18s ease-out;
+}
+
+.case-row:hover {
+  background-color: rgba(0, 0, 0, 0.02);
+  transform: translateX(1px);
+}
+
+/* Status badget / chip */
+.case-badge {
+  transition:
+    background-color 0.18s ease-out,
+    color 0.18s ease-out,
+    transform 0.18s ease-out;
+}
+
+.case-badge-updated {
+  animation: caseBadgePulse 0.7s ease-out 1;
+}
+
+@keyframes caseBadgePulse {
+  0% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgba(0, 150, 136, 0.4);
+  }
+  70% {
+    transform: scale(1.03);
+    box-shadow: 0 0 0 10px rgba(0, 150, 136, 0);
+  }
+  100% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgba(0, 150, 136, 0);
+  }
+}
+
+/* Modal w case.html – ultra gładkie otwieranie */
+.case-modal {
+  opacity: 0;
+  transform: translateY(12px) scale(0.98);
+  transition:
+    opacity 0.25s ease-out,
+    transform 0.25s ease-out;
+}
+
+.case-modal.is-open {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+}
+
+/* Przycisk – kliknięcie */
+.case-btn {
+  transition:
+    transform 0.12s ease-out,
+    box-shadow 0.12s ease-out;
+  will-change: transform, box-shadow;
+}
+
+.case-btn:active {
+  transform: scale(0.97) translateY(1px);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.18);
+}
+
+/* Pasek postępu / etap sprawy */
+.case-progress-bar {
+  overflow: hidden;
+  border-radius: 999px;
+  background: #e5e7eb;
+  height: 6px;
+}
+
+.case-progress-fill {
+  width: 0;
+  height: 6px;
+  background: #991b1b;
+  transition: width 0.45s cubic-bezier(0.22, 0.61, 0.36, 1);
+  will-change: width;
+}
+
+      /* === MICROINTERACTIONS & TOAST === */
+
+      .field input,
+      .field select,
+      .field textarea {
+        transition:
+          border-color 0.15s ease-out,
+          box-shadow 0.15s ease-out,
+          background-color 0.15s ease-out;
+      }
+
+      .field input:focus,
+      .field select:focus,
+      .field textarea:focus {
+        outline: none;
+        border-color: #991b1b;
+        box-shadow: 0 0 0 1px rgba(153, 27, 27, 0.2);
+        background-color: #fef2f2;
+      }
+
+
+
+      .save-toast {
+  position: fixed;
+  left: 50%;
+  bottom: 16px;
+  transform: translateX(-50%) translateY(8px);
+  padding: 8px 14px;
+  border-radius: 999px;
+  background: #111827;
+  color: #f9fafb;
+  font-size: 0.85rem;
+  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.3);
+  opacity: 0;
+  pointer-events: none;
+  z-index: 9999;
+  transition:
+    opacity 0.2s ease-out,
+    transform 0.2s ease-out;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  max-width: 90vw;
+}
+
+
+      .save-toast--visible {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+
+      /* Minimalne style pod layout – możesz z czasem przenieść do głównego CSS */
+
+      body {
+        margin: 0;
+        font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+          sans-serif;
+        background: #f3f4f6;
+        color: #111827;
+      }
+
+      .page {
+        max-width: 1200px;
+        margin: 0 auto;
+        padding: 16px;
+      }
+
+      .card {
+        background: #ffffff;
+        border-radius: 12px;
+        padding: 16px;
+        box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08);
+        margin-bottom: 16px;
+      }
+
+      .case-header {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+      }
+
+      .case-header-main {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+      }
+
+      .case-title {
+        font-size: 1.25rem;
+        font-weight: 600;
+      }
+
+      .case-subtitle {
+        font-size: 0.9rem;
+        color: #6b7280;
+      }
+
+      .case-tags {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+
+      .tag {
+        font-size: 0.75rem;
+        padding: 4px 8px;
+        border-radius: 999px;
+        background: #e5e7eb;
+        color: #374151;
+      }
+
+      .tag-primary {
+        background: #991b1b;
+        color: #fef2f2;
+      }
+
+      .tag-success {
+        background: #065f46;
+        color: #ecfdf5;
+      }
+
+      .tag-warning {
+        background: #92400e;
+        color: #fffbeb;
+      }
+
+      .case-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+
+      .btn {
+        border: none;
+        border-radius: 999px;
+        padding: 8px 14px;
+        font-size: 0.9rem;
+        cursor: pointer;
+      }
+
+      .btn-primary {
+        background: #991b1b;
+        color: #f9fafb;
+      }
+
+      .btn-outline {
+        background: #ffffff;
+        color: #374151;
+        border: 1px solid #e5e7eb;
+      }
+
+      .case-layout {
+        display: grid;
+        grid-template-columns: minmax(0, 280px) minmax(0, 1fr);
+        gap: 16px;
+      }
+
+      @media (max-width: 900px) {
+        .case-layout {
+          grid-template-columns: minmax(0, 1fr);
+        }
+      }
+
+      .case-sidebar {
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+      }
+
+      .case-sidebar-section-title {
+        font-size: 0.9rem;
+        font-weight: 600;
+        margin-bottom: 8px;
+      }
+
+      .case-sidebar-row {
+        display: flex;
+        justify-content: space-between;
+        font-size: 0.85rem;
+        margin-bottom: 4px;
+      }
+
+      .case-sidebar-label {
+        color: #6b7280;
+      }
+
+      .case-sidebar-value {
+        font-weight: 500;
+      }
+
+      /* Tabs */
+
+      .case-tabs {
+        display: flex;
+        gap: 8px;
+        border-bottom: 1px solid #e5e7eb;
+        margin-bottom: 12px;
+        overflow-x: auto;
+      }
+
+      .case-tab {
+        padding: 8px 12px;
+        font-size: 0.9rem;
+        border-radius: 999px 999px 0 0;
+        cursor: pointer;
+        border: 1px solid transparent;
+        white-space: nowrap;
+      }
+
+      .case-tab.active {
+        background: #ffffff;
+        border-color: #e5e7eb;
+        border-bottom-color: #ffffff;
+        font-weight: 600;
+      }
+
+      .case-tab:not(.active) {
+        color: #6b7280;
+      }
+
+      .tab-panels {
+        padding-top: 4px;
+      }
+
+      .tab-panel {
+        display: none;
+      }
+
+      .tab-panel.active {
+        display: block;
+      }
+
+      /* Accordion */
+
+      .accordion {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+
+      .accordion-item {
+        border-radius: 10px;
+        border: 1px solid #e5e7eb;
+        overflow: hidden;
+        background: #f9fafb;
+      }
+
+      .accordion-header {
+        padding: 10px 12px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        cursor: pointer;
+      }
+
+      .accordion-title {
+        font-size: 0.9rem;
+        font-weight: 500;
+      }
+
+      .accordion-toggle {
+        font-size: 0.9rem;
+        color: #6b7280;
+      }
+
+      .accordion-body {
+        padding: 10px 12px 12px;
+        border-top: 1px solid #e5e7eb;
+        display: none;
+        font-size: 0.85rem;
+      }
+
+      .accordion-item.open .accordion-body {
+        display: block;
+      }
+
+      .accordion-item.open .accordion-toggle {
+        transform: rotate(90deg);
+      }
+
+      .field-row {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+        gap: 10px;
+        margin-bottom: 10px;
+      }
+
+      .field {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+      }
+
+      .field label {
+        font-size: 0.8rem;
+        color: #6b7280;
+      }
+
+      .field input,
+      .field select,
+      .field textarea {
+        border-radius: 8px;
+        border: 1px solid #d1d5db;
+        padding: 6px 8px;
+        font-size: 0.85rem;
+      }
+
+      .field textarea {
+        resize: vertical;
+        min-height: 60px;
+      }
+
+      .section-actions {
+        display: flex;
+        justify-content: flex-end;
+        gap: 8px;
+        margin-top: 8px;
+      }
+
+      .section-actions .btn {
+        font-size: 0.8rem;
+        padding: 6px 10px;
+      }
+      /* ============================
+   BAZA ANIMACJI CASE VIEW
+   ============================ */
+
+      /* Szanujemy prefers-reduced-motion */
+      @media (prefers-reduced-motion: reduce) {
+        * {
+          scroll-behavior: auto !important;
+          animation-duration: 0.001ms !important;
+          animation-iteration-count: 1 !important;
+          transition-duration: 0.001ms !important;
+        }
+      }
+
+      /* Wejście sekcji przy scrollu */
+      .case-anim {
+        opacity: 0;
+        transform: translateY(12px);
+        transition: opacity 0.35s ease-out, transform 0.35s ease-out;
+        will-change: opacity, transform;
+      }
+
+      .case-anim.in-view {
+        opacity: 1;
+        transform: translateY(0);
+      }
+
+      /* Delikatne opóźnienia – do nadania w HTML */
+      .case-anim-delay-1 {
+        transition-delay: 0.05s;
+      }
+      .case-anim-delay-2 {
+        transition-delay: 0.1s;
+      }
+      .case-anim-delay-3 {
+        transition-delay: 0.15s;
+      }
+      .case-anim-delay-4 {
+        transition-delay: 0.2s;
+      }
+
+      /* Karty / boxy w case view */
+      .case-card {
+        transition: transform 0.2s ease-out, box-shadow 0.2s ease-out;
+        will-change: transform, box-shadow;
+      }
+
+      .case-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 8px 18px rgba(0, 0, 0, 0.08);
+      }
+
+      /* Klikalne wiersze (np. historia sprawy) */
+      .case-row {
+        transition: background-color 0.18s ease-out, transform 0.18s ease-out;
+      }
+
+      .case-row:hover {
+        background-color: rgba(0, 0, 0, 0.02);
+        transform: translateX(1px);
+      }
+
+      /* Status badget / chip */
+      .case-badge {
+        transition: background-color 0.18s ease-out, color 0.18s ease-out,
+          transform 0.18s ease-out;
+      }
+
+      .case-badge-updated {
+        animation: caseBadgePulse 0.7s ease-out 1;
+      }
+
+      @keyframes caseBadgePulse {
+        0% {
+          transform: scale(1);
+          box-shadow: 0 0 0 0 rgba(0, 150, 136, 0.4);
+        }
+        70% {
+          transform: scale(1.03);
+          box-shadow: 0 0 0 10px rgba(0, 150, 136, 0);
+        }
+        100% {
+          transform: scale(1);
+          box-shadow: 0 0 0 0 rgba(0, 150, 136, 0);
+        }
+      }
+
+      /* Modal w case.html – ultra gładkie otwieranie */
+      .case-modal {
+        opacity: 0;
+        transform: translateY(12px) scale(0.98);
+        transition: opacity 0.25s ease-out, transform 0.25s ease-out;
+      }
+
+      .case-modal.is-open {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+      }
+
+      /* Przycisk – kliknięcie */
+      .case-btn {
+        transition: transform 0.12s ease-out, box-shadow 0.12s ease-out;
+        will-change: transform, box-shadow;
+      }
+
+      .case-btn:active {
+        transform: scale(0.97) translateY(1px);
+        box-shadow: 0 2px 6px rgba(0, 0, 0, 0.18);
+      }
+
+      /* Pasek postępu / etap sprawy */
+      .case-progress-bar {
+        overflow: hidden;
+        border-radius: 999px;
+      }
+
+      .case-progress-fill {
+        width: 0;
+        transition: width 0.45s cubic-bezier(0.22, 0.61, 0.36, 1);
+        will-change: width;
+      }
+
+/* Toast tylko dla case.html – unikalne klasy */
+.case-toast {
+  position: fixed;
+  left: 50%;
+  bottom: 18px;
+  transform: translateX(-50%) translateY(12px) scale(0.96);
+  padding: 8px 14px;
+  border-radius: 999px;
+  background: #111827;
+  color: #f9fafb;
+  font-size: 0.85rem;
+  box-shadow: 0 10px 25px rgba(15, 23, 42, 0.35);
+  opacity: 0;
+  pointer-events: none;
+  z-index: 9999;
+  transition:
+    opacity 0.18s ease-out,
+    transform 0.18s ease-out;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  max-width: 90vw;
+  white-space: nowrap;
+}
+
+.case-toast--visible {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0) scale(1);
+}
+
+/* CASE: microinteractions przy zmianie pól */
+.case-input-changed {
+  animation: caseInputFlash 0.45s ease-out;
+}
+
+@keyframes caseInputFlash {
+  0% {
+    background-color: #fef2f2;
+  }
+  50% {
+    background-color: #fee2e2;
+  }
+  100% {
+    background-color: #ffffff;
+  }
+}
+/* CASE: historia zmian (timeline) */
+.case-history-list {
+  position: relative;
+  padding-left: 18px;
+  margin-top: 6px;
+}
+
+.case-history-list::before {
+  content: "";
+  position: absolute;
+  left: 7px;
+  top: 4px;
+  bottom: 4px;
+  width: 2px;
+  background: #e5e7eb;
+}
+
+.case-history-item {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.case-history-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  background: #991b1b;
+  margin-top: 3px;
+  flex-shrink: 0;
+  box-shadow: 0 0 0 4px rgba(153, 27, 27, 0.12);
+}
+
+.case-history-content {
+  font-size: 0.85rem;
+}
+
+.case-history-title {
+  font-weight: 500;
+  color: #111827;
+}
+
+.case-history-meta {
+  color: #6b7280;
+  font-size: 0.78rem;
+}
+/* CASE: animacje dokumentów */
+.case-file-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.85rem;
+  padding: 6px 8px;
+  border-radius: 8px;
+  border: 1px solid #e5e7eb;
+  margin-bottom: 6px;
+  background: #ffffff;
+  animation: caseFileIn 0.22s ease-out;
+}
+
+.case-file-item:hover {
+  background: #f9fafb;
+}
+
+.case-file-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.case-file-actions {
+  display: flex;
+  gap: 10px;
+  font-size: 0.8rem;
+}
+
+.case-file-download,
+.case-file-remove {
+  cursor: pointer;
+}
+
+.case-file-remove {
+  color: #b91c1c;
+}
+
+@keyframes caseFileIn {
+  0% {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+/* CASE: hover only on urządzeniach z myszką (lepszy FPS na telefonie) */
+@media (hover: hover) and (pointer: fine) {
+  .case-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 18px rgba(0, 0, 0, 0.08);
+  }
+}
+
+/* Domyślnie bez mocnych hoverów – mobilne */
+@media (hover: none) and (pointer: coarse) {
+  .case-card {
+    transform: none !important;
+  }
 }

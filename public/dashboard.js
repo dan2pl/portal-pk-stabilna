@@ -764,7 +764,8 @@ function renderFilePreview() {
 
   pendingFiles.forEach((file, index) => {
     const row = document.createElement("div");
-    row.className = "file-item";
+              row.className = "case-file-item case-row";
+
 
     row.innerHTML = `
       <div class="file-item-name">
