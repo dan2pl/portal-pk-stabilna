@@ -194,6 +194,18 @@
                         />
                       </div>
                     </div>
+                    <div class="field-row">
+                      <div class="field">
+                        <label for="contractIban"
+                          >Numer konta klienta (do umowy)</label
+                        >
+                        <input
+                          type="text"
+                          id="contractIban"
+                          autocomplete="off"
+                        />
+                      </div>
+                    </div>
 
                     <div class="section-actions">
                       <button
@@ -775,6 +787,17 @@
         $("clientPostcode").value = postcode;
 
         $("clientNotes").value = data.clientNotes ?? data.client_notes ?? "";
+
+        // 🔽 NOWE: wczytanie numeru konta, jeśli backend go zwraca
+        const ibanInput = $("contractIban");
+        if (ibanInput) {
+          const ibanFromData =
+            data.iban ?? // np. pole "iban" na case
+            data.contractIban ?? // albo inne warianty nazw
+            data.clientIban ??
+            "";
+          ibanInput.value = ibanFromData || "";
+        }
       }
 
       function splitAddress(address) {
@@ -804,7 +827,83 @@
 
         return { street, city, postcode };
       }
+      // === IBAN – autoformatowanie w polu "Numer konta klienta" ===
+      function attachIbanFormatter() {
+        const input = $("contractIban");
+        if (!input) return;
 
+        function formatValue() {
+          const raw = input.value || "";
+          const clean = raw.replace(/\s+/g, "").toUpperCase();
+
+          // jeśli krócej niż 3 znaki – nie kombinujemy
+          if (clean.length <= 2) {
+            input.value = clean;
+            return;
+          }
+
+          const first2 = clean.slice(0, 2); // np. "PL" / "97"
+          const rest = clean.slice(2); // reszta po tych 2 znakach
+
+          // resztę grupujemy po 4 znaki
+          const restGrouped = rest.replace(/(.{4})/g, "$1 ").trim();
+
+          // składamy wynik: "PL" + spacja + grupy po 4
+          input.value = restGrouped ? `${first2} ${restGrouped}` : first2;
+        }
+
+        input.addEventListener("input", formatValue);
+        input.addEventListener("blur", formatValue);
+      }
+
+      function attachIbanValidator() {
+        const input = $("contractIban");
+        if (!input) return;
+
+        // Tworzymy mały element z błędem (na żywo, bez HTML-a)
+        const errorBox = document.createElement("div");
+        errorBox.style.color = "#d9534f";
+        errorBox.style.fontSize = "12px";
+        errorBox.style.marginTop = "4px";
+        errorBox.style.display = "none";
+        errorBox.textContent = "Niepoprawny numer IBAN";
+        input.insertAdjacentElement("afterend", errorBox);
+
+        input.addEventListener("input", () => {
+          const raw = input.value.replace(/\s+/g, "");
+          let isValid = true;
+
+          // Dopuszczamy też czyste wpisywanie PL… lub same cyfry
+          const hasPL = /^[A-Z]{2}\d+$/.test(raw);
+
+          // Zasada walidacji:
+          // 26 cyfr (PL pomijamy, bo formatowanie je doda)
+          if (!/^\d{0,26}$/.test(raw.replace(/[A-Z]/gi, ""))) {
+            isValid = false;
+          }
+
+          if (raw.length > 0 && raw.length < 26) {
+            // Za krótki — ale nie traktujemy tego jako error, póki użytkownik pisze
+            isValid = true;
+            errorBox.style.display = "none";
+            input.style.borderColor = "";
+            return;
+          }
+
+          // Jeśli użytkownik wpisze PL… — pozwalamy, ale sprawdzamy, czy reszta to cyfry
+          if (raw.startsWith("PL") && raw.length !== 28) {
+            isValid = false;
+          }
+
+          if (!isValid) {
+            input.style.borderColor = "#d9534f";
+            errorBox.style.display = "block";
+          } else {
+            input.style.borderColor = "";
+            errorBox.style.display = "none";
+          }
+        });
+      }
       function fillCreditSection(data) {
         $("creditBank").value =
           data.bank ?? data.creditBank ?? data.bankName ?? data.bank_name ?? "";
@@ -974,6 +1073,7 @@
         // === KLIENT – dane podstawowe ===
         const btnClient = $("btnClientSave");
         btnClient?.addEventListener("click", async () => {
+          const ibanRaw = $("contractIban").value.trim();
           const payload = {
             client: $("clientName").value.trim(),
             pesel: $("clientPesel").value.trim(),
@@ -982,6 +1082,7 @@
             address: `${$("clientPostcode").value.trim()} ${$(
               "clientCity"
             ).value.trim()}, ${$("clientStreet").value.trim()}`,
+            iban: ibanRaw.replace(/\s+/g, "") || null, // zapisujemy BEZ spacji
           };
 
           try {
@@ -1157,6 +1258,8 @@
 
           attachSaveHandlers(caseId);
           attachFieldChangeMicroFX();
+          attachIbanFormatter();
+          attachIbanValidator();
         } catch (e) {
           console.error("Błąd ładowania szczegółów sprawy:", e);
           alert("Nie udało się załadować danych sprawy ❌");

@@ -687,6 +687,7 @@ app.get(
       owner_id: row.owner_id,
       updated_at: row.updated_at,
       offer_skd: row.offer_skd,  // jeśli trzymasz JSON z ofertą
+      iban: row.iban ?? null,
     };
 
     res.json(safe);
@@ -710,7 +711,8 @@ app.patch(
     "email",
     "address",
     "pesel",
-    "notes"
+    "notes",
+    "iban",
   ]),
   async (req, res) => {
     try {
@@ -737,7 +739,8 @@ app.patch(
         email: true,
         address: true,
         pesel: true,
-        notes: true
+        notes: true,
+        iban: true,
       };
 
       // ==============================
