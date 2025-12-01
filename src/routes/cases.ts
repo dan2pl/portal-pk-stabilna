@@ -89,7 +89,20 @@ const storage = multer.diskStorage({
   destination: (req, file, cb) => {
     try {
       const rawId = (req.params && req.params.id) || "unknown";
-      const caseId = String(rawId);
+
+      // ✅ Dodatkowy bezpiecznik: caseId musi być złożone z cyfr
+      if (!/^\d+$/.test(String(rawId))) {
+        securityLog("Nieprawidłowe caseId w uploadzie", {
+          rawId,
+          file: file.originalname,
+        });
+        return cb(
+          new Error("Nieprawidłowe ID sprawy dla uploadu."),
+          path.join(process.cwd(), "uploads", "cases")
+        );
+      }
+
+      const caseId = String(rawId); // teraz mamy pewność że to tylko cyfry
 
       const baseDir = path.join(process.cwd(), "uploads", "cases", caseId);
 
@@ -828,7 +841,25 @@ app.patch(
         }
         update.contract_date = d || null;
       }
+      // IBAN – oczyszczenie z odstępów i dziwnych znaków
+      if (update.iban !== undefined) {
+        let iban = clean(update.iban);
 
+        if (iban) {
+          // usuwamy spacje, zamieniamy na wielkie litery
+          iban = iban.replace(/\s+/g, "").toUpperCase();
+
+          // zostawiamy tylko A–Z i cyfry
+          iban = iban.replace(/[^A-Z0-9]/g, "");
+
+          // twardy limit długości IBAN (teoretycznie max 34 znaki)
+          if (iban.length > 34) {
+            iban = iban.slice(0, 34);
+          }
+        }
+
+        update.iban = iban || null;
+      }
       // TEKSTY
       const safeText = (t: any, max: number) =>
         t ? clean(String(t).slice(0, max)) : null;
@@ -877,74 +908,86 @@ app.patch(
   }
 );
 
-  // === DANE KLIENTA ===
-  app.put("/api/cases/:id/client", requireAuth, async (req, res) => {
-    const user = (req as any).user;
-    const idRaw = req.params.id;
-    const id = Number(idRaw);
+   // === DANE KLIENTA ===
+  app.put(
+    "/api/cases/:id/client",
+    mediumApiLimit,
+    requireAuth,
+    denyUnknownFields(["client", "phone", "email", "address", "pesel"]),
+    async (req, res) => {
+      const user = (req as any).user;
+      const idRaw = req.params.id;
+      const id = Number(idRaw);
 
-    if (!Number.isFinite(id)) {
-      return res.status(400).json({ error: "Nieprawidłowe ID sprawy" });
+      if (!Number.isFinite(id)) {
+        return res.status(400).json({ error: "Nieprawidłowe ID sprawy" });
+      }
+
+      const allowed = await verifyCaseOwnership(id, user);
+      if (allowed === null) {
+        return res.status(404).json({ error: "Sprawa nie istnieje" });
+      }
+      if (!allowed) {
+        return res.status(403).json({ error: "Brak dostępu do tej sprawy" });
+      }
+
+      const { client, phone, email, address, pesel } = req.body || {};
+
+      try {
+        const result = await updateCasePartial(id, {
+          client,
+          phone,
+          email,
+          address,
+          pesel,
+        });
+        return res.json(result);
+      } catch (err) {
+        console.error("PUT /api/cases/:id/client error", err);
+        return res.status(500).json({ error: "Server error" });
+      }
     }
+  );
 
-    const allowed = await verifyCaseOwnership(id, user);
-    if (allowed === null) {
-      return res.status(404).json({ error: "Sprawa nie istnieje" });
+    // === DANE KREDYTU ===
+  app.put(
+    "/api/cases/:id/credit",
+    mediumApiLimit,
+    requireAuth,
+    denyUnknownFields(["loan_amount", "contract_date", "bank", "status"]),
+    async (req, res) => {
+      const user = (req as any).user;
+      const idRaw = req.params.id;
+      const id = Number(idRaw);
+
+      if (!Number.isFinite(id)) {
+        return res.status(400).json({ error: "Nieprawidłowe ID sprawy" });
+      }
+
+      const allowed = await verifyCaseOwnership(id, user);
+      if (allowed === null) {
+        return res.status(404).json({ error: "Sprawa nie istnieje" });
+      }
+      if (!allowed) {
+        return res.status(403).json({ error: "Brak dostępu do tej sprawy" });
+      }
+
+      const { loan_amount, contract_date, bank, status } = req.body || {};
+
+      try {
+        const result = await updateCasePartial(id, {
+          loan_amount,
+          contract_date,
+          bank,
+          status,
+        });
+        return res.json(result);
+      } catch (err) {
+        console.error("PUT /api/cases/:id/credit error", err);
+        return res.status(500).json({ error: "Server error" });
+      }
     }
-    if (!allowed) {
-      return res.status(403).json({ error: "Brak dostępu do tej sprawy" });
-    }
-
-    const { client, phone, email, address, pesel } = req.body || {};
-
-    try {
-      const result = await updateCasePartial(id, {
-        client,
-        phone,
-        email,
-        address,
-        pesel,
-      });
-      return res.json(result);
-    } catch (err) {
-      console.error("PUT /api/cases/:id/client error", err);
-      return res.status(500).json({ error: "Server error" });
-    }
-  });
-
-  // === DANE KREDYTU ===
-  app.put("/api/cases/:id/credit", requireAuth, async (req, res) => {
-    const user = (req as any).user;
-    const idRaw = req.params.id;
-    const id = Number(idRaw);
-
-    if (!Number.isFinite(id)) {
-      return res.status(400).json({ error: "Nieprawidłowe ID sprawy" });
-    }
-
-    const allowed = await verifyCaseOwnership(id, user);
-    if (allowed === null) {
-      return res.status(404).json({ error: "Sprawa nie istnieje" });
-    }
-    if (!allowed) {
-      return res.status(403).json({ error: "Brak dostępu do tej sprawy" });
-    }
-
-    const { loan_amount, contract_date, bank, status } = req.body || {};
-
-    try {
-      const result = await updateCasePartial(id, {
-        loan_amount,
-        contract_date,
-        bank,
-        status,
-      });
-      return res.json(result);
-    } catch (err) {
-      console.error("PUT /api/cases/:id/credit error", err);
-      return res.status(500).json({ error: "Server error" });
-    }
-  });
+  );
 
   // === ODCZYT OFERTY SKD ===
   app.get(
@@ -1458,37 +1501,16 @@ app.delete("/api/files/:fileId", hardApiLimit, requireAuth, async (req, res) => 
       return res.status(400).json({ error: "Brak plików do dodania" });
     }
 
-    // 3️⃣ walidacja MIME + rozszerzeń + rozmiaru
-    const allowedMime = [
-      "application/pdf",
-      "image/jpeg",
-      "image/png",
-      "image/webp"
-    ];
+   // 3️⃣ TYLKO limit rozmiaru (20 MB) – reszta jest robiona w fileFilter
+const maxSize = MAX_FILE_SIZE; // 20 MB
 
-    const maxSize = 20 * 1024 * 1024; // 20 MB
-
-    for (const f of files) {
-      if (!allowedMime.includes(f.mimetype)) {
-        return res.status(400).json({
-          error: `Niedozwolony typ pliku: ${f.originalname}`
-        });
-      }
-
-      if (f.size > maxSize) {
-        return res.status(400).json({
-          error: `Plik jest zbyt duży (max 20 MB): ${f.originalname}`
-        });
-      }
-
-      // lekkie sprawdzenie rozszerzenia
-      const ext = f.originalname.toLowerCase();
-      if (!ext.match(/\.(pdf|jpg|jpeg|png|webp)$/)) {
-        return res.status(400).json({
-          error: `Niedozwolone rozszerzenie: ${f.originalname}`
-        });
-      }
-    }
+for (const f of files) {
+  if (f.size > maxSize) {
+    return res.status(400).json({
+      error: `Plik jest zbyt duży (max 20 MB): ${f.originalname}`,
+    });
+  }
+}
 
     try {
       const values: any[] = [];

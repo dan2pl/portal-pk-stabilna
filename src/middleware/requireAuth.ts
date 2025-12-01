@@ -8,45 +8,72 @@ type AnyReq = Request & {
   user?: any;
 };
 
+// Trzymamy sekret w zmiennej – spójnie z auth.ts
+const JWT_SECRET = process.env.JWT_SECRET;
+
 /**
  * Middleware: wymagane zalogowanie (dowolna rola)
  * - czyta auth_token z cookies
  * - weryfikuje JWT
- * - wkłada decoded payload do req.user
+ * - wkłada bezpieczny payload do req.user
  */
 export function requireAuth(req: Request, res: Response, next: NextFunction) {
   const anyReq = req as AnyReq;
   const cookies = anyReq.cookies || {};
 
-  console.log("🔐 requireAuth → path:", req.path);
-  console.log("🔐 requireAuth → cookies:", cookies);
+  // W DEV można zostawić log ścieżki
+  if (process.env.NODE_ENV !== "production") {
+    console.log("🔐 requireAuth → path:", req.path);
+  }
 
   const token = cookies.auth_token;
 
   if (!token) {
-    console.warn("🔐 requireAuth → brak auth_token w cookies");
+    if (process.env.NODE_ENV !== "production") {
+      console.warn("🔐 requireAuth → brak auth_token w cookies");
+    }
     return res.status(401).json({ error: "Brak dostępu – zaloguj się" });
   }
 
-  try {
-    const payload = jwt.verify(
-      token,
-      process.env.JWT_SECRET || "sekret"
-    ) as any;
+  if (!JWT_SECRET) {
+    console.error("🚨 JWT_SECRET nie jest ustawione w .env (requireAuth)");
+    return res
+      .status(500)
+      .json({ error: "Błąd konfiguracji serwera (JWT_SECRET)" });
+  }
 
-    anyReq.user = payload;
-    console.log("🔐 requireAuth → user:", payload);
+  try {
+    const payload = jwt.verify(token, JWT_SECRET) as any;
+
+    // Hardening: wyciągamy tylko pola, które nas interesują
+    anyReq.user = {
+      id: payload.id ?? null,
+      email: payload.email ?? null,
+      name: payload.name ?? null,
+      role: payload.role ?? null,
+    };
+
+    if (process.env.NODE_ENV !== "production") {
+      console.log("🔐 requireAuth → user:", {
+        id: anyReq.user.id,
+        email: anyReq.user.email,
+        role: anyReq.user.role,
+      });
+    }
+
     return next();
   } catch (e) {
-    console.error("🔐 requireAuth → nieprawidłowy token:", e);
+    if (process.env.NODE_ENV !== "production") {
+      console.error("🔐 requireAuth → nieprawidłowy token:", e);
+    }
     return res.status(401).json({ error: "Nieprawidłowy token" });
   }
 }
 
 /**
  * Middleware: tylko dla administratorów
- * - korzysta z requireAuth (musi być zalogowany)
- * - dodatkowo sprawdza role === 'admin'
+ * - najpierw odpala requireAuth (musi być zalogowany)
+ * - potem sprawdza role === 'admin'
  */
 export function requireAdmin(
   req: Request,
@@ -55,35 +82,40 @@ export function requireAdmin(
 ) {
   const anyReq = req as AnyReq;
 
-  // Najpierw upewniamy się, że user jest ustawiony (wywołujemy requireAuth)
-  requireAuth(req, res, (err?: any) => {
-    if (err) {
-      // jak requireAuth już odesłał odpowiedź (401), nie idziemy dalej
-      return;
-    }
-
+  // Najpierw weryfikujemy JWT
+  requireAuth(req, res, () => {
     const user = anyReq.user;
+
     if (!user) {
-      console.warn("🔐 requireAdmin → brak usera po requireAuth");
+      if (process.env.NODE_ENV !== "production") {
+        console.warn("🔐 requireAdmin → brak usera po requireAuth");
+      }
       return res.status(401).json({ error: "Brak dostępu – zaloguj się" });
     }
 
     if (user.role !== "admin") {
-      console.warn("🔐 requireAdmin → próba wejścia bez roli admin:", user);
+      if (process.env.NODE_ENV !== "production") {
+        console.warn("🔐 requireAdmin → próba wejścia bez roli admin:", {
+          id: user.id,
+          email: user.email,
+          role: user.role,
+        });
+      }
       return res
         .status(403)
         .json({ error: "Brak uprawnień administratora" });
     }
 
-    console.log("🔐 requireAdmin → OK, user:", {
-      id: user.id,
-      email: user.email,
-      role: user.role,
-    });
+    if (process.env.NODE_ENV !== "production") {
+      console.log("🔐 requireAdmin → OK, user:", {
+        id: user.id,
+        email: user.email,
+        role: user.role,
+      });
+    }
 
     return next();
   });
-  
 }
 export function requireOwnerOrAdmin() {
   return async (req: Request, res: Response, next: NextFunction) => {

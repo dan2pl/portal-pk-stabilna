@@ -48,18 +48,37 @@ const PORT = process.env.PORT || 4000;
 //   BEZPIECZEŃSTWO (CSP + XSS + HEADERS)
 // ==========================================
 
+const isProd = process.env.NODE_ENV === "production";
+// Adres frontu (prod/dev) – dla CORS
+const FRONTEND_URL = isProd
+  ? process.env.FRONTEND_URL || "https://portal.pokonajkredyt.pl"
+  : "http://localhost:4000";
+
 app.use(
   helmet({
     hidePoweredBy: true,
     noSniff: true,
     frameguard: { action: "deny" },
     referrerPolicy: { policy: "no-referrer" },
+    // xssFilter w nowszych wersjach jest deprecated, ale zostawiamy dla kompatybilności
     xssFilter: true,
 
-    // 🔥 tymczasowo wyłączamy CSP,
-    // żeby UI (zakładki, modale, accordion, inline scripts)
-    // działał poprawnie
-    contentSecurityPolicy: false,
+    // ✅ CSP: w DEV wyłączone, w PROD – włączone z rozsądnymi ustawieniami
+    contentSecurityPolicy: isProd
+      ? {
+          directives: {
+            defaultSrc: ["'self'"],
+            scriptSrc: ["'self'", "'unsafe-inline'"],
+            styleSrc: ["'self'", "'unsafe-inline'"],
+            imgSrc: ["'self'", "data:", "https:"],
+            connectSrc: ["'self'"],
+            fontSrc: ["'self'", "data:"],
+            objectSrc: ["'none'"],
+            baseUri: ["'self'"],
+            frameAncestors: ["'none'"],
+          },
+        }
+      : false,
   })
 );
 // Blokada dostępu do uploads
@@ -67,15 +86,43 @@ app.use("/uploads", (req, res) => {
   return res.status(403).json({ error: "Brak dostępu" });
 });
 
-// statyczne pliki (PRAWIDŁOWE MIEJSCE!)
+// ==========================================
+//   STATIC FILES — produkcyjnie bezpieczne
+// ==========================================
+
+const publicPath = path.join(__dirname, "..", "public");
+
+app.use((req, res, next) => {
+  // ⛔ Twardy bezpiecznik: blokuje ../ oraz próby wyjścia z katalogu public
+  const resolved = path.resolve(publicPath, "." + req.path);
+
+  if (!resolved.startsWith(publicPath)) {
+    console.warn("⚠️ Blokada próby wyjścia poza public/:", req.path);
+    return res.status(403).send("Forbidden");
+  }
+  next();
+});
+
+// Serwowanie plików statycznych
 app.use(
-  express.static(path.join(__dirname, "..", "public"), {
+  express.static(publicPath, {
     index: false,
     etag: true,
     lastModified: true,
-    immutable: false,
-    cacheControl: true,
     fallthrough: true,
+    cacheControl: true,
+    maxAge: "12h", // 🔥 CSS/JS będą cacheowane
+    setHeaders: (res, filePath) => {
+      // 🔐 Bezpieczne nagłówki dla statycznych plików
+      res.setHeader("X-Content-Type-Options", "nosniff");
+      res.setHeader("Referrer-Policy", "no-referrer");
+      res.setHeader("Cross-Origin-Resource-Policy", "same-origin");
+
+      // HTML NIE może być cacheowany (np. dashboard.html)
+      if (filePath.endsWith(".html")) {
+        res.setHeader("Cache-Control", "no-store");
+      }
+    },
   })
 );
 
@@ -84,15 +131,33 @@ app.use(
 // ==========================================
 app.use(
   cors({
-    origin: "http://localhost:4000",
+    origin(origin, callback) {
+      const allowed = [
+        FRONTEND_URL,
+        "http://localhost:4000", // zostawiamy DEV na sztywno, żeby nie zwariować :)
+      ];
+
+      // Brak origin (np. Postman, curl) → OK
+      if (!origin) return callback(null, true);
+
+      if (allowed.includes(origin)) {
+        return callback(null, true);
+      }
+
+      console.warn("🚫 CORS blocked:", origin);
+      return callback(new Error("CORS blocked: " + origin), false);
+    },
     credentials: true,
   })
 );
 
-app.use(express.json());
+app.use(express.json({ limit: "1mb" }));
 app.use(sanitizeBody);
 app.use(cookieParser());
 
+if (isProd) {
+  app.set("trust proxy", 1);
+}
 // ==========================================
 //   SESJE
 // ==========================================
@@ -112,13 +177,13 @@ app.use(
     resave: false,
     saveUninitialized: false,
 
-    cookie: {
-      httpOnly: true,                            // JS w przeglądarce nie widzi ciasteczka
-      secure: process.env.NODE_ENV === "production", // w prod tylko po HTTPS
-      sameSite: "lax",                           // sensowny balans bezpieczeństwo/używalność
-      maxAge: 1000 * 60 * 60 * 8,                // 8h
-      path: "/",                                 // cookie ważne dla całej domeny
-    },
+        cookie: {
+  httpOnly: true,
+  secure: isProd,
+  sameSite: "lax",
+  maxAge: 1000 * 60 * 60 * 8,
+  path: "/",
+},
   })
 );
 // === GLOBAL: blokuje nieznane pola w req.body ===

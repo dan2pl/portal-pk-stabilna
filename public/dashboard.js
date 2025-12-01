@@ -417,19 +417,44 @@ function bindFilters() {
 }
 
 function bindModalAndLogout() {
-  const cmCloseEl = document.getElementById('cmClose');
-  const cmModal = document.getElementById('caseModal');
+  const cmCloseEl = document.getElementById("cmClose");
+  const cmModal = document.getElementById("caseModal");
+
   if (cmCloseEl && cmModal) {
-    cmCloseEl.addEventListener('click', () => (cmModal.style.display = 'none'));
-    cmModal.addEventListener('click', (e) => {
-      if (e.target.classList.contains('modal-backdrop')) cmModal.style.display = 'none';
+    cmCloseEl.addEventListener("click", () => {
+      cmModal.style.display = "none";
+    });
+
+    cmModal.addEventListener("click", (e) => {
+      if (e.target.classList.contains("modal-backdrop")) {
+        cmModal.style.display = "none";
+      }
     });
   }
 
-  document.getElementById('logoutBtn')?.addEventListener('click', () => {
-    localStorage.removeItem('token');
-    window.location.href = '/login.html';
-  });
+  const logoutBtn = document.getElementById("logoutBtn");
+  if (logoutBtn) {
+    logoutBtn.addEventListener("click", async () => {
+      try {
+        // czyścimy sesję po stronie backendu
+        await fetch("/api/logout", {
+          method: "POST",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+        });
+      } catch (err) {
+        console.error("Błąd podczas logoutu:", err);
+        // tu nie blokujemy – i tak przekierujemy niżej
+      } finally {
+        // na wszelki wypadek czyścimy ewentualne lokalne śmieci
+        try {
+          localStorage.removeItem("token");
+        } catch (_) {}
+
+        window.location.href = "/login.html";
+      }
+    });
+  }
 }
 // ===== BOOT MODULES — END =====
 
@@ -1360,40 +1385,69 @@ function getCsrf() {
   return document.querySelector('meta[name="csrf-token"]')?.content || null;
 }
 
-async function apiFetch(path, opts = {}) {
-  const isFormData = opts.body instanceof FormData;
+// Centralny helper do wywołań API – z obsługą błędów i sesji
+async function apiFetch(url, options = {}) {
+  const finalOptions = {
+    // zawsze wysyłamy cookies (auth_token)
+    credentials: "include",
 
-  const baseHeaders = isFormData
-    ? {}
-    : { 'Content-Type': 'application/json' };
+    // domyślne nagłówki – JSON, chyba że ktoś poda własne
+    headers: {
+      ...(options.body instanceof FormData
+        ? {}
+        : { "Content-Type": "application/json" }),
+      ...(options.headers || {}),
+    },
 
-  let headers = {
-    ...baseHeaders,
-    ...(opts.headers || {}),
+    ...options,
   };
 
-  // globalny token (np. ustawiony przy logowaniu)
-  if (window.API.authToken) {
-    headers.Authorization = 'Bearer ' + window.API.authToken;
+  try {
+    const res = await fetch(url, finalOptions);
+
+    // ======= STATUS 401 – sesja wygasła =======
+    if (res.status === 401) {
+      alert("Twoja sesja wygasła lub nie jesteś zalogowany. Zaloguj się ponownie.");
+      window.location.href = "/login.html";
+      throw new Error("Unauthorized (401)");
+    }
+
+    // ======= STATUS 403 – brak uprawnień =======
+    if (res.status === 403) {
+      alert("Brak dostępu do tego zasobu.");
+      throw new Error("Forbidden (403)");
+    }
+
+    // ======= STATUS 429 – za dużo żądań (rate limit) =======
+    if (res.status === 429) {
+      alert("Wykonano zbyt wiele żądań. Spróbuj ponownie za chwilę.");
+      throw new Error("Too Many Requests (429)");
+    }
+
+    // ======= Inny błąd =======
+    if (!res.ok) {
+      const msg = await res.text().catch(() => "");
+      console.error("API error:", res.status, msg);
+      alert("Wystąpił błąd serwera.");
+      throw new Error("API error " + res.status);
+    }
+
+    // ======= JSON lub tekst =======
+    const contentType = res.headers.get("Content-Type") || "";
+    if (contentType.includes("application/json")) {
+      return res.json();
+    }
+    return res.text();
+
+  } catch (err) {
+    console.error("apiFetch – problem z połączeniem:", err);
+    alert("Nie udało się połączyć z serwerem. Sprawdź internet i spróbuj ponownie.");
+    throw err;
   }
-
-  // lokalny token z getToken()
-  headers = authHeaders(headers);
-
-  const csrf = getCsrf();
-  if (csrf) headers['X-CSRF-Token'] = csrf;
-
-  return fetch(`${window.API.base}${path}`, {
-    ...opts,
-    headers,
-    credentials: 'include',
-  });
 }
 
-// alias legacy (dla starego kodu)
-if (typeof window.apiFetch !== 'function') {
-  window.apiFetch = apiFetch;
-}
+// rejestracja globalna
+window.apiFetch = apiFetch;
 
 
 // === Modal SKD (blok 2/3): zapis (PUT), usuwanie (DELETE), walidacje — z DEV fallback ===

@@ -449,6 +449,14 @@
                     <div id="documentsSection">
                       <!-- Drag & Drop -->
                       <div class="file-drop-area" id="caseFileDropArea">
+                        <div class="upload-hint">
+                          📄 <strong>Obsługiwane formaty:</strong> PDF, JPG,
+                          PNG, DOC, XLS, TXT <br />📸
+                          <strong>Uwaga:</strong> Zdjęcia z iPhone w formacie
+                          HEIC/HEIF nie są obsługiwane — w razie potrzeby zmień
+                          format aparatu na JPG lub użyj opcji „Zapisz jako
+                          PDF”.
+                        </div>
                         <div class="file-drop-message">
                           📎 Upuść tutaj pliki lub
                           <span class="file-browse">kliknij</span>, aby dodać
@@ -1262,7 +1270,12 @@
           attachIbanValidator();
         } catch (e) {
           console.error("Błąd ładowania szczegółów sprawy:", e);
-          alert("Nie udało się załadować danych sprawy ❌");
+
+          // Czytelny komunikat dla usera
+          alert("Sprawa nie istnieje lub nie masz do niej dostępu.");
+
+          // Bezpieczny fallback – wracamy do listy spraw
+          window.location.href = "dashboard.html";
         }
       }
 
