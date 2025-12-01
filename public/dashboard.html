@@ -127,7 +127,7 @@
   </head>
 
 
-  <body data-role="admin">
+  <body>
     <header class="site-header">
       <div class="wrap">
         <h1>Portal PK – Dashboard</h1>
@@ -146,7 +146,7 @@
             <input
               id="caseSearch"
               type="text"
-              placeholder="Szukaj: nazwisko"
+              placeholder="Szukaj: nazwisko, bank, telefon, e-mail"
               autocomplete="off"
               style="
                 height: 34px;
@@ -182,8 +182,11 @@
           ></span>
         </div>
 
-        <button id="logoutBtn">🚪 Wyloguj</button>\
-        <span id="currentUserLabel" style="margin-right: 16px; font-weight: 500;">
+        <button id="logoutBtn">🚪 Wyloguj</button>
+<span
+  id="currentUserLabel"
+  style="margin-right: 16px; font-weight: 500;"
+>
   <!-- tu wstrzykniemy z JS -->
 </span>
 
@@ -372,25 +375,45 @@
               >
                 Zapisz
               </button>
-            </header>
-<section class="card" id="wpsBasicCard">
+             </header>
+
+              <!-- ================= WPS BASIC (silnik SKD) ================= -->
+
+              <section class="card" id="wpsBasicCard">
   <header class="card-h">
     <div class="card-b">
       <div class="card-title">WPS Basic (silnik SKD)</div>
-      <div class="card-sub">Szybkie wyliczenie na podstawie podstawowych danych</div>
+      <div class="card-sub">
+        Szybkie wyliczenie na podstawie podstawowych danych
+      </div>
     </div>
   </header>
+<!-- W nagłówku modala / w sekcji pod WPS -->
+<div class="skd-modal-summary">
+  <span>SKD Score:</span>
+  <span id="modalSkdScoreBadge" class="skd-badge">—</span>
+
+  <span style="margin-left: 16px;">Wariant SKD:</span>
+  <span id="modalSkdVariant">—</span>
+
+  <button id="btnModalSkdRecalc" class="btn btn-primary" type="button">
+    Przelicz SKD
+  </button>
+</div>
+
+<p id="modalSkdReason" class="skd-reason">—</p>
   <div class="card-b">
     <input type="hidden" id="wpsCaseId" value="{{ case.id }}">
+
     <div class="form-grid">
       <label class="form-field">
         <span>Kwota kredytu na rękę (netto)</span>
-        <input id="wpsLoanNet" type="number" step="0.01" placeholder="np. 40000" />
+        <input id="wpsLoanNet" type="number" step="0.01" placeholder="np. 40 000" />
       </label>
 
       <label class="form-field">
         <span>Kwota całkowita umowy (brutto)</span>
-        <input id="wpsLoanTotal" type="number" step="0.01" placeholder="np. 52000" />
+        <input id="wpsLoanTotal" type="number" step="0.01" placeholder="np. 52 000" />
       </label>
 
       <label class="form-field">
@@ -408,11 +431,16 @@
         <input id="wpsInstallmentReal" type="number" step="0.01" placeholder="np. 980,50" />
       </label>
     </div>
-<label class="fld small-note">
-  <span>Nie znasz raty? Podaj oprocentowanie z umowy (%):</span>
-  <input id="wpsInterestInput" type="number" step="0.1" placeholder="np. 10" />
-</label>
-    <div class="form-actions" style="margin-top: 1rem; display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center;">
+
+    <label class="fld small-note">
+      <span>Nie znasz raty? Podaj oprocentowanie z umowy (%):</span>
+      <input id="wpsInterestInput" type="number" step="0.1" placeholder="np. 10" />
+    </label>
+
+    <div
+      class="form-actions"
+      style="margin-top: 1rem; display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center;"
+    >
       <button id="wpsCalcBtn" class="btn btn-primary">
         Przelicz WPS (Basic)
       </button>
@@ -432,47 +460,92 @@
   </div>
 </section>
 
+<!-- ================= PODSUMOWANIE / OFERTA SKD ================= -->
 
-            <div class="card-b">
-              <!-- TABS wewnątrz oferty SKD -->
-              <div class="modal-tabs">
-                <div class="tab active" data-tab="summary">Podsumowanie</div>
-                <div class="tab" data-tab="contract">Dane do umowy</div>
-                <div class="tab" data-tab="files">Pliki</div>
-              </div>
+<h3 class="section-title">Podsumowanie</h3>
 
-              <!-- PANEL: PODSUMOWANIE -->
-              <div
-                id="tab-summary"
-                class="tab-panel active"
-                style="margin-top: 12px"
-              >
-                <!-- Dostępność wariantów -->
-                <div class="group" id="skdEligibilityGroup">
-                  <div class="group-title">
-                    Dostępność wariantów (co możemy zaproponować)
-                  </div>
-                  <div class="row">
-                    <label class="chk">
-                      <input type="checkbox" id="eligSf50" checked />
-                      <span>Success Fee 50% — bez ryzyka</span>
-                    </label>
-                    <label class="chk">
-                      <input type="checkbox" id="eligSf49" checked />
-                      <span
-                        >Success Fee 49% — z wynagrodzeniem początkowym</span
-                      >
-                    </label>
-                    <label class="chk">
-                      <input type="checkbox" id="eligSell" checked />
-                      <span>Sprzedaż roszczenia — wypłata z góry</span>
-                    </label>
-                  </div>
-                  <small
-                    >Odznacz warianty, które nie są możliwe dla tej
-                    sprawy.</small
-                  >
-                </div>
+<!-- Dane umowy do oceny wariantu 3 -->
+<div class="group">
+  <div class="group-title">Dane umowy do oceny wariantu 3</div>
+
+  <div class="form-grid">
+    <label class="form-field">
+      <span>Bank</span>
+      <select id="creditBank">
+        <option value="">— wybierz —</option>
+        <option value="Alior Bank">Alior Bank</option>
+        <option value="Bank Millennium">Bank Millennium</option>
+        <option value="Bank Pekao">Bank Pekao</option>
+        <option value="Bank Pocztowy">Bank Pocztowy</option>
+        <option value="BNP Paribas">BNP Paribas</option>
+        <option value="BOŚ Bank">BOŚ Bank</option>
+        <option value="Citi Handlowy">Citi Handlowy</option>
+        <option value="Credit Agricole">Credit Agricole</option>
+        <option value="Getin Bank">Getin Bank</option>
+        <option value="ING Bank Śląski">ING Bank Śląski</option>
+        <option value="mBank">mBank</option>
+        <option value="Nest Bank">Nest Bank</option>
+        <option value="PKO BP">PKO BP</option>
+        <option value="Plus Bank">Plus Bank</option>
+        <option value="Santander Bank Polska">Santander Bank Polska</option>
+        <option value="Santander Consumer">Santander Consumer</option>
+        <option value="SKOK">SKOK</option>
+        <option value="Smartney">Smartney</option>
+        <option value="Velo Bank">Velo Bank</option>
+        <option value="Bank Spółdzielczy">Bank Spółdzielczy</option>
+      </select>
+    </label>
+
+    <label class="form-field">
+      <span>Rok zawarcia umowy</span>
+      <input id="creditAgreementYear" type="number" placeholder="np. 2018" />
+    </label>
+
+    <label class="form-field">
+      <span>Koszty poza kapitałem (PLN)</span>
+      <input id="creditExtraCosts" type="number" placeholder="np. 1 500" />
+    </label>
+  </div>
+</div>
+
+<!-- Dostępność wariantów -->
+<div class="group" id="skdEligibilityGroup">
+  <div class="group-title">
+    Dostępność wariantów (co możemy zaproponować)
+  </div>
+
+  <div class="row">
+    <label class="chk">
+      <input type="checkbox" id="eligSf50" checked />
+      <span>Success Fee 50% — bez ryzyka</span>
+    </label>
+
+    <label class="chk">
+      <input type="checkbox" id="eligSf49" checked />
+      <span>Success Fee 49% — z wynagrodzeniem początkowym</span>
+    </label>
+
+    <label class="chk">
+      <input type="checkbox" id="eligSell" checked />
+      <span>Sprzedaż roszczenia — wypłata z góry</span>
+    </label>
+  </div>
+
+  <small>
+    Odznacz warianty, które nie są możliwe dla tej sprawy.
+  </small>
+</div>
+
+<!-- Wstępna ocena wariantu 3 -->
+<div class="group" id="variant3Preview">
+  <div class="group-title">Wstępna ocena wariantu 3</div>
+
+  <div id="variant3Status" class="variant3-status">—</div>
+
+  <div id="variant3Details" class="variant3-details">
+    <p>Uzupełnij dane kredytu, aby zobaczyć wstępną ocenę wariantu 3.</p>
+  </div>
+</div>
 
                 <!-- Preferencja klienta -->
                 <div class="group" id="clientPreferenceBlock">
@@ -653,7 +726,7 @@
                     placeholder="np. klient preferuje sprzedaż roszczenia; możliwa korekta % przy wykupie."
                   ></textarea>
                 </div>
-              </div>
+
 
               <!-- PANEL: DANE DO UMOWY -->
               <div
@@ -802,38 +875,6 @@
                 </div>
               </div>
 
-              <div style="margin-top: 10px; display: flex; gap: 8px">     
-          </div>
-
-<script>
-  // Podczas kliknięcia w wiersz w tabeli zapisujemy ID sprawy jako "aktywne"
-  document.getElementById("caseTableBody")?.addEventListener("click", (ev) => {
-    const tr = ev.target.closest("tr");
-    if (!tr) return;
-
-    const cid = tr.getAttribute("data-id");
-    if (!cid) return;
-
-    // zapisz ID do linka
-    const openBtn = document.getElementById("openFullCase");
-    if (openBtn) {
-      openBtn.dataset.caseId = cid;
-      openBtn.href = `/cases/${cid}`;
-    }
-  });
-
-  // Fallback gdy ktoś kliknie zanim wybierze wiersz
-  document.getElementById("openFullCase")?.addEventListener("click", (ev) => {
-    const link = ev.currentTarget;
-    const cid = link.dataset.caseId;
-
-    if (!cid) {
-      ev.preventDefault();
-      alert("Najpierw wybierz sprawę z listy po lewej.");
-    }
-  });
-</script>
-
             <!-- EDIT -->
             <div class="tabpanel" data-panel="edit">
               <div class="grid">
@@ -933,9 +974,62 @@
       <!-- Diagnostics overlay -->
       <div id="diagnostics"></div>
     </main>
+<script>
+  function collectCaseDataForSkd() {
+    const getNum = (id) => {
+      const el = document.getElementById(id);
+      if (!el) return 0;
+      const raw = (el.value ?? el.textContent ?? "")
+        .toString()
+        .replace(/\s+/g, "")
+        .replace(",", ".");
+      const n = parseFloat(raw);
+      return Number.isNaN(n) ? 0 : n;
+    };
 
-    <script src="/skdEngine.js"></script>
-<script src="/dashboard.js"></script>
+    // 🔹 Bank + rok umowy (z sekcji "Dane umowy do oceny wariantu 3")
+    const bank =
+      document.getElementById("creditBank")?.value || "";
+
+    const contractYear =
+      parseInt(
+        document.getElementById("creditAgreementYear")?.value || "0",
+        10
+      ) || 0;
+
+    // 🔹 Kwota kredytu — najpierw dedykowane pole, jeśli kiedyś dodamy,
+    //   a na dziś fallback na "Kwota kredytu na rękę (netto)" z WPS Basic
+    const loanAmount = getNum("wpsLoanNet"); // 👈 to idzie do silnika
+
+    // 🔹 Postęp spłaty: zamieniamy liczba rat → procent
+    const term  = getNum("wpsLoanTerm");
+    const paid  = getNum("wpsInstallmentsPaid");
+    let repaymentProgress = 0;
+
+    if (term > 0 && paid > 0) {
+      repaymentProgress = Math.max(
+        0,
+        Math.min(100, (paid / term) * 100)
+      );
+    }
+
+    // 🔹 WPS + anulowane odsetki (opcjonalnie dla wariantu 2)
+    const wps = getNum("wpsResultValue");        // np. "18 500 zł"
+    const futureInterestRelief = getNum("futureInterestInput");
+
+    return {
+      bank,
+      contractYear,
+      loanAmount,
+      repaymentProgress,
+      wps,
+      futureInterestRelief,
+      riskFlags: {}, // na razie puste
+    };
+  }
+</script>
+    <script src="/js/skdEngine.js"></script>
+<script src="/js/dashboard.js"></script>
 </body>
 </html>
 

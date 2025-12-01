@@ -221,10 +221,12 @@ document.addEventListener("input", async (ev) => {
   if (!t.closest("#caseContractSection")) return;
 
   const payload = {
-    loan_amount: document.getElementById("caseLoanInput")?.value ?? null,
-    bank: document.getElementById("caseBankInput")?.value ?? null,
-    contract_date: document.getElementById("caseContractDateInput")?.value ?? null,
-  };
+  loan_amount: document.getElementById("caseLoanInput")?.value ?? null,
+  bank: document.getElementById("caseBankInput")?.value ?? null,
+  contract_date: document.getElementById("caseContractDateInput")?.value ?? null,
+  iban: document.getElementById("contractIban")?.value?.trim() ?? null, // ← NOWE POLE
+};
+
 
   try {
     await fetch(`/api/cases/${caseId}/contract`, {

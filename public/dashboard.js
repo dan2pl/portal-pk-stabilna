@@ -28,6 +28,408 @@ function getToken() {
     null
   );
 }
+
+// === ETAP 17: Konfiguracja wariantu 3 (wstępna ocena) ===
+
+const VARIANT3_BANK_RULES = {
+  // PRZYKŁADY – UZUPEŁNIJ DANYMI Z TWOJEJ TABELI:
+
+  "Alior Bank": {
+    allowsVariant3: true,
+    minProgressRequired: 20,     // w %
+    maxYearFor3: 2023            // ostatni rok, w którym rozważamy 3
+  },
+
+  "ING Bank Śląski": {
+    allowsVariant3: true,
+    minProgressRequired: 80,     // np. 80–90% -> przyjmij dolny próg
+    maxYearFor3: 2024
+  },
+
+  "PKO BP": {
+    allowsVariant3: true,
+    minProgressRequired: 30,
+    maxYearFor3: 2022
+  },
+
+  "Santander Bank Polska": {
+    allowsVariant3: true,
+    minProgressRequired: 20,
+    maxYearFor3: 2023
+  },
+
+  "mBank": {
+    allowsVariant3: true,
+    minProgressRequired: 20,
+    maxYearFor3: 2023
+  },
+
+  "Bank Millennium": {
+    allowsVariant3: true,
+    minProgressRequired: 90,
+    maxYearFor3: 2023
+  },
+
+  "Citi Handlowy": {
+    allowsVariant3: true,
+    minProgressRequired: 20,
+    maxYearFor3: 2023
+  },
+
+  "Bank Pekao": {
+    allowsVariant3: true,
+    minProgressRequired: 30,
+    maxYearFor3: 2023
+  },
+
+  "Bank Pocztowy": {
+    allowsVariant3: true,
+    minProgressRequired: 30,
+    maxYearFor3: 2023
+  },
+
+  "BNP Paribas": {
+    allowsVariant3: true,
+    minProgressRequired: 30,
+    maxYearFor3: 2023
+  },
+
+  "BOŚ Bank": {
+    allowsVariant3: true,
+    minProgressRequired: 80,
+    maxYearFor3: 2023
+  },
+
+  "Credit Agricole": {
+    allowsVariant3: true,
+    minProgressRequired: 30,
+    maxYearFor3: 2023
+  },
+
+  "Getin Bank": {
+    allowsVariant3: true,
+    minProgressRequired: 70,
+    maxYearFor3: 2023
+  },
+
+  "Santander Consumer": {
+    allowsVariant3: true,
+    minProgressRequired: 25,
+    maxYearFor3: 2023
+  },
+
+  "SKOK": {
+    allowsVariant3: true,
+    minProgressRequired: 80,
+    maxYearFor3: 2022
+  },
+
+  "Smartney": {
+    allowsVariant3: true,
+    minProgressRequired: 75,
+    maxYearFor3: 2023
+  },
+
+  "Velo Bank": {
+    allowsVariant3: true,
+    minProgressRequired: 75,
+    maxYearFor3: 2023
+  },
+
+  "Bank Spółdzielczy": {
+    allowsVariant3: true,
+    minProgressRequired: 80,
+    maxYearFor3: 2022
+  },
+};
+
+// Obliczenie postępu spłaty w %
+function calculateRepaymentProgress(totalInstallments, paidInstallments) {
+  if (!totalInstallments || totalInstallments <= 0) return 0;
+  const progress = (paidInstallments / totalInstallments) * 100;
+  return Math.max(0, Math.min(100, Math.round(progress)));
+}
+
+// Obliczenie kosztów dodatkowych w % kwoty kredytu
+function calculateExtraCostPercent(creditAmount, extraCostsAmount) {
+  if (!creditAmount || creditAmount <= 0 || !extraCostsAmount) return 0;
+  const percent = (extraCostsAmount / creditAmount) * 100;
+  return Math.max(0, Math.round(percent * 10) / 10); // zaokrąglenie do 0,1%
+}
+
+// Główna funkcja wstępnej oceny wariantu 3
+function evaluateVariant3Preliminary(params) {
+  const {
+    bankName,
+    agreementYear,
+    progressPercent,
+    extraCostPercent
+  } = params;
+
+  const rule = VARIANT3_BANK_RULES[bankName];
+
+  if (!rule) {
+    return {
+      status: "impossible",
+      reason: "no_rule",
+      message: "Brak zdefiniowanych reguł dla tego banku. Wymagana analiza dokumentów."
+    };
+  }
+
+  if (!rule.allowsVariant3) {
+    return {
+      status: "impossible",
+      reason: "bank_excluded",
+      message: "Dla tego banku wariant 3 jest wyłączony (konstrukcja umowy)."
+    };
+  }
+
+  if (rule.maxYearFor3 && agreementYear > rule.maxYearFor3) {
+    return {
+      status: "impossible",
+      reason: "year_too_new",
+      message: `Umowa zawarta w ${agreementYear} r. – poza zakresem dla wariantu 3 (max ${rule.maxYearFor3}).`
+    };
+  }
+
+  if (typeof rule.minProgressRequired === "number" && progressPercent < rule.minProgressRequired) {
+    return {
+      status: "impossible",
+      reason: "low_progress",
+      message: `Zbyt niski postęp w spłacie dla wariantu 3. Postęp: ${progressPercent}%, wymagany: ${rule.minProgressRequired}%.`
+    };
+  }
+
+  // KLUCZOWA LOGIKA: jeśli wymagany próg postępu dla banku jest NISKI (< 70%),
+  // to dodatkowo wymagamy min. 5% kosztów poza kapitałem.
+  if (
+    typeof rule.minProgressRequired === "number" &&
+    rule.minProgressRequired < 70
+  ) {
+    if (extraCostPercent < 5) {
+      return {
+        status: "impossible",
+        reason: "low_extra_cost",
+        message: `Koszty poza kapitałem (${extraCostPercent}%) są niższe niż wymagane 5% przy niskim progu postępu.`
+      };
+    }
+  }
+
+  // Jeśli wszystkie warunki spełnione – wstępnie możliwy
+  return {
+    status: "possible",
+    reason: "ok",
+    message:
+      "Wariant 3 wygląda wstępnie na możliwy. Ostateczna decyzja po analizie umowy i dokumentów."
+  };
+}
+
+function $(id) {
+  return document.getElementById(id);
+}
+function refreshVariant3Preview() {
+  const bankName = $("creditBank")?.value || "";
+  const agreementYear = parseInt($("creditAgreementYear")?.value || "0", 10);
+
+  // Dane z WPS Basic
+  const totalInstallments = parseInt($("wpsLoanTerm")?.value || "0", 10);
+  const paidInstallments = parseInt($("wpsInstallmentsPaid")?.value || "0", 10);
+
+  const loanNet = parseFloat(($("wpsLoanNet")?.value || "0").replace(",", "."));
+  const loanTotal = parseFloat(($("wpsLoanTotal")?.value || "0").replace(",", "."));
+
+  // Koszty poza kapitałem – najpierw to, co wpisane ręcznie
+  let extraCostsAmount = parseFloat(
+    ($("creditExtraCosts")?.value || "0").replace(",", ".")
+  );
+
+  // Jeśli pole kosztów puste/0, a mamy netto i brutto → policz brutto - netto
+  if ((!extraCostsAmount || isNaN(extraCostsAmount)) && loanNet > 0 && loanTotal > 0) {
+    const autoExtra = loanTotal - loanNet;
+    if (autoExtra > 0) {
+      extraCostsAmount = autoExtra;
+
+      // pokaż policzoną wartość w polu
+      const extraInput = $("creditExtraCosts");
+      if (extraInput) {
+        extraInput.value = autoExtra.toFixed(2);
+      }
+    }
+  }
+
+  const progressPercent = calculateRepaymentProgress(
+    totalInstallments,
+    paidInstallments
+  );
+  const extraCostPercent = calculateExtraCostPercent(loanNet, extraCostsAmount);
+
+  const result = evaluateVariant3Preliminary({
+    bankName,
+    agreementYear,
+    progressPercent,
+    extraCostPercent
+  });
+
+  // Podpinamy do UI:
+  const statusEl = $("variant3Status");
+  const detailsEl = $("variant3Details");
+
+  if (!statusEl || !detailsEl) return;
+
+  if (result.status === "possible") {
+    statusEl.textContent = "🟢 Wstępnie możliwy";
+    statusEl.className = "variant3-status possible";
+  } else {
+    statusEl.textContent = "🔴 Wstępnie niedostępny";
+    statusEl.className = "variant3-status impossible";
+  }
+
+  detailsEl.innerHTML = `
+    <ul>
+      <li><strong>Bank:</strong> ${bankName || "—"}</li>
+      <li><strong>Rok umowy:</strong> ${agreementYear || "—"}</li>
+      <li><strong>Postęp spłaty:</strong> ${
+        isNaN(progressPercent) ? "—" : progressPercent + "%"
+      }</li>
+      <li><strong>Koszty poza kapitałem:</strong> ${
+        isNaN(extraCostPercent) ? "—" : extraCostPercent + "%"
+      }</li>
+      <li><strong>Uzasadnienie:</strong> ${result.message}</li>
+    </ul>
+    <p class="variant3-hint">
+      Informacja ma charakter poglądowy. Ostateczna decyzja o zastosowaniu wariantu 3 zapada po analizie umowy i dokumentów źródłowych.
+    </p>
+  `;
+}
+
+function collectModalSkdData() {
+  const getNum = (selector) => {
+    const el = document.querySelector(selector);
+    if (!el) return 0;
+    const raw = (el.value ?? el.textContent ?? "")
+      .toString()
+      .replace(/\s+/g, "")
+      .replace(",", ".");
+    const n = parseFloat(raw);
+    return Number.isNaN(n) ? 0 : n;
+  };
+
+  return {
+    bank: document.querySelector("#modalBank")?.value || "",     // dopasuj ID
+    contractYear:
+      parseInt(
+        document.querySelector("#modalYear")?.value || "0",
+        10
+      ) || 0,
+    loanAmount: getNum("#modalLoanAmount"),                      // dopasuj ID
+    repaymentProgress: getNum("#modalRepaymentProgress") || 0,   // jeśli masz
+    wps: getNum("#modalWpsValue"),                               // WPS z modala
+    futureInterestRelief: getNum("#modalFutureRelief") || 0,     // na później
+  };
+}
+
+function updateModalSkdUi(result) {
+  const badge = document.getElementById("modalSkdScoreBadge");
+  const variantEl = document.getElementById("modalSkdVariant");
+  const reasonEl = document.getElementById("modalSkdReason");
+
+  if (badge) {
+    badge.textContent = result.score.toString();
+    badge.classList.remove("skd-badge-low", "skd-badge-mid", "skd-badge-high");
+
+    if (result.score >= 76) {
+      badge.classList.add("skd-badge-high");
+    } else if (result.score >= 40) {
+      badge.classList.add("skd-badge-mid");
+    } else {
+      badge.classList.add("skd-badge-low");
+    }
+  }
+
+  if (variantEl) {
+    variantEl.textContent =
+      result.variant === 0 ? "brak oferty" : `Wariant ${result.variant}`;
+  }
+
+  if (reasonEl) {
+    reasonEl.textContent = result.reason || "";
+  }
+}
+function prefFillVariant3FromCase() {
+  // bierzemy dane z ukrytych pól przy WPS
+  const bankHidden = $("wpsCaseBank");
+  const yearHidden = $("wpsCaseAgreementYear");
+
+  const bankFromCase = bankHidden?.value || "";
+  const yearFromCase = yearHidden?.value || "";
+
+  const bankSelect = $("creditBank");
+  const yearInput = $("creditAgreementYear");
+
+  // ustaw bank, jeśli jest
+  if (bankSelect && bankFromCase) {
+    bankSelect.value = bankFromCase;
+  }
+
+  // ustaw rok, jeśli jest
+  if (yearInput && yearFromCase) {
+    yearInput.value = yearFromCase;
+  }
+}
+
+function attachVariant3Handlers() {
+  const fields = [
+    "creditBank",
+    "creditAgreementYear",
+    "wpsLoanTerm",
+    "wpsInstallmentsPaid",
+    "wpsLoanNet",
+    "wpsLoanTotal",
+    "creditExtraCosts"
+  ];
+
+  fields.forEach((id) => {
+    const el = $(id);
+    if (el) {
+      el.addEventListener("input", refreshVariant3Preview);
+      el.addEventListener("change", refreshVariant3Preview);
+    }
+  });
+
+  // pierwsze przeliczenie
+  refreshVariant3Preview();
+}
+const btnModalSkd = document.getElementById("btnModalSkdRecalc");
+if (btnModalSkd) {
+  btnModalSkd.addEventListener("click", () => {
+    const caseData = collectModalSkdData();
+    const result = window.determineSkdVariant(caseData); // z skdEngine.js
+
+    console.log("📊 SKD wynik (modal):", result);
+    updateModalSkdUi(result);
+
+    // opcjonalnie: od razu wyślij do backendu:
+    /*
+    fetch(`/api/cases/${currentCaseId}/skd`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        skd_score: result.score,
+        skd_variant: result.variant,
+        skd_reason: result.reason,
+      }),
+    });
+    */
+  });
+}
+
+// Wywołaj po załadowaniu widoku sprawy
+document.addEventListener("DOMContentLoaded", () => {
+  prefFillVariant3FromCase();   // najpierw wypełnij bank + rok z ukrytych pól
+  attachVariant3Handlers();     // potem podłącz logikę przeliczania
+});
+
+
 function authHeaders(base = {}) {
   const t = getToken();
   return t ? { ...base, Authorization: `Bearer ${t}` } : base;
@@ -125,13 +527,20 @@ async function loadCurrentUser() {
 
     const user = data.user || data || {};
 
+    // 🔥 ZAPISUJEMY GLOBALNIE UŻYTKOWNIKA I ROLĘ
+    window.currentUser = user;
+
+    const roleRaw = user.role || data.role || "";
+    if (roleRaw) {
+      document.body.dataset.role = roleRaw;      // żeby USER_ROLE w JS miał sens
+    }
+
     const label = document.getElementById("currentUserLabel");
     const adminLink = document.getElementById("adminPanelLink");
 
     const name =
       user.name || user.email || (user.id ? `Użytkownik #${user.id}` : "—");
 
-    const roleRaw = user.role || data.role || "";
     const roleLabel =
       roleRaw === "admin"
         ? "Administrator"
@@ -282,7 +691,7 @@ const BANKS = [
   "Credit Agricole",
   "Getin Bank",
   "ING Bank Śląski",
-  "mBank",
+  "mBank", 
   "PKO BP",
   "Santander Bank Polska",
   "Santander Consumer",
@@ -837,14 +1246,6 @@ if (dropArea && addFilesEl) {
     renderFilePreview();
   });
 }
-
-  // Wybranie plików przez kliknięcie
-  addFilesEl.addEventListener("change", () => {
-    const selected = Array.from(addFilesEl.files || []);
-    pendingFiles.push(...selected);
-    syncFilesToInput();
-    renderFilePreview();
-  });
 
 
 // --- handler przycisku dodania sprawy (dopisz/zmień u siebie tylko środek) ---
@@ -1756,7 +2157,21 @@ document.addEventListener('DOMContentLoaded', async () => {
     showDiag('❌ Boot zatrzymany: ' + (e?.message || e));
   }
 
-    
+   // === Helper: otwarcie modala sprawy po ID (używany przez szukajkę) ===
+  function openCaseModal(caseId) {
+    if (!caseId) return;
+    const tbody = document.getElementById("caseTableBody");
+    if (!tbody) return;
+
+    const tr = tbody.querySelector(`tr[data-id="${caseId}"]`);
+    if (!tr) {
+      console.warn("openCaseModal: nie znaleziono wiersza dla ID:", caseId);
+      return;
+    }
+
+    // korzystamy z istniejącego listenera click na tbodyEl
+    tr.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+  }
 
   // === Szukajka ===
   (function initCaseSearch() {
@@ -1797,21 +2212,20 @@ document.addEventListener('DOMContentLoaded', async () => {
 
 
 
-      updateCount(shown, q);
+            updateCount(shown, q);
 
-          if (shown === 1 && typeof openCaseModal === "function") {
-      const onlyTr = rows.find(tr => tr.style.display !== "none");
-      const idCell = onlyTr ? onlyTr.querySelector("td,th") : null;
-      const caseId = idCell ? (idCell.textContent || "").trim() : null;
+      // jeśli jest dokładnie 1 wynik — otwórz modal tej sprawy
+      if (shown === 1) {
+        const onlyTr = rows.find(tr => tr.style.display !== "none");
+        const caseId = onlyTr ? onlyTr.dataset.id : null;
 
-      if (caseId) {
-        setTimeout(() => {
-          window.currentCaseId = caseId;              // ⬅️ tutaj łapiemy ID sprawy
-          console.log("Otwieram sprawę ID:", caseId); // opcjonalny log do debugowania
-          openCaseModal(caseId);
-        }, 80);
+        if (caseId) {
+          setTimeout(() => {
+            console.log("Otwieram sprawę ID (szukajka):", caseId);
+            openCaseModal(caseId);  // helper zdefiniowany wyżej
+          }, 80);
+        }
       }
-    }
   }, 200);
 
 
@@ -2580,7 +2994,100 @@ try {
 }
 
 } // ← domknięcie brakującego bloku, np. funkcji lub DOMContentLoaded
+// === SKD SCORE — zbieranie danych z modala + aktualizacja UI ===
+function collectCaseDataForSkd() {
+  const getNum = (id) => {
+    const el = document.getElementById(id);
+    if (!el) return 0;
+    const raw = (el.value ?? el.textContent ?? "")
+      .toString()
+      .replace(/\s+/g, "")
+      .replace(",", ".");
+    const n = parseFloat(raw);
+    return Number.isNaN(n) ? 0 : n;
+  };
 
+  // 👇 staramy się działać zarówno w modalu dashboardu, jak i w case.html
+  const bank =
+    document.getElementById("creditBank")?.value ||
+    document.getElementById("cmBank")?.value ||
+    "";
+
+  // Rok umowy – najpierw specjalne pole, potem z daty startu
+  let contractYear =
+    parseInt(
+      document.getElementById("creditAgreementYear")?.value || "0",
+      10
+    ) || 0;
+
+  if (!contractYear) {
+    const startDate =
+      document.getElementById("creditStartDate")?.value || "";
+    if (startDate && /^\d{4}-\d{2}-\d{2}$/.test(startDate)) {
+      contractYear = parseInt(startDate.slice(0, 4), 10) || 0;
+    }
+  }
+
+  const loanAmount =
+    getNum("creditAmount") || // case.html
+    getNum("wpsLoanNet") ||   // modal WPS (dashboard)
+    getNum("summaryAmount");  // fallback
+
+  const repaymentProgress = getNum("wpsInstallmentsPaid");
+
+  // WPS – preferujemy ostatnio policzony WPS, inaczej bierzemy z UI
+  const wps =
+    (typeof lastWpsBasic === "number" && lastWpsBasic > 0
+      ? lastWpsBasic
+      : getNum("wpsResultValue")) || getNum("skdWpsForecast");
+
+  const futureInterestRelief = getNum("futureInterestInput");
+
+  return {
+    bank,
+    contractYear,
+    loanAmount,
+    repaymentProgress,
+    wps,
+    futureInterestRelief,
+  };
+}
+
+function updateSkdUi(result) {
+  const badge = document.getElementById("modalSkdScoreBadge");
+  const variantEl = document.getElementById("modalSkdVariant");
+  const reasonEl = document.getElementById("modalSkdReason");
+
+  // 🔹 Badge z wynikiem
+  if (badge && result && typeof result.score === "number") {
+    badge.textContent = result.score.toString();
+    badge.classList.remove("skd-badge-low", "skd-badge-mid", "skd-badge-high");
+
+    if (result.score >= 76) {
+      badge.classList.add("skd-badge-high");
+    } else if (result.score >= 40) {
+      badge.classList.add("skd-badge-mid");
+    } else {
+      badge.classList.add("skd-badge-low");
+    }
+  }
+
+  // 🔹 Tekst wariantu
+  if (variantEl) {
+    if (!result || result.variant == null) {
+      variantEl.textContent = "—";
+    } else if (result.variant === 0) {
+      variantEl.textContent = "brak oferty";
+    } else {
+      variantEl.textContent = `Wariant ${result.variant}`;
+    }
+  }
+
+  // 🔹 Uzasadnienie
+  if (reasonEl) {
+    reasonEl.textContent = (result && result.reason) || "";
+  }
+}
 // ===============================
 //   WPS BASIC — obsługa UI + zapis + oferta SKD
 // ===============================
@@ -2758,54 +3265,68 @@ async function saveSkdOffer() {
     });
   }
 
-  // 2) PRZELICZ WPS
-  btnCalc.addEventListener("click", () => {
-    const loan_amount_net = parseNumber(loanNetInput);
-    const loan_amount_total = parseNumber(loanTotalInput);
-    const loan_term_months = parseNumber(termInput);
-    const installments_paid = parseNumber(paidInput);
-    const installment_amount_real = parseNumber(installmentRealInput);
+ // 2) PRZELICZ WPS
+btnCalc.addEventListener("click", () => {
+  const loan_amount_net = parseNumber(loanNetInput);
+  const loan_amount_total = parseNumber(loanTotalInput);
+  const loan_term_months = parseNumber(termInput);
+  const installments_paid = parseNumber(paidInput);
+  const installment_amount_real = parseNumber(installmentRealInput);
 
-    if (!loan_amount_net || !loan_term_months || !installments_paid) {
-      alert("Uzupełnij kwotę netto, okres kredytu i liczbę zapłaconych rat.");
-      return;
-    }
+  if (!loan_amount_net || !loan_term_months || !installments_paid) {
+    alert("Uzupełnij kwotę netto, okres kredytu i liczbę zapłaconych rat.");
+    return;
+  }
 
-    if (!installment_amount_real && !loan_amount_total) {
-      alert("Podaj ratę faktyczną ALBO kwotę całkowitą umowy (żeby ją wyliczyć).");
-      return;
-    }
+  if (!installment_amount_real && !loan_amount_total) {
+    alert("Podaj ratę faktyczną ALBO kwotę całkowitą umowy (żeby ją wyliczyć).");
+    return;
+  }
 
-    const wps = calculateWpsBasic({
-      loan_amount_net,
-      loan_amount_total,
-      loan_term_months,
-      installments_paid,
-      installment_amount_real,
-    });
-
-    if (wps === null) {
-      resultEl.textContent = "brak danych";
-      lastWpsBasic = null;
-      if (btnSave) btnSave.disabled = true;
-      if (btnApply) btnApply.disabled = true;
-      return;
-    }
-
-    lastWpsBasic = wps;
-
-    const formatted = wps.toLocaleString("pl-PL", {
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0,
-    });
-    resultEl.textContent = `${formatted} zł`;
-
-    if (btnSave) btnSave.disabled = false;
-    if (btnApply) btnApply.disabled = false;
-
-    // 💾 zapisz wprowadzone dane kredytu dla tej sprawy
-    saveWpsInputsToStorage();
+  const wps = calculateWpsBasic({
+    loan_amount_net,
+    loan_amount_total,
+    loan_term_months,
+    installments_paid,
+    installment_amount_real,
   });
+
+  if (wps === null) {
+    resultEl.textContent = "brak danych";
+    lastWpsBasic = null;
+    if (btnSave) btnSave.disabled = true;
+    if (btnApply) btnApply.disabled = true;
+    return;
+  }
+
+  lastWpsBasic = wps;
+
+  const formatted = wps.toLocaleString("pl-PL", {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  });
+  resultEl.textContent = `${formatted} zł`;
+
+  if (btnSave) btnSave.disabled = false;
+  if (btnApply) btnApply.disabled = false;
+
+  // 💾 zapisz wprowadzone dane kredytu dla tej sprawy
+  saveWpsInputsToStorage();
+
+  // 🔥 DODANE: od razu licz SKD Score i uzupełnij UI w modalu
+  try {
+    if (typeof window.calculateSkdScore === "function") {
+      const data = collectCaseDataForSkdFromModal();
+      const result = window.calculateSkdScore(data);
+      console.log("[SKD Score][modal] dane:", data, "wynik:", result);
+      updateSkdUi(result);
+    } else {
+      console.warn("Brak window.calculateSkdScore – sprawdź skdEngine.js");
+    }
+  } catch (err) {
+    console.warn("Błąd przy liczeniu SKD Score w modalu:", err);
+  }
+});
 
   // 3) ZAPISZ WPS DO SPRAWY (PATCH)
   if (btnSave) {
@@ -2879,7 +3400,76 @@ async function saveSkdOffer() {
     });
   }
 })(); // ← DOMKNIĘCIE IIFE setupWpsBasicUI (BARDZO WAŻNE)
+// ===============================
+//   SKD SCORE – helpery dla modala
+// ===============================
+function collectCaseDataForSkdFromModal() {
+  const getNum = (id) => {
+    const el = document.getElementById(id);
+    if (!el) return 0;
 
+    const raw = (el.value ?? el.textContent ?? "")
+      .toString()
+      .replace(/\s+/g, "")
+      .replace(",", ".")
+      .replace("zł", "");
+
+    const n = parseFloat(raw);
+    return Number.isNaN(n) ? 0 : n;
+  };
+
+  return {
+    bank: document.getElementById("creditBank")?.value || "",
+    contractYear:
+      parseInt(
+        document.getElementById("creditAgreementYear")?.value || "0",
+        10
+      ) || 0,
+    // kwota kredytu – bierzemy z WPS Basic (netto), a jakby co fallback na "creditAmount"
+    loanAmount: getNum("wpsLoanNet") || getNum("creditAmount"),
+    // postęp spłaty – liczba rat
+    repaymentProgress: getNum("wpsInstallmentsPaid"),
+    // WPS – z pola wyniku WPS Basic
+    wps: getNum("wpsResultValue"),
+    // anulowane przyszłe odsetki
+    futureInterestRelief: getNum("futureInterestInput"),
+  };
+}
+
+function updateSkdUi(result) {
+  const badge = document.getElementById("modalSkdScoreBadge");
+  const variantEl = document.getElementById("modalSkdVariant");
+  const reasonEl = document.getElementById("modalSkdReason");
+
+  if (badge) {
+    badge.textContent = (result.score ?? "—").toString();
+    badge.classList.remove("skd-badge-low", "skd-badge-mid", "skd-badge-high");
+
+    if (typeof result.score === "number") {
+      if (result.score >= 76) {
+        badge.classList.add("skd-badge-high");
+      } else if (result.score >= 40) {
+        badge.classList.add("skd-badge-mid");
+      } else {
+        badge.classList.add("skd-badge-low");
+      }
+    }
+  }
+
+  if (variantEl) {
+    if (!result || !result.variant) {
+      variantEl.textContent = "—";
+    } else if (result.variant === 0) {
+      variantEl.textContent = "brak oferty";
+    } else {
+      variantEl.textContent = `Wariant ${result.variant}`;
+    }
+  }
+
+  if (reasonEl) {
+    reasonEl.textContent = result?.reason || "";
+  }
+}
 // ===== Ostrzeżenie przy opuszczaniu strony, gdy oferta SKD ma niezapisane zmiany =====
 window.addEventListener("beforeunload", (e) => {
   try {

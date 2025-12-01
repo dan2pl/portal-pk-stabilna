@@ -1579,5 +1579,99 @@
         });
       })();
     </script>
+    <script>
+      function collectCaseDataForSkd() {
+        const getNum = (id) => {
+          const el = document.getElementById(id);
+          if (!el) return 0;
+          const raw = (el.value ?? el.textContent ?? "")
+            .toString()
+            .replace(/\s+/g, "")
+            .replace(",", ".");
+          const n = parseFloat(raw);
+          return Number.isNaN(n) ? 0 : n;
+        };
+
+        return {
+          bank: document.getElementById("creditBank")?.value || "",
+          contractYear:
+            parseInt(
+              document.getElementById("creditAgreementYear")?.value || "0",
+              10
+            ) || 0,
+          loanAmount: getNum("creditAmount"),
+          repaymentProgress: getNum("wpsInstallmentsPaid"), // jeżeli się nie zgadza – zmienimy
+          wps: getNum("wpsResultValue"),
+          futureInterestRelief: getNum("futureInterestInput"),
+        };
+      }
+
+      function updateSkdUi(result) {
+        const badge = document.getElementById("modalSkdScoreBadge");
+        const variantEl = document.getElementById("modalSkdVariant");
+        const reasonEl = document.getElementById("modalSkdReason");
+
+        if (badge) {
+          badge.textContent = result.score.toString();
+          badge.classList.remove(
+            "skd-badge-low",
+            "skd-badge-mid",
+            "skd-badge-high"
+          );
+
+          if (result.score >= 76) {
+            badge.classList.add("skd-badge-high");
+          } else if (result.score >= 40) {
+            badge.classList.add("skd-badge-mid");
+          } else {
+            badge.classList.add("skd-badge-low");
+          }
+        }
+
+        if (variantEl) {
+          variantEl.textContent =
+            result.variant === 0 ? "brak oferty" : `Wariant ${result.variant}`;
+        }
+
+        if (reasonEl) {
+          reasonEl.textContent = result.reason || "";
+        }
+      }
+    </script>
+    <script>
+      document.addEventListener("DOMContentLoaded", () => {
+        const btn = document.getElementById("btnModalSkdRecalc");
+        if (!btn) return;
+
+        btn.addEventListener("click", () => {
+          const data = collectCaseDataForSkd();
+
+          if (
+            typeof window.calculateSkdScore !== "function" ||
+            typeof window.determineSkdVariant !== "function"
+          ) {
+            alert("Brak funkcji SKD – sprawdź skdEngine.js");
+            return;
+          }
+
+          // 1️⃣ liczmy sam score
+          const score = window.calculateSkdScore(data);
+          console.log("[SKD Score][modal] dane:", data, "wynik:", score);
+
+          // 2️⃣ przekazujemy score do silnika wariantów
+          const result = window.determineSkdVariant({
+            ...data,
+            score, // <– KLUCZOWA LINIJKA
+          });
+
+          console.log("📊 SKD wynik (modal):", result);
+
+          // 3️⃣ odświeżamy UI w modalu
+          updateSkdUi(result);
+        });
+      });
+    </script>
+    <script src="/skdEngine.js"></script>
+    <script src="/dashboard.js"></script>
   </body>
 </html>

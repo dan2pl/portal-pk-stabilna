@@ -1682,3 +1682,206 @@ body[data-role="admin"]  #clientPreferenceBlock { display: none !important; }
     transform: none !important;
   }
 }
+.variant3-status {
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+
+.variant3-status.possible {
+  color: #15803d; /* zielony */
+}
+
+.variant3-status.impossible {
+  color: #b91c1c; /* czerwony */
+}
+
+.variant3-details ul {
+  margin: 0;
+  padding-left: 18px;
+}
+
+.variant3-hint {
+  font-size: 0.8rem;
+  color: #6b7280;
+  margin-top: 4px;
+}
+/* === FIX: kosmetyka modala SKD === */
+
+#skdOfferModal .card {
+  margin-bottom: 24px;
+  border-radius: 12px;
+}
+
+#skdOfferModal .group {
+  background: #fafafa;
+  border: 1px solid #e4e4e4;
+  padding: 20px;
+  border-radius: 12px;
+  margin-bottom: 24px;
+}
+
+#skdOfferModal .group-title {
+  font-weight: 600;
+  margin-bottom: 16px;
+  font-size: 16px;
+}
+
+#skdOfferModal .form-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 18px;
+}
+
+#skdOfferModal .variant3-status {
+  font-size: 15px;
+  font-weight: 600;
+  margin-bottom: 12px;
+}
+
+#skdOfferModal .variant3-status.possible {
+  color: #0a8a2a;
+}
+
+#skdOfferModal .variant3-status.impossible {
+  color: #b92d2d;
+}
+
+#skdOfferModal .variant3-details {
+  background: #fff;
+  padding: 14px 18px;
+  border-radius: 10px;
+  border: 1px solid #eee;
+}
+
+#skdOfferModal .variant3-details ul {
+  margin: 0;
+  padding-left: 18px;
+}
+
+#skdOfferModal .variant3-details li {
+  margin-bottom: 8px;
+}
+
+#skdOfferModal .variant3-hint {
+  margin-top: 12px;
+  font-size: 12px;
+  color: #777;
+}
+
+/* Odstępy sekcji */
+#skdOfferModal .card-subsection {
+  margin-top: 24px;
+}
+/* Sekcje w modalu SKD */
+#skdOfferModal .group {
+  background: #fafafa;
+  border: 1px solid #e5e5e5;
+  border-radius: 12px;
+  padding: 16px 20px;
+  margin-bottom: 20px;
+}
+
+#skdOfferModal .group-title {
+  font-weight: 600;
+  margin-bottom: 12px;
+}
+
+/* WPS Basic – delikatne wygładzenie */
+#wpsBasicCard .form-grid {
+  gap: 16px;
+}
+
+#wpsBasicCard .form-field span {
+  display: block;
+  margin-bottom: 4px;
+}
+
+/* Wstępna ocena wariantu 3 */
+#skdOfferModal .variant3-status {
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+
+#skdOfferModal .variant3-status.possible {
+  color: #0a8a2a;
+}
+
+#skdOfferModal .variant3-status.impossible {
+  color: #b91c1c;
+}
+
+#skdOfferModal .variant3-details {
+  background: #fff;
+  border: 1px solid #e5e5e5;
+  border-radius: 10px;
+  padding: 10px 14px;
+}
+
+#skdOfferModal .variant3-details ul {
+  margin: 0;
+  padding-left: 18px;
+}
+
+#skdOfferModal .variant3-details li {
+  margin-bottom: 4px;
+}
+
+#skdOfferModal .variant3-hint {
+  margin-top: 8px;
+  font-size: 12px;
+  color: #777;
+}
+.skd-badge {
+  display: inline-block;
+  min-width: 40px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  text-align: center;
+  color: #fff;
+  font-weight: 600;
+}
+
+.skd-badge-low {
+  background: #e53935;
+}
+
+.skd-badge-mid {
+  background: #ffb300;
+}
+
+.skd-badge-high {
+  background: #43a047;
+}
+
+.skd-reason {
+  font-size: 0.85rem;
+  color: #555;
+  margin-top: 4px;
+}
+.skd-summary-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 0;
+}
+
+.skd-badge {
+  display: inline-block;
+  min-width: 40px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  text-align: center;
+  color: #fff;
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.skd-badge-low  { background: #e53935; }
+.skd-badge-mid  { background: #ffb300; }
+.skd-badge-high { background: #43a047; }
+
+.skd-reason {
+  font-size: 0.85rem;
+  color: #555;
+  margin: 0 0 8px 0;
+}
