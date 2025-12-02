@@ -181,7 +181,17 @@
             style="font-size: 12px; color: #6c757d"
           ></span>
         </div>
+<div class="notif-container">
+  <button id="notificationsButton" class="notif-btn">
+    🔔
+    <span id="notificationsBadge" class="notif-badge" style="display:none;">0</span>
+  </button>
 
+  <div id="notificationsPanel" class="notif-panel" style="display:none;">
+    <div class="notif-panel-header">Powiadomienia</div>
+    <div id="notificationsList" class="notif-list"></div>
+  </div>
+</div>
         <button id="logoutBtn">🚪 Wyloguj</button>\
         <span id="currentUserLabel" style="margin-right: 16px; font-weight: 500;">
   <!-- tu wstrzykniemy z JS -->
@@ -322,7 +332,7 @@
             </div>
             <input id="addStatus" type="hidden" value="nowa" />
             <div class="form-actions">
-              <button id="addCaseBtn" type="button">Zapisz sprawę</button>
+              <button id="btnSaveCase" class="pk-btn">Zapisz sprawę</button>
             </div>
           </div>
         </section>

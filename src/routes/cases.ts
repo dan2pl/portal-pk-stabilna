@@ -1,12 +1,19 @@
 // src/routes/cases.ts
+// Zewnętrzne biblioteki
 import { Express } from "express";
-import pool from "../db";
 import multer from "multer";
 import fs from "fs";
 import fsPromises from "fs/promises";
 import path from "path";
+
+// Wewnętrzne – core i middleware
+import pool from "../db";
 import { requireAuth } from "../middleware/requireAuth";
 import { denyUnknownFields } from "./denyUnknownFields";
+
+// Logika biznesowa (statusy)
+import { updateCaseStatus } from "../services/caseStatus";
+import { isValidCaseStatus } from "../domain/caseStatus";
 
 function sanitizeBody(req, res, next) {
   try {
@@ -430,6 +437,40 @@ function sanitizeNumberLike(raw: any): number | null {
   const num = Number(s);
   return Number.isFinite(num) ? num : null;
 }
+
+  // ============================================
+  //  ZMIANA STATUSU SPRAWY
+  //  POST /api/cases/update-status
+  // ============================================
+  app.post("/api/cases/update-status", requireAuth, async (req, res) => {
+    try {
+      const { caseId, status } = req.body;
+
+      // Walidacja caseId
+      const idNum = Number(caseId);
+      if (!idNum || Number.isNaN(idNum)) {
+        return res.status(400).json({ error: "Invalid caseId" });
+      }
+
+      // Walidacja statusu względem CaseStatus
+      if (!isValidCaseStatus(status)) {
+        return res.status(400).json({ error: "Invalid case status" });
+      }
+
+      // @ts-ignore – jeśli TS marudzi o req.user, a Ty masz to z middleware
+      const userId = (req as any).user?.id ?? null;
+
+      const updated = await updateCaseStatus(idNum, status);
+
+      return res.json({
+        ok: true,
+        case: updated,
+      });
+    } catch (err) {
+      console.error("❌ /api/cases/update-status error:", err);
+      return res.status(500).json({ error: "Server error" });
+    }
+  });
 // === ULTRA-SAFE LISTA SPRAW (GET /api/cases) ===
 app.get("/api/cases",
   softApiLimit,       // lekkie ograniczenie dla list
@@ -545,27 +586,43 @@ app.get(
       if (user.role === "admin") {
         // ADMIN → KPI z wszystkich spraw
         q = await pool.query(`
-          SELECT
-            COUNT(*)::int AS total_cases,
-            COUNT(*) FILTER (WHERE status NOT IN ('zamknieta','zamknięta','archiwum'))::int AS open_cases,
-            COUNT(*) FILTER (WHERE status IN ('nowa','analiza','w toku'))::int              AS new_cases,
-            COALESCE(SUM(wps), 0)::numeric AS wps_total
-          FROM cases
-        `);
+  SELECT
+    COUNT(*)::int AS total_cases,
+
+    -- SPRAWY OTWARTE: wszystko oprócz zamkniętych / archiwalnych
+    COUNT(*) FILTER (
+      WHERE status_code NOT IN ('CLOSED_SUCCESS','CLOSED_FAIL','CLIENT_RESIGNED')
+    )::int AS open_cases,
+
+    -- "NOWE": w naszym nowym pipeline: nowe + w analizie
+    COUNT(*) FILTER (
+      WHERE status_code IN ('NEW','ANALYSIS')
+    )::int AS new_cases,
+
+    COALESCE(SUM(wps), 0)::numeric AS wps_total
+  FROM cases
+`);
       } else {
         // AGENT → KPI tylko z jego spraw
         q = await pool.query(
-          `
-          SELECT
-            COUNT(*)::int AS total_cases,
-            COUNT(*) FILTER (WHERE status NOT IN ('zamknieta','zamknięta','archiwum'))::int AS open_cases,
-            COUNT(*) FILTER (WHERE status IN ('nowa','analiza','w toku'))::int              AS new_cases,
-            COALESCE(SUM(wps), 0)::numeric AS wps_total
-          FROM cases
-          WHERE owner_id = $1
-          `,
-          [user.id]
-        );
+  `
+  SELECT
+    COUNT(*)::int AS total_cases,
+
+    COUNT(*) FILTER (
+      WHERE status_code NOT IN ('CLOSED_SUCCESS','CLOSED_FAIL','CLIENT_RESIGNED')
+    )::int AS open_cases,
+
+    COUNT(*) FILTER (
+      WHERE status_code IN ('NEW','ANALYSIS')
+    )::int AS new_cases,
+
+    COALESCE(SUM(wps), 0)::numeric AS wps_total
+  FROM cases
+  WHERE owner_id = $1
+  `,
+  [user.id]
+);
       }
 
       const r = q.rows[0] || {
@@ -674,12 +731,41 @@ app.get(
 );
 
   // === SZCZEGÓŁY JEDNEJ SPRAWY (dla case.html) ===
-  app.get("/api/cases/:id", softApiLimit, requireAuth, async (req, res) => {
+app.get("/api/cases/:id", softApiLimit, requireAuth, async (req, res) => {
   try {
     const user = (req as any).user;
     const id = Number(req.params.id);
 
     const row = await loadCaseForUser(id, user);
+
+    // 🔹 NOWE: wyliczamy status_code (z bazy albo ze starego statusu)
+    let statusCode: string | null = row.status_code ?? null;
+
+    if (!statusCode) {
+      const legacy = (row.status || "").toLowerCase();
+      switch (legacy) {
+        case "nowa":
+          statusCode = "NEW";
+          break;
+        case "analiza":
+          statusCode = "ANALYSIS";
+          break;
+        case "przygotowanie":
+          statusCode = "CONTRACT_PREP";
+          break;
+        case "wyslane":
+          statusCode = "IN_PROGRESS";
+          break;
+        case "uznane":
+          statusCode = "CLOSED_SUCCESS";
+          break;
+        case "odrzucone":
+          statusCode = "CLOSED_FAIL";
+          break;
+        default:
+          statusCode = "NEW";
+      }
+    }
 
     // selekcja tylko potrzebnych pól do frontu (bez wrażliwych)
     const safe = {
@@ -687,19 +773,20 @@ app.get(
       client: row.client,
       bank: row.bank,
       loan_amount: row.loan_amount,
-      status: row.status,
+      status: row.status,          // legacy – jak coś jeszcze z tego korzysta
+      status_code: statusCode,     // ⬅⬅⬅ KLUCZOWE DLA NOWEGO SYSTEMU
       contract_date: row.contract_date,
       phone: row.phone,
       email: row.email,
       address: row.address,
-      pesel: row.pesel,           // jak chcesz – można też wypiąć z API
+      pesel: row.pesel,            // jak chcesz – można też wypiąć z API
       wps_forecast: row.wps_forecast,
       wps_final: row.wps_final,
       client_benefit: row.client_benefit,
       notes: row.notes,
       owner_id: row.owner_id,
       updated_at: row.updated_at,
-      offer_skd: row.offer_skd,  // jeśli trzymasz JSON z ofertą
+      offer_skd: row.offer_skd,    // jeśli trzymasz JSON z ofertą
       iban: row.iban ?? null,
     };
 

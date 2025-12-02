@@ -22,6 +22,7 @@
             Utworzono: <span id="caseCreatedAt">01.10.2025</span> · Prowadzący:
             <span id="caseOwner">Jan Kowalski</span>
           </div>
+          <input type="hidden" id="caseId" />
           <div class="case-tags">
             <span class="tag tag-primary" id="caseStatus">NOWA</span>
             <span class="tag" id="caseBank">mBank</span>
@@ -338,33 +339,54 @@
                 <div class="accordion-item open">
                   <div class="accordion-header">
                     <div class="accordion-title">
-                      Status SKD i podstawowe dane
-                    </div>
-                    <div class="accordion-toggle">▶</div>
-                  </div>
-                  <div class="accordion-body">
-                    <div class="field-row">
-                      <div class="field">
-                        <label for="skdStatus">Status SKD</label>
-                        <select id="skdStatus">
-                          <option value="brak">Brak</option>
-                          <option value="analiza">Analiza</option>
-                          <option value="przygotowanie">W przygotowaniu</option>
-                          <option value="wyslane">Wysłane do banku</option>
-                          <option value="uznane">Uznane</option>
-                          <option value="odrzucone">Odrzucone</option>
-                        </select>
-                      </div>
-                      <div class="field">
-                        <label for="caseStage">Etap sprawy</label>
-                        <select id="caseStage">
-                          <option value="nowa">Nowa</option>
-                          <option value="analiza">Analiza</option>
-                          <option value="przygotowanie">W przygotowaniu</option>
-                          <option value="wyslane">Wysłane do banku</option>
-                          <option value="uznane">Uznane</option>
-                          <option value="odrzucone">Odrzucone</option>
-                        </select>
+                      <div class="field-row">
+                        <!-- Status SKD – na razie tylko informacyjny (podsumowanie) -->
+                        <div class="field">
+                          <label>Status SKD</label>
+                          <div id="skdStatusLabel">
+                            <!-- Tu JS wstawi tekst typu "W procesie" / "SKD uznane" -->
+                          </div>
+                        </div>
+
+                        <!-- GŁÓWNY etap sprawy – spięty z status_code -->
+                        <div class="field">
+                          <label for="caseStage">Etap sprawy</label>
+                          <select id="caseStage">
+                            <option value="NEW">Nowa</option>
+                            <option value="ANALYSIS">W analizie</option>
+                            <option value="ANALYSIS_DOCS_NEEDED">
+                              Braki dokumentów do analizy
+                            </option>
+                            <option value="ANALYSIS_POSITIVE">
+                              Analiza pozytywna
+                            </option>
+                            <option value="ANALYSIS_NEGATIVE">
+                              Odrzucona w analizie
+                            </option>
+                            <option value="CONTRACT_PREP">
+                              Przygotowanie umowy
+                            </option>
+                            <option value="CONTRACT_DOCS_NEEDED">
+                              Oczekiwanie na dokumenty do wykupu
+                            </option>
+                            <option value="CONTRACT_AT_AGENT">
+                              Umowa u agenta
+                            </option>
+                            <option value="CONTRACT_SIGNED">
+                              Umowa zawarta
+                            </option>
+                            <option value="IN_PROGRESS">W toku</option>
+                            <option value="CLOSED_SUCCESS">
+                              Zakończona – Sukces
+                            </option>
+                            <option value="CLOSED_FAIL">
+                              Zakończona – Przegrana
+                            </option>
+                            <option value="CLIENT_RESIGNED">
+                              Rezygnacja klienta
+                            </option>
+                          </select>
+                        </div>
                       </div>
 
                       <div class="field">
@@ -646,37 +668,115 @@
         return document.getElementById(id);
       }
 
-      // === PROGRES ETAPU SPRAWY ===
+      // === PROGRES ETAPU SPRAWY (NOWY SYSTEM) ===
 
-      function stageToProgress(value) {
-        switch (String(value).toLowerCase()) {
-          case "nowa":
-            return 10;
-          case "analiza":
-            return 30;
-          case "przygotowanie":
-            return 45;
-          case "wyslane":
-            return 70;
-          case "uznane":
-            return 100;
-          case "odrzucone":
+      function stageToProgress(statusCode) {
+        switch (statusCode) {
+          case "NEW":
+            return 5;
+
+          case "ANALYSIS":
+            return 20;
+
+          case "ANALYSIS_DOCS_NEEDED":
+            return 25;
+
+          case "ANALYSIS_POSITIVE":
+            return 35;
+
+          case "ANALYSIS_NEGATIVE":
             return 0;
+
+          case "CONTRACT_PREP":
+            return 50;
+
+          case "CONTRACT_DOCS_NEEDED":
+            return 55;
+
+          case "CONTRACT_AT_AGENT":
+            return 65;
+
+          case "CONTRACT_SIGNED":
+            return 75;
+
+          case "IN_PROGRESS":
+            return 85;
+
+          case "CLOSED_SUCCESS":
+            return 100;
+
+          case "CLOSED_FAIL":
+          case "CLIENT_RESIGNED":
+            return 0;
+
           default:
             return 0;
         }
       }
 
-      function updateCaseProgress(stage) {
+      function updateCaseProgress(statusCode) {
         const fill = document.getElementById("caseProgressFill");
         if (!fill) return;
-        const percent = stageToProgress(stage);
+        const percent = stageToProgress(statusCode);
         fill.style.width = percent + "%";
+      }
+
+      // 🔹 JEDNO globalne caseStageSelect + caseIdInput
+      const caseStageSelect = document.getElementById("caseStage");
+      const caseIdInput = document.getElementById("caseId");
+
+      async function saveCaseStatus() {
+        if (!caseStageSelect) return;
+
+        const caseId =
+          Number(caseIdInput?.value) ||
+          Number(new URLSearchParams(window.location.search).get("id"));
+
+        const status = caseStageSelect.value;
+
+        if (!caseId || !status) {
+          console.warn("Brak caseId lub statusu przy zapisie etapu", {
+            caseId,
+            status,
+          });
+          return;
+        }
+
+        try {
+          const res = await fetch(`${API_BASE}/cases/update-status`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ caseId, status }),
+          });
+
+          const data = await res.json();
+          if (!data.ok) {
+            console.error("Błąd przy zmianie statusu", data);
+            alert("Nie udało się zapisać etapu sprawy.");
+            return;
+          }
+
+          console.log("✅ Status sprawy zapisany:", data.case);
+
+          updateCaseProgress(status);
+        } catch (err) {
+          console.error("Błąd requestu przy zmianie statusu:", err);
+          alert("Wystąpił błąd przy zapisie etapu sprawy.");
+        }
+      }
+
+      if (caseStageSelect) {
+        caseStageSelect.addEventListener("change", saveCaseStatus);
       }
 
       // === WYPEŁNIANIE DANYCH Z API ===
 
       function fillCaseHeader(data) {
+        const caseIdHidden = document.getElementById("caseId");
+        if (caseIdHidden) {
+          caseIdHidden.value = data.id ?? data.caseId ?? "";
+        }
+
         const caseId = data.id ?? data.caseId ?? "";
         const clientName =
           data.client ??
@@ -768,44 +868,6 @@
         $("summaryLastUpdate").textContent = lastUpdate
           ? new Date(lastUpdate).toLocaleDateString("pl-PL")
           : "—";
-      }
-
-      function fillClientSection(data) {
-        $("clientName").value =
-          data.client ??
-          data.clientName ??
-          data.client_name ??
-          data.client_full_name ??
-          "";
-
-        $("clientPesel").value =
-          data.pesel ?? data.clientPesel ?? data.client_pesel ?? "";
-
-        $("clientPhone").value =
-          data.phone ?? data.clientPhone ?? data.client_phone ?? "";
-
-        $("clientEmail").value =
-          data.email ?? data.clientEmail ?? data.client_email ?? "";
-
-        const addr = data.address ?? "";
-        const { street, city, postcode } = splitAddress(addr);
-
-        $("clientStreet").value = street;
-        $("clientCity").value = city;
-        $("clientPostcode").value = postcode;
-
-        $("clientNotes").value = data.clientNotes ?? data.client_notes ?? "";
-
-        // 🔽 NOWE: wczytanie numeru konta, jeśli backend go zwraca
-        const ibanInput = $("contractIban");
-        if (ibanInput) {
-          const ibanFromData =
-            data.iban ?? // np. pole "iban" na case
-            data.contractIban ?? // albo inne warianty nazw
-            data.clientIban ??
-            "";
-          ibanInput.value = ibanFromData || "";
-        }
       }
 
       function splitAddress(address) {
@@ -912,6 +974,111 @@
           }
         });
       }
+      function fillClientSection(data) {
+        // --- Dane klienta ---
+        $("clientName").value =
+          data.client ??
+          data.clientName ??
+          data.client_name ??
+          data.client_full_name ??
+          "";
+
+        $("clientPesel").value =
+          data.pesel ?? data.clientPesel ?? data.client_pesel ?? "";
+
+        $("clientPhone").value =
+          data.phone ?? data.clientPhone ?? data.client_phone ?? "";
+
+        $("clientEmail").value =
+          data.email ?? data.clientEmail ?? data.client_email ?? "";
+
+        const addr = data.address ?? "";
+        const { street, city, postcode } = splitAddress(addr);
+
+        $("clientStreet").value = street;
+        $("clientCity").value = city;
+        $("clientPostcode").value = postcode;
+
+        $("clientNotes").value = data.clientNotes ?? data.client_notes ?? "";
+
+        // --- IBAN (jeśli backend go zwraca) ---
+        const ibanInput = $("contractIban");
+        if (ibanInput) {
+          const ibanFromData =
+            data.iban ?? data.contractIban ?? data.clientIban ?? "";
+          ibanInput.value = ibanFromData || "";
+        }
+
+        // --- ETAP SPRAWY / STATUS_CODE ---
+
+        // 1. Najpierw próbujemy status_code z backendu (docelowe pole)
+        let statusCode = data.status_code;
+
+        // 2. Jeśli nie ma status_code – próbujemy odczytać go ze starego pola "status"
+        if (!statusCode) {
+          const raw = data.status;
+
+          if (raw) {
+            const upper = String(raw).toUpperCase();
+
+            // pełna lista naszych kodów statusu
+            const known = [
+              "NEW",
+              "ANALYSIS",
+              "ANALYSIS_DOCS_NEEDED",
+              "ANALYSIS_POSITIVE",
+              "ANALYSIS_NEGATIVE",
+              "CONTRACT_PREP",
+              "CONTRACT_DOCS_NEEDED",
+              "CONTRACT_AT_AGENT",
+              "CONTRACT_SIGNED",
+              "IN_PROGRESS",
+              "CLOSED_SUCCESS",
+              "CLOSED_FAIL",
+              "CLIENT_RESIGNED",
+            ];
+
+            if (known.includes(upper)) {
+              // 🟢 w bazie już siedzi nowy kod → używamy go 1:1
+              statusCode = upper;
+            } else {
+              // 🔙 stary schemat z polskimi nazwami typu "analiza", "przygotowanie" itd.
+              const legacy = String(raw).toLowerCase();
+              switch (legacy) {
+                case "nowa":
+                  statusCode = "NEW";
+                  break;
+                case "analiza":
+                  statusCode = "ANALYSIS";
+                  break;
+                case "przygotowanie":
+                  statusCode = "CONTRACT_PREP";
+                  break;
+                case "wyslane":
+                  statusCode = "IN_PROGRESS";
+                  break;
+                case "uznane":
+                  statusCode = "CLOSED_SUCCESS";
+                  break;
+                case "odrzucone":
+                  statusCode = "CLOSED_FAIL";
+                  break;
+                default:
+                  statusCode = "NEW";
+              }
+            }
+          } else {
+            statusCode = "NEW";
+          }
+        }
+
+        // 3. Ustawiamy dropdown "Etap sprawy" i pasek postępu
+        if (caseStageSelect && statusCode) {
+          caseStageSelect.value = statusCode;
+          updateCaseProgress(statusCode);
+        }
+      }
+
       function fillCreditSection(data) {
         $("creditBank").value =
           data.bank ?? data.creditBank ?? data.bankName ?? data.bank_name ?? "";
@@ -942,7 +1109,8 @@
       }
 
       function fillSkdSection(data) {
-        const skdStatus = data.skdStatus ?? data.skd_status ?? "brak";
+        console.log("[fillSkdSection] data =", data);
+
         const skdDate = data.skdDate ?? data.skd_date ?? data.skdSentDate;
         const skdPotential = data.skdPotential ?? data.skd_potential ?? "";
         const wps =
@@ -955,21 +1123,33 @@
           data.skdOfferVariant ?? data.skd_offer_variant ?? "prosty";
         const offerText = data.skdOfferText ?? data.skd_offer_text ?? "";
 
-        $("skdStatus").value = skdStatus;
-        $("skdDate").value = normalizeDateToInput(skdDate);
-        $("skdPotential").value = skdPotential;
-        $("skdWpsForecast").value = wps;
-        $("skdOfferVariant").value = variant;
-        $("skdOfferText").value = offerText;
+        const skdDateInput = $("skdDate");
+        if (skdDateInput) {
+          skdDateInput.value = normalizeDateToInput(skdDate);
+        }
 
-        // 🔥 JEDYNE miejsce, które ustawia etap sprawy (czyli status z backendu)
-        const backendStatus = data.status || "nowa";
-        const normalized = String(backendStatus).toLowerCase();
+        const skdPotentialInput = $("skdPotential");
+        if (skdPotentialInput) {
+          skdPotentialInput.value = skdPotential;
+        }
 
-        $("caseStage").value = normalized;
-        updateCaseProgress(normalized);
+        const wpsInput = $("skdWpsForecast");
+        if (wpsInput) {
+          wpsInput.value = wps;
+        }
+
+        const variantSelect = $("skdOfferVariant");
+        if (variantSelect) {
+          variantSelect.value = variant;
+        }
+
+        const offerTextArea = $("skdOfferText");
+        if (offerTextArea) {
+          offerTextArea.value = offerText;
+        }
+
+        // NIC nie ruszamy w etapie / pasku
       }
-
       function fillNotesSection(data) {
         $("caseNotes").value =
           data.notes ?? data.caseNotes ?? data.case_notes ?? "";
@@ -1271,11 +1451,10 @@
         } catch (e) {
           console.error("Błąd ładowania szczegółów sprawy:", e);
 
-          // Czytelny komunikat dla usera
-          alert("Sprawa nie istnieje lub nie masz do niej dostępu.");
-
-          // Bezpieczny fallback – wracamy do listy spraw
-          window.location.href = "dashboard.html";
+          // Tymczasowo: bez alertu, bez przekierowania,
+          // żeby zobaczyć dokładny błąd w konsoli
+          // alert("Sprawa nie istnieje lub nie masz do niej dostępu.");
+          // window.location.href = "dashboard.html";
         }
       }
 

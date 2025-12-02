@@ -12,6 +12,7 @@ import adminRoutes from "./routes/admin";
 import pool from "./db";
 import authRoutes from "./routes/auth";
 import casesRoutes from "./routes/cases";
+import notificationsRoutes from "./routes/notifications";
 
 dotenv.config();
 
@@ -209,7 +210,7 @@ function denyUnknownFields(allowedKeys: string[]) {
 authRoutes(app);
 casesRoutes(app);
 adminRoutes(app);
-
+notificationsRoutes(app);
 // ==========================================
 //   404 — musi być NA KOŃCU
 // ==========================================

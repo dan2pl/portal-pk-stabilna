@@ -3020,5 +3020,84 @@ document.addEventListener("DOMContentLoaded", () => {
       alert("Nie udało się usunąć sprawy.");
     }
   });
+
+  async function fetchNotifications(onlyUnread = true) {
+  try {
+    const res = await fetch(`/api/notifications?onlyUnread=${onlyUnread ? "1" : "0"}`, {
+      credentials: "include",
+    });
+
+    const data = await res.json();
+    if (!data.ok) return;
+
+    const items = data.items;
+    const badge = document.getElementById("notificationsBadge");
+    const list = document.getElementById("notificationsList");
+
+    // Badge
+    if (items.length > 0) {
+      badge.style.display = "inline-block";
+      badge.textContent = items.length > 9 ? "9+" : items.length;
+    } else {
+      badge.style.display = "none";
+    }
+
+    // Panel list
+    list.innerHTML = "";
+    items.forEach(n => {
+      const div = document.createElement("div");
+      div.className = "notif-item unread";
+      div.dataset.id = n.id;
+      div.innerHTML = `
+        <div>${n.title}</div>
+        <div class="notif-item-time">${new Date(n.created_at).toLocaleString()}</div>
+        <div style="font-size:12px; color:#555">${n.body}</div>
+      `;
+      div.addEventListener("click", () => {
+        markNotificationsRead([n.id]);
+        div.classList.remove("unread");
+      });
+      list.appendChild(div);
+    });
+
+  } catch (err) {
+    console.error("fetchNotifications error:", err);
+  }
+}
+
+async function markNotificationsRead(ids) {
+  await fetch("/api/notifications/read", {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ ids }),
+  });
+
+  fetchNotifications(true);
+}
+
+function initNotifications() {
+  const btn = document.getElementById("notificationsButton");
+  const panel = document.getElementById("notificationsPanel");
+
+  if (!btn || !panel) return;
+
+  btn.addEventListener("click", () => {
+    panel.style.display = panel.style.display === "none" ? "block" : "none";
+    if (panel.style.display === "block") {
+      fetchNotifications(true);
+    }
+  });
+
+  // Initial fetch
+  fetchNotifications(true);
+
+  // Auto-refresh every 60s
+  setInterval(() => fetchNotifications(true), 60000);
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+  initNotifications();
+});
 });
 
