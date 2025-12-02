@@ -2,8 +2,10 @@
   "name": "portal-pk-stabilna",
   "version": "1.0.0",
   "scripts": {
-    "dev": "npx ts-node src/server.ts"
-  },
+  "dev": "npx ts-node src/server.ts",
+  "build": "tsc",
+  "start": "node dist/server.js"
+},
   "dependencies": {
     "@types/bcryptjs": "^2.4.6",
     "@types/express-session": "^1.18.2",
