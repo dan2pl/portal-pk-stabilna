@@ -17,6 +17,22 @@ const USER_ROLE = document.body.dataset.role || 'agent';
 const IS_ADMIN = USER_ROLE === 'admin';
 console.log('Zalogowany jako:', USER_ROLE);
 
+// === GLOBALNE ETYKIETY STATUSÓW (jedyna prawda) ===
+const CASE_STATUS_LABELS = {
+  NEW: "Nowa",
+  ANALYSIS: "W analizie",
+  ANALYSIS_DOCS_NEEDED: "Braki dokumentów do analizy",
+  ANALYSIS_POSITIVE: "Analiza pozytywna",
+  ANALYSIS_NEGATIVE: "Analiza negatywna",
+  CONTRACT_PREP: "Przygotowanie umowy",
+  CONTRACT_DOCS_NEEDED: "Oczekiwanie na dokumenty",
+  CONTRACT_AT_AGENT: "Umowa u agenta",
+  CONTRACT_SIGNED: "Umowa zawarta",
+  IN_PROGRESS: "W toku",
+  CLOSED_SUCCESS: "Zakończona – Sukces",
+  CLOSED_FAIL: "Zakończona – Przegrana",
+  CLIENT_RESIGNED: "Rezygnacja klienta",
+};
 function getToken() {
   // spróbuj kilku popularnych miejsc
   return (
@@ -362,14 +378,32 @@ async function initTableAndKpi() {
     renderKpis(computeKpis(itemsAll));
     computeAndRenderWpsKpis(itemsAll);
 
-    const tBody = document.getElementById('caseTableBody');
+        const tBody = document.getElementById('caseTableBody');
     if (tBody) {
       tBody.innerHTML = itemsAll.map(c => {
         const clientStr = c.client ?? '—';
         const bankStr   = c.bank ? String(c.bank) : '—';
-        const amountStr = (c.loan_amount ?? c.amount ?? null) != null ? fmtPL(c.loan_amount ?? c.amount) : '—';
-        const wpsStr    = (c.wps ?? '') !== '' ? fmtPL(c.wps) : '—';
-        const statusStr = String(c.status || '—');
+        const amountStr =
+          (c.loan_amount ?? c.amount ?? null) != null
+            ? fmtPL(c.loan_amount ?? c.amount)
+            : '—';
+        const wpsStr =
+          (c.wps ?? '') !== ''
+            ? fmtPL(c.wps)
+            : '—';
+
+        // 🔹 Nowe: status jako kod → ładna etykieta
+        const rawCode =
+          c.status_code ??
+          c.status ??
+          c.stage ??
+          c.caseStage ??
+          null;
+
+        const statusStr = rawCode
+          ? (CASE_STATUS_LABELS[String(rawCode).toUpperCase()] || String(rawCode))
+          : "—";
+
         return `
 <tr data-id="${c.id ?? ''}">
   <td>${clientStr}</td>
@@ -675,8 +709,6 @@ try {
     const bankStr   = c.bank ? String(c.bank) : '—';
     const amountStr = (c.loan_amount ?? c.amount ?? null) != null ? fmtPL(c.loan_amount ?? c.amount) : '—';
     const wpsStr    = (c.wps ?? '') !== '' ? fmtPL(c.wps) : '—';
-    const statusStr = String(c.status || '—');
-
     const caseNoStr = c.case_number ? String(c.case_number) : '';
 
     // 🔍 zbierz wszystkie pola, których NAZWA zawiera phone/tel/email
@@ -685,6 +717,17 @@ try {
       .map(([, val]) => (val == null ? '' : String(val)))
       .join(' ');
 
+        // 🔹 Status jako kod → ładna etykieta z CASE_STATUS_LABELS
+  const rawCode =
+    c.status_code ??
+    c.status ??
+    c.stage ??
+    c.caseStage ??
+    null;
+
+  const statusStr = rawCode
+    ? (CASE_STATUS_LABELS[String(rawCode).toUpperCase()] || String(rawCode))
+    : "—";
     // prosty escape cudzysłowów, żeby nie rozwalić HTML-a
     const esc = (s) => String(s).replace(/"/g, '&quot;');
 
