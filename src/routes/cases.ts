@@ -380,63 +380,63 @@ export default function casesRoutes(app: Express) {
   console.log("➡️ routes: cases + KPI loaded");
 
   // === Helper: pobierz sprawę z kontrolią uprawnień ===
-async function loadCaseForUser(caseId: number, user: any) {
-  if (!Number.isFinite(caseId)) {
-    throw Object.assign(new Error("invalid-id"), { status: 400 });
-  }
+  async function loadCaseForUser(caseId: number, user: any) {
+    if (!Number.isFinite(caseId)) {
+      throw Object.assign(new Error("invalid-id"), { status: 400 });
+    }
 
-  // Admin widzi wszystko
-  if (user.role === "admin") {
+    // Admin widzi wszystko
+    if (user.role === "admin") {
+      const q = await pool.query(
+        `SELECT * FROM cases WHERE id = $1`,
+        [caseId]
+      );
+      if (!q.rowCount) {
+        throw Object.assign(new Error("case-not-found"), { status: 404 });
+      }
+      return q.rows[0];
+    }
+
+    // Agent – tylko swoje sprawy
     const q = await pool.query(
-      `SELECT * FROM cases WHERE id = $1`,
-      [caseId]
+      `SELECT * FROM cases WHERE id = $1 AND owner_id = $2`,
+      [caseId, user.id]
     );
     if (!q.rowCount) {
+      // celowo ten sam komunikat – żeby nie zdradzać,
+      // czy sprawa istnieje ale należy do kogoś innego
       throw Object.assign(new Error("case-not-found"), { status: 404 });
     }
     return q.rows[0];
   }
-
-  // Agent – tylko swoje sprawy
-  const q = await pool.query(
-    `SELECT * FROM cases WHERE id = $1 AND owner_id = $2`,
-    [caseId, user.id]
-  );
-  if (!q.rowCount) {
-    // celowo ten sam komunikat – żeby nie zdradzać,
-    // czy sprawa istnieje ale należy do kogoś innego
-    throw Object.assign(new Error("case-not-found"), { status: 404 });
+  function sendCaseError(res: any, err: any) {
+    const status = (err && (err.status as number)) || 500;
+    if (status === 404) {
+      return res.status(404).json({ error: "Sprawa nie istnieje lub brak dostępu" });
+    }
+    if (status === 400) {
+      return res.status(400).json({ error: "Nieprawidłowy identyfikator sprawy" });
+    }
+    console.error("CASE API ERROR:", err);
+    return res.status(500).json({ error: "Błąd serwera (CASE)" });
   }
-  return q.rows[0];
-}
-function sendCaseError(res: any, err: any) {
-  const status = (err && (err.status as number)) || 500;
-  if (status === 404) {
-    return res.status(404).json({ error: "Sprawa nie istnieje lub brak dostępu" });
+  // ————————————————————————————
+  // Helper: twarda sanityzacja liczb finansowych
+  // ————————————————————————————
+  function sanitizeNumberLike(raw: any): number | null {
+    if (raw === null || raw === undefined) return null;
+
+    let s = String(raw)
+      .replace(/\s+/g, "")   // usuń spacje
+      .replace(",", ".")     // zamień przecinek na kropkę
+      .replace(/[^\d.-]/g, ""); // wyrzuć wszystko poza cyframi, - i .
+
+    // Usuń przypadki "--12", "12-", ".", "-", "--", itp:
+    if (s === "" || s === "." || s === "-" || s === "-.") return null;
+
+    const num = Number(s);
+    return Number.isFinite(num) ? num : null;
   }
-  if (status === 400) {
-    return res.status(400).json({ error: "Nieprawidłowy identyfikator sprawy" });
-  }
-  console.error("CASE API ERROR:", err);
-  return res.status(500).json({ error: "Błąd serwera (CASE)" });
-}
-// ————————————————————————————
-// Helper: twarda sanityzacja liczb finansowych
-// ————————————————————————————
-function sanitizeNumberLike(raw: any): number | null {
-  if (raw === null || raw === undefined) return null;
-
-  let s = String(raw)
-    .replace(/\s+/g, "")   // usuń spacje
-    .replace(",", ".")     // zamień przecinek na kropkę
-    .replace(/[^\d.-]/g, ""); // wyrzuć wszystko poza cyframi, - i .
-
-  // Usuń przypadki "--12", "12-", ".", "-", "--", itp:
-  if (s === "" || s === "." || s === "-" || s === "-.") return null;
-
-  const num = Number(s);
-  return Number.isFinite(num) ? num : null;
-}
 
   // ============================================
   //  ZMIANA STATUSU SPRAWY
@@ -471,64 +471,64 @@ function sanitizeNumberLike(raw: any): number | null {
       return res.status(500).json({ error: "Server error" });
     }
   });
-// === ULTRA-SAFE LISTA SPRAW (GET /api/cases) ===
-app.get("/api/cases",
-  softApiLimit,       // lekkie ograniczenie dla list
-  requireAuth,        // musi być zalogowany
-  async (req, res) => {
-    try {
-      const user = (req as any).user;
+  // === ULTRA-SAFE LISTA SPRAW (GET /api/cases) ===
+  app.get("/api/cases",
+    softApiLimit,       // lekkie ograniczenie dla list
+    requireAuth,        // musi być zalogowany
+    async (req, res) => {
+      try {
+        const user = (req as any).user;
 
-      if (!user) {
-        return res.status(401).json({ error: "Brak dostępu – zaloguj się" });
-      }
+        if (!user) {
+          return res.status(401).json({ error: "Brak dostępu – zaloguj się" });
+        }
 
-      // 🔐 Log audytowy
-      console.log(`[CASES] user=${user.id}, role=${user.role}, ip=${req.ip}`);
+        // 🔐 Log audytowy
+        console.log(`[CASES] user=${user.id}, role=${user.role}, ip=${req.ip}`);
 
-      // -------------------------
-      // 1) PAGE / LIMIT (zabezpieczone)
-      // -------------------------
-      const pageRaw  = parseInt(String(req.query.page  ?? "1"), 10);
-      const limitRaw = parseInt(String(req.query.limit ?? "100"), 10);
+        // -------------------------
+        // 1) PAGE / LIMIT (zabezpieczone)
+        // -------------------------
+        const pageRaw = parseInt(String(req.query.page ?? "1"), 10);
+        const limitRaw = parseInt(String(req.query.limit ?? "100"), 10);
 
-      const page  = Number.isFinite(pageRaw)  && pageRaw  > 0 ? pageRaw  : 1;
-      const limitU = Number.isFinite(limitRaw) && limitRaw > 0 ? limitRaw : 100;
+        const page = Number.isFinite(pageRaw) && pageRaw > 0 ? pageRaw : 1;
+        const limitU = Number.isFinite(limitRaw) && limitRaw > 0 ? limitRaw : 100;
 
-      // 🔒 limit twardo ograniczony do 200
-      const limit = Math.min(limitU, 200);
-      const offset = (page - 1) * limit;
+        // 🔒 limit twardo ograniczony do 200
+        const limit = Math.min(limitU, 200);
+        const offset = (page - 1) * limit;
 
-      // -------------------------
-      // 2) FILTR DOSTĘPU (admin vs agent)
-      // -------------------------
-      let whereSql = "";
-      const params: any[] = [];
+        // -------------------------
+        // 2) FILTR DOSTĘPU (admin vs agent)
+        // -------------------------
+        let whereSql = "";
+        const params: any[] = [];
 
-      if (user.role === "admin") {
-        whereSql = "";     // admin widzi wszystko
-      } else {
-        whereSql = "WHERE owner_id = $1";
-        params.push(user.id);
-      }
+        if (user.role === "admin") {
+          whereSql = "";     // admin widzi wszystko
+        } else {
+          whereSql = "WHERE owner_id = $1";
+          params.push(user.id);
+        }
 
-      // -------------------------
-      // 3) POLICZ ILE SPRAW
-      // -------------------------
-      const countSql = `
+        // -------------------------
+        // 3) POLICZ ILE SPRAW
+        // -------------------------
+        const countSql = `
         SELECT COUNT(*)::int AS count
         FROM cases
         ${whereSql}
       `;
-      const countRes = await pool.query(countSql, params);
-      const totalCount = countRes.rows[0]?.count ?? 0;
-      const totalPages =
-        totalCount === 0 ? 1 : Math.max(Math.ceil(totalCount / limit), 1);
+        const countRes = await pool.query(countSql, params);
+        const totalCount = countRes.rows[0]?.count ?? 0;
+        const totalPages =
+          totalCount === 0 ? 1 : Math.max(Math.ceil(totalCount / limit), 1);
 
-      // -------------------------
-      // 4) POBIERZ STRONĘ
-      // -------------------------
-      const rowsSql = `
+        // -------------------------
+        // 4) POBIERZ STRONĘ
+        // -------------------------
+        const rowsSql = `
         SELECT
           id,
           client,
@@ -548,44 +548,44 @@ app.get("/api/cases",
         OFFSET $${params.length + 2}
       `;
 
-      const rows = await pool.query(rowsSql, [...params, limit, offset]);
+        const rows = await pool.query(rowsSql, [...params, limit, offset]);
 
-      // -------------------------
-      // 5) ODP.
-      // -------------------------
-      return res.json({
-        items: rows.rows || [],
-        page,
-        limit,
-        totalCount,
-        totalPages,
-      });
+        // -------------------------
+        // 5) ODP.
+        // -------------------------
+        return res.json({
+          items: rows.rows || [],
+          page,
+          limit,
+          totalCount,
+          totalPages,
+        });
 
-    } catch (err) {
-      console.error("❌ GET /api/cases ERROR:", err);
-      return res.status(500).json({ error: "Błąd serwera przy pobieraniu spraw" });
+      } catch (err) {
+        console.error("❌ GET /api/cases ERROR:", err);
+        return res.status(500).json({ error: "Błąd serwera przy pobieraniu spraw" });
+      }
     }
-  }
-);
+  );
 
   // === KPI (per user / admin) ===
-app.get(
-  "/api/kpi",
-  softApiLimit,       
-  requireAuth,       
-  async (req, res) => {
-    try {
-      const user = (req as any).user;
+  app.get(
+    "/api/kpi",
+    softApiLimit,
+    requireAuth,
+    async (req, res) => {
+      try {
+        const user = (req as any).user;
 
-      if (!user) {
-        return res.status(401).json({ error: "Brak dostępu – zaloguj się" });
-      }
+        if (!user) {
+          return res.status(401).json({ error: "Brak dostępu – zaloguj się" });
+        }
 
-      let q;
+        let q;
 
-      if (user.role === "admin") {
-        // ADMIN → KPI z wszystkich spraw
-        q = await pool.query(`
+        if (user.role === "admin") {
+          // ADMIN → KPI z wszystkich spraw
+          q = await pool.query(`
   SELECT
     COUNT(*)::int AS total_cases,
 
@@ -602,10 +602,10 @@ app.get(
     COALESCE(SUM(wps), 0)::numeric AS wps_total
   FROM cases
 `);
-      } else {
-        // AGENT → KPI tylko z jego spraw
-        q = await pool.query(
-  `
+        } else {
+          // AGENT → KPI tylko z jego spraw
+          q = await pool.query(
+            `
   SELECT
     COUNT(*)::int AS total_cases,
 
@@ -621,381 +621,381 @@ app.get(
   FROM cases
   WHERE owner_id = $1
   `,
-  [user.id]
-);
+            [user.id]
+          );
+        }
+
+        const r = q.rows[0] || {
+          total_cases: 0,
+          open_cases: 0,
+          new_cases: 0,
+          wps_total: 0,
+        };
+
+        return res.json({
+          totalCases: r.total_cases,
+          openCases: r.open_cases,
+          newCases: r.new_cases,
+          wpsTotal: Number(r.wps_total) || 0,
+        });
+
+      } catch (err) {
+        console.error("GET /api/kpi error", err);
+        return res.status(500).json({ error: "Server error" });
       }
-
-      const r = q.rows[0] || {
-        total_cases: 0,
-        open_cases: 0,
-        new_cases: 0,
-        wps_total: 0,
-      };
-
-      return res.json({
-        totalCases: r.total_cases,
-        openCases: r.open_cases,
-        newCases: r.new_cases,
-        wpsTotal: Number(r.wps_total) || 0,
-      });
-
-    } catch (err) {
-      console.error("GET /api/kpi error", err);
-      return res.status(500).json({ error: "Server error" });
     }
-  }
-);
+  );
   // === DODAWANIE NOWEJ SPRAWY ===
   app.post(
-  "/api/cases",
-  mediumApiLimit,
-  requireAuth,
-  denyUnknownFields(["client", "loan_amount", "bank"]),   
-  async (req, res) => {
+    "/api/cases",
+    mediumApiLimit,
+    requireAuth,
+    denyUnknownFields(["client", "loan_amount", "bank"]),
+    async (req, res) => {
 
-    const user = (req as any).user;
+      const user = (req as any).user;
 
-    if (!user) {
-      return res.status(401).json({ error: "Brak dostępu – zaloguj się" });
-    }
+      if (!user) {
+        return res.status(401).json({ error: "Brak dostępu – zaloguj się" });
+      }
 
-    // ================================
-    // 1) SANITY + WALIDACJA WEJŚCIA
-    // ================================
-    const raw = req.body || {};
-    let { client, loan_amount, bank } = raw;
+      // ================================
+      // 1) SANITY + WALIDACJA WEJŚCIA
+      // ================================
+      const raw = req.body || {};
+      let { client, loan_amount, bank } = raw;
 
-    // --- NORMALIZACJA STRINGÓW ---
-    const cleanStr = (v: any, max = 120) => {
-      if (typeof v !== "string") return null;
-      let s = v.trim();
+      // --- NORMALIZACJA STRINGÓW ---
+      const cleanStr = (v: any, max = 120) => {
+        if (typeof v !== "string") return null;
+        let s = v.trim();
 
-      // usuń znaki mogące rodzić XSS / dziwne injection
-      s = s.replace(/[<>]/g, "");       // blokada HTML injection
-      s = s.replace(/[\u0000-\u001F]/g, ""); // control chars
-      s = s.substring(0, max);          // twardy limit długości
+        // usuń znaki mogące rodzić XSS / dziwne injection
+        s = s.replace(/[<>]/g, "");       // blokada HTML injection
+        s = s.replace(/[\u0000-\u001F]/g, ""); // control chars
+        s = s.substring(0, max);          // twardy limit długości
 
-      return s || null;
-    };
+        return s || null;
+      };
 
-    client = cleanStr(client, 120);
-    bank   = cleanStr(bank, 80);
+      client = cleanStr(client, 120);
+      bank = cleanStr(bank, 80);
 
-    if (!client) {
-      return res.status(400).json({ error: "Pole 'client' jest wymagane." });
-    }
+      if (!client) {
+        return res.status(400).json({ error: "Pole 'client' jest wymagane." });
+      }
 
-    // --- KWOTA ---
-    const toNumber = (v: any) => {
-      if (v == null) return null;
-      const n = Number(
-        String(v).replace(/\s+/g, "").replace(",", ".")
+      // --- KWOTA ---
+      const toNumber = (v: any) => {
+        if (v == null) return null;
+        const n = Number(
+          String(v).replace(/\s+/g, "").replace(",", ".")
+        );
+        return Number.isFinite(n) ? n : null;
+      };
+
+      const amountVal = toNumber(loan_amount);
+
+      if (amountVal === null || amountVal <= 0 || amountVal > 10_000_000) {
+        return res.status(400).json({ error: "Nieprawidłowa kwota kredytu." });
+      }
+
+      // ================================
+      // 2) LOG ZDARZENIA BEZPIECZEŃSTWA
+      // ================================
+      console.log(
+        `[AUDIT][CREATE_CASE] user=${user.id}, role=${user.role}, client="${client}", amount=${amountVal}, bank="${bank}"`
       );
-      return Number.isFinite(n) ? n : null;
-    };
 
-    const amountVal = toNumber(loan_amount);
-
-    if (amountVal === null || amountVal <= 0 || amountVal > 10_000_000) {
-      return res.status(400).json({ error: "Nieprawidłowa kwota kredytu." });
-    }
-
-    // ================================
-    // 2) LOG ZDARZENIA BEZPIECZEŃSTWA
-    // ================================
-    console.log(
-      `[AUDIT][CREATE_CASE] user=${user.id}, role=${user.role}, client="${client}", amount=${amountVal}, bank="${bank}"`
-    );
-
-    // ================================
-    // 3) ZAPIS DO BAZY
-    // ================================
-    try {
-      const sql = `
+      // ================================
+      // 3) ZAPIS DO BAZY
+      // ================================
+      try {
+        const sql = `
         INSERT INTO cases (client, loan_amount, status, bank, owner_id)
         VALUES ($1, $2, 'nowa', $3, $4)
         RETURNING id, client, loan_amount, wps, status, contract_date, bank, owner_id
       `;
-      const params = [client, amountVal, bank ?? null, user.id];
+        const params = [client, amountVal, bank ?? null, user.id];
 
-      const result = await pool.query(sql, params);
+        const result = await pool.query(sql, params);
 
-      return res.json(result.rows[0]);
-    } catch (e: any) {
-      console.error("Błąd przy POST /api/cases:", e);
-      return res.status(500).json({
-        error: "Błąd serwera podczas tworzenia sprawy.",
-      });
-    }
-  }
-);
-
-  // === SZCZEGÓŁY JEDNEJ SPRAWY (dla case.html) ===
-app.get("/api/cases/:id", softApiLimit, requireAuth, async (req, res) => {
-  try {
-    const user = (req as any).user;
-    const id = Number(req.params.id);
-
-    const row = await loadCaseForUser(id, user);
-
-    // 🔹 NOWE: wyliczamy status_code (z bazy albo ze starego statusu)
-    let statusCode: string | null = row.status_code ?? null;
-
-    if (!statusCode) {
-      const legacy = (row.status || "").toLowerCase();
-      switch (legacy) {
-        case "nowa":
-          statusCode = "NEW";
-          break;
-        case "analiza":
-          statusCode = "ANALYSIS";
-          break;
-        case "przygotowanie":
-          statusCode = "CONTRACT_PREP";
-          break;
-        case "wyslane":
-          statusCode = "IN_PROGRESS";
-          break;
-        case "uznane":
-          statusCode = "CLOSED_SUCCESS";
-          break;
-        case "odrzucone":
-          statusCode = "CLOSED_FAIL";
-          break;
-        default:
-          statusCode = "NEW";
+        return res.json(result.rows[0]);
+      } catch (e: any) {
+        console.error("Błąd przy POST /api/cases:", e);
+        return res.status(500).json({
+          error: "Błąd serwera podczas tworzenia sprawy.",
+        });
       }
     }
+  );
 
-    // selekcja tylko potrzebnych pól do frontu (bez wrażliwych)
-    const safe = {
-      id: row.id,
-      client: row.client,
-      bank: row.bank,
-      loan_amount: row.loan_amount,
-      status: row.status,          // legacy – jak coś jeszcze z tego korzysta
-      status_code: statusCode,     // ⬅⬅⬅ KLUCZOWE DLA NOWEGO SYSTEMU
-      contract_date: row.contract_date,
-      phone: row.phone,
-      email: row.email,
-      address: row.address,
-      pesel: row.pesel,            // jak chcesz – można też wypiąć z API
-      wps_forecast: row.wps_forecast,
-      wps_final: row.wps_final,
-      client_benefit: row.client_benefit,
-      notes: row.notes,
-      owner_id: row.owner_id,
-      updated_at: row.updated_at,
-      offer_skd: row.offer_skd,    // jeśli trzymasz JSON z ofertą
-      iban: row.iban ?? null,
-    };
-
-    res.json(safe);
-  } catch (err) {
-    sendCaseError(res, err);
-  }
-});
-
-// === OGÓLNA CZĘŚCIOWA AKTUALIZACJA SPRAWY ===
-app.patch(
-  "/api/cases/:id",
-  mediumApiLimit,
-  requireAuth,
-  denyUnknownFields([
-    "client",
-    "bank",
-    "loan_amount",
-    "status",
-    "contract_date",
-    "phone",
-    "email",
-    "address",
-    "pesel",
-    "notes",
-    "iban",
-  ]),
-  async (req, res) => {
+  // === SZCZEGÓŁY JEDNEJ SPRAWY (dla case.html) ===
+  app.get("/api/cases/:id", softApiLimit, requireAuth, async (req, res) => {
     try {
       const user = (req as any).user;
       const id = Number(req.params.id);
 
-      if (!Number.isFinite(id)) {
-        return res.status(400).json({ error: "Nieprawidłowe ID sprawy" });
+      const row = await loadCaseForUser(id, user);
+
+      // 🔹 NOWE: wyliczamy status_code (z bazy albo ze starego statusu)
+      let statusCode: string | null = row.status_code ?? null;
+
+      if (!statusCode) {
+        const legacy = (row.status || "").toLowerCase();
+        switch (legacy) {
+          case "nowa":
+            statusCode = "NEW";
+            break;
+          case "analiza":
+            statusCode = "ANALYSIS";
+            break;
+          case "przygotowanie":
+            statusCode = "CONTRACT_PREP";
+            break;
+          case "wyslane":
+            statusCode = "IN_PROGRESS";
+            break;
+          case "uznane":
+            statusCode = "CLOSED_SUCCESS";
+            break;
+          case "odrzucone":
+            statusCode = "CLOSED_FAIL";
+            break;
+          default:
+            statusCode = "NEW";
+        }
       }
 
-      // 🔐 Sprawdzenie uprawnień
-      await loadCaseForUser(id, user);
-
-      // ==============================
-      // 1) WHITELISTA DOZWOLONYCH PÓL
-      // ==============================
-      const allowedFields = {
-        client: true,
-        bank: true,
-        loan_amount: true,
-        status: true,
-        contract_date: true,
-        phone: true,
-        email: true,
-        address: true,
-        pesel: true,
-        notes: true,
-        iban: true,
+      // selekcja tylko potrzebnych pól do frontu (bez wrażliwych)
+      const safe = {
+        id: row.id,
+        client: row.client,
+        bank: row.bank,
+        loan_amount: row.loan_amount,
+        status: row.status,          // legacy – jak coś jeszcze z tego korzysta
+        status_code: statusCode,     // ⬅⬅⬅ KLUCZOWE DLA NOWEGO SYSTEMU
+        contract_date: row.contract_date,
+        phone: row.phone,
+        email: row.email,
+        address: row.address,
+        pesel: row.pesel,            // jak chcesz – można też wypiąć z API
+        wps_forecast: row.wps_forecast,
+        wps_final: row.wps_final,
+        client_benefit: row.client_benefit,
+        notes: row.notes,
+        owner_id: row.owner_id,
+        updated_at: row.updated_at,
+        offer_skd: row.offer_skd,    // jeśli trzymasz JSON z ofertą
+        iban: row.iban ?? null,
       };
 
-      // ==============================
-      // 2) Pobranie i wybór pól
-      // ==============================
-      const body = req.body || {};
-      const update: any = {};
+      res.json(safe);
+    } catch (err) {
+      sendCaseError(res, err);
+    }
+  });
 
-      for (const key of Object.keys(body)) {
-        if (allowedFields[key]) {
-          update[key] = body[key];
-        }
-      }
+  // === OGÓLNA CZĘŚCIOWA AKTUALIZACJA SPRAWY ===
+  app.patch(
+    "/api/cases/:id",
+    mediumApiLimit,
+    requireAuth,
+    denyUnknownFields([
+      "client",
+      "bank",
+      "loan_amount",
+      "status",
+      "contract_date",
+      "phone",
+      "email",
+      "address",
+      "pesel",
+      "notes",
+      "iban",
+    ]),
+    async (req, res) => {
+      try {
+        const user = (req as any).user;
+        const id = Number(req.params.id);
 
-      if (Object.keys(update).length === 0) {
-        return res.status(400).json({ error: "Brak pól do aktualizacji" });
-      }
-
-      // 🔧 pomocniczy cleaner tekstu
-      const clean = (v: any) =>
-        typeof v === "string" ? v.replace(/[<>]/g, "").trim() : v;
-
-      // 🔧 sanitizator liczb
-      const sanitizeNumberLike = (raw: any): number | null => {
-        if (raw === null || raw === undefined) return null;
-
-        let s = String(raw)
-          .replace(/\s+/g, "")
-          .replace(",", ".")
-          .replace(/[^\d.-]/g, "");
-
-        if (s === "" || s === "." || s === "-" || s === "-.") return null;
-
-        const num = Number(s);
-        return Number.isFinite(num) ? num : null;
-      };
-
-      // ==============================
-      // 3) WALIDACJE – bezpieczne i twarde
-      // ==============================
-
-      // EMAIL
-      if (update.email !== undefined) {
-        const e = clean(update.email);
-        if (e && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e)) {
-          return res.status(400).json({ error: "Nieprawidłowy adres e-mail" });
-        }
-        update.email = e || null;
-      }
-
-      // TELEFON
-      if (update.phone !== undefined) {
-        const p = clean(update.phone);
-        if (p && !/^[0-9+\-\s]{5,20}$/.test(p)) {
-          return res.status(400).json({ error: "Nieprawidłowy numer telefonu" });
-        }
-        update.phone = p || null;
-      }
-
-      // PESEL
-      if (update.pesel !== undefined) {
-        const p = clean(update.pesel);
-        if (p && !/^[0-9]{11}$/.test(p)) {
-          return res.status(400).json({ error: "Nieprawidłowy PESEL" });
-        }
-        update.pesel = p || null;
-      }
-
-      // KWOTA KREDYTU — ✨ NOWA MOCNA WALIDACJA ✨
-      if (update.loan_amount !== undefined) {
-        const amount = sanitizeNumberLike(update.loan_amount);
-
-        if (amount === null || amount < 0 || amount > 5_000_000) {
-          return res.status(400).json({ error: "Nieprawidłowa kwota kredytu" });
+        if (!Number.isFinite(id)) {
+          return res.status(400).json({ error: "Nieprawidłowe ID sprawy" });
         }
 
-        update.loan_amount = amount;
-      }
+        // 🔐 Sprawdzenie uprawnień
+        await loadCaseForUser(id, user);
 
-      // DATA
-      if (update.contract_date !== undefined) {
-        const d = clean(update.contract_date);
-        if (d && isNaN(Date.parse(d))) {
-          return res.status(400).json({ error: "Nieprawidłowa data umowy" });
-        }
-        update.contract_date = d || null;
-      }
-      // IBAN – oczyszczenie z odstępów i dziwnych znaków
-      if (update.iban !== undefined) {
-        let iban = clean(update.iban);
+        // ==============================
+        // 1) WHITELISTA DOZWOLONYCH PÓL
+        // ==============================
+        const allowedFields = {
+          client: true,
+          bank: true,
+          loan_amount: true,
+          status: true,
+          contract_date: true,
+          phone: true,
+          email: true,
+          address: true,
+          pesel: true,
+          notes: true,
+          iban: true,
+        };
 
-        if (iban) {
-          // usuwamy spacje, zamieniamy na wielkie litery
-          iban = iban.replace(/\s+/g, "").toUpperCase();
+        // ==============================
+        // 2) Pobranie i wybór pól
+        // ==============================
+        const body = req.body || {};
+        const update: any = {};
 
-          // zostawiamy tylko A–Z i cyfry
-          iban = iban.replace(/[^A-Z0-9]/g, "");
-
-          // twardy limit długości IBAN (teoretycznie max 34 znaki)
-          if (iban.length > 34) {
-            iban = iban.slice(0, 34);
+        for (const key of Object.keys(body)) {
+          if (allowedFields[key]) {
+            update[key] = body[key];
           }
         }
 
-        update.iban = iban || null;
+        if (Object.keys(update).length === 0) {
+          return res.status(400).json({ error: "Brak pól do aktualizacji" });
+        }
+
+        // 🔧 pomocniczy cleaner tekstu
+        const clean = (v: any) =>
+          typeof v === "string" ? v.replace(/[<>]/g, "").trim() : v;
+
+        // 🔧 sanitizator liczb
+        const sanitizeNumberLike = (raw: any): number | null => {
+          if (raw === null || raw === undefined) return null;
+
+          let s = String(raw)
+            .replace(/\s+/g, "")
+            .replace(",", ".")
+            .replace(/[^\d.-]/g, "");
+
+          if (s === "" || s === "." || s === "-" || s === "-.") return null;
+
+          const num = Number(s);
+          return Number.isFinite(num) ? num : null;
+        };
+
+        // ==============================
+        // 3) WALIDACJE – bezpieczne i twarde
+        // ==============================
+
+        // EMAIL
+        if (update.email !== undefined) {
+          const e = clean(update.email);
+          if (e && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e)) {
+            return res.status(400).json({ error: "Nieprawidłowy adres e-mail" });
+          }
+          update.email = e || null;
+        }
+
+        // TELEFON
+        if (update.phone !== undefined) {
+          const p = clean(update.phone);
+          if (p && !/^[0-9+\-\s]{5,20}$/.test(p)) {
+            return res.status(400).json({ error: "Nieprawidłowy numer telefonu" });
+          }
+          update.phone = p || null;
+        }
+
+        // PESEL
+        if (update.pesel !== undefined) {
+          const p = clean(update.pesel);
+          if (p && !/^[0-9]{11}$/.test(p)) {
+            return res.status(400).json({ error: "Nieprawidłowy PESEL" });
+          }
+          update.pesel = p || null;
+        }
+
+        // KWOTA KREDYTU — ✨ NOWA MOCNA WALIDACJA ✨
+        if (update.loan_amount !== undefined) {
+          const amount = sanitizeNumberLike(update.loan_amount);
+
+          if (amount === null || amount < 0 || amount > 5_000_000) {
+            return res.status(400).json({ error: "Nieprawidłowa kwota kredytu" });
+          }
+
+          update.loan_amount = amount;
+        }
+
+        // DATA
+        if (update.contract_date !== undefined) {
+          const d = clean(update.contract_date);
+          if (d && isNaN(Date.parse(d))) {
+            return res.status(400).json({ error: "Nieprawidłowa data umowy" });
+          }
+          update.contract_date = d || null;
+        }
+        // IBAN – oczyszczenie z odstępów i dziwnych znaków
+        if (update.iban !== undefined) {
+          let iban = clean(update.iban);
+
+          if (iban) {
+            // usuwamy spacje, zamieniamy na wielkie litery
+            iban = iban.replace(/\s+/g, "").toUpperCase();
+
+            // zostawiamy tylko A–Z i cyfry
+            iban = iban.replace(/[^A-Z0-9]/g, "");
+
+            // twardy limit długości IBAN (teoretycznie max 34 znaki)
+            if (iban.length > 34) {
+              iban = iban.slice(0, 34);
+            }
+          }
+
+          update.iban = iban || null;
+        }
+        // TEKSTY
+        const safeText = (t: any, max: number) =>
+          t ? clean(String(t).slice(0, max)) : null;
+
+        if (update.client) update.client = safeText(update.client, 200);
+        if (update.bank) update.bank = safeText(update.bank, 200);
+        if (update.address) update.address = safeText(update.address, 400);
+        if (update.notes) update.notes = safeText(update.notes, 2000);
+        if (update.status) update.status = safeText(update.status, 100);
+
+        // ==============================
+        // 4) BUDOWANIE UPDATE SQL
+        // ==============================
+        const sqlFields = [];
+        const values = [];
+        let i = 1;
+
+        for (const [k, v] of Object.entries(update)) {
+          sqlFields.push(`${k} = $${i}`);
+          values.push(v);
+          i++;
+        }
+
+        sqlFields.push(`updated_at = NOW()`);
+        values.push(id);
+
+        const result = await pool.query(
+          `UPDATE cases SET ${sqlFields.join(", ")} WHERE id = $${i} RETURNING *`,
+          values
+        );
+
+        if (result.rowCount === 0) {
+          return res.status(404).json({ error: "Sprawa nie istnieje" });
+        }
+
+        // AUDYT
+        console.log(
+          `[PATCH CASE] user=${user.id}, case=${id}, updated=${Object.keys(update).join(", ")}`
+        );
+
+        return res.json(result.rows[0]);
+      } catch (err) {
+        console.error("PATCH /api/cases/:id ERROR:", err);
+        return res.status(500).json({ error: "Błąd serwera" });
       }
-      // TEKSTY
-      const safeText = (t: any, max: number) =>
-        t ? clean(String(t).slice(0, max)) : null;
-
-      if (update.client) update.client = safeText(update.client, 200);
-      if (update.bank) update.bank = safeText(update.bank, 200);
-      if (update.address) update.address = safeText(update.address, 400);
-      if (update.notes) update.notes = safeText(update.notes, 2000);
-      if (update.status) update.status = safeText(update.status, 100);
-
-      // ==============================
-      // 4) BUDOWANIE UPDATE SQL
-      // ==============================
-      const sqlFields = [];
-      const values = [];
-      let i = 1;
-
-      for (const [k, v] of Object.entries(update)) {
-        sqlFields.push(`${k} = $${i}`);
-        values.push(v);
-        i++;
-      }
-
-      sqlFields.push(`updated_at = NOW()`);
-      values.push(id);
-
-      const result = await pool.query(
-        `UPDATE cases SET ${sqlFields.join(", ")} WHERE id = $${i} RETURNING *`,
-        values
-      );
-
-      if (result.rowCount === 0) {
-        return res.status(404).json({ error: "Sprawa nie istnieje" });
-      }
-
-      // AUDYT
-      console.log(
-        `[PATCH CASE] user=${user.id}, case=${id}, updated=${Object.keys(update).join(", ")}`
-      );
-
-      return res.json(result.rows[0]);
-    } catch (err) {
-      console.error("PATCH /api/cases/:id ERROR:", err);
-      return res.status(500).json({ error: "Błąd serwera" });
     }
-  }
-);
+  );
 
-   // === DANE KLIENTA ===
+  // === DANE KLIENTA ===
   app.put(
     "/api/cases/:id/client",
     mediumApiLimit,
@@ -1036,7 +1036,7 @@ app.patch(
     }
   );
 
-    // === DANE KREDYTU ===
+  // === DANE KREDYTU ===
   app.put(
     "/api/cases/:id/credit",
     mediumApiLimit,
@@ -1078,239 +1078,244 @@ app.patch(
 
   // === ODCZYT OFERTY SKD ===
   app.get(
-  "/api/cases/:id/skd-offer",
-  softApiLimit,
-  requireAuth,
-  async (req, res) => {
+    "/api/cases/:id/skd-offer",
+    softApiLimit,
+    requireAuth,
+    async (req, res) => {
 
-    const user = (req as any).user;
-    const idRaw = req.params.id;
-    const id = Number(idRaw);
+      const user = (req as any).user;
+      const idRaw = req.params.id;
+      const id = Number(idRaw);
 
-    if (!Number.isFinite(id)) {
-      return res.status(400).json({ error: "Nieprawidłowe ID sprawy" });
-    }
+      if (!Number.isFinite(id)) {
+        return res.status(400).json({ error: "Nieprawidłowe ID sprawy" });
+      }
 
-    const allowed = await verifyCaseOwnership(id, user);
-    if (allowed === null) {
-      return res.status(404).json({ error: "Case not found" });
-    }
-    if (!allowed) {
-      return res.status(403).json({ error: "Brak dostępu do tej sprawy" });
-    }
-
-    try {
-      const result = await pool.query(
-        "SELECT wps_forecast, offer_skd FROM cases WHERE id = $1",
-        [id]
-      );
-
-      if (!result.rows.length) {
+      const allowed = await verifyCaseOwnership(id, user);
+      if (allowed === null) {
         return res.status(404).json({ error: "Case not found" });
       }
+      if (!allowed) {
+        return res.status(403).json({ error: "Brak dostępu do tej sprawy" });
+      }
 
-      const row = result.rows[0];
+      try {
+        const result = await pool.query(
+          "SELECT wps_forecast, offer_skd FROM cases WHERE id = $1",
+          [id]
+        );
 
-      let rawOffer: any = row.offer_skd || {};
-      if (typeof rawOffer === "string") {
-        try {
-          rawOffer = JSON.parse(rawOffer);
-        } catch {
-          rawOffer = {};
+        if (!result.rows.length) {
+          return res.status(404).json({ error: "Case not found" });
         }
+
+        const row = result.rows[0];
+
+        let rawOffer: any = row.offer_skd || {};
+        if (typeof rawOffer === "string") {
+          try {
+            rawOffer = JSON.parse(rawOffer);
+          } catch {
+            rawOffer = {};
+          }
+        }
+
+        const rawElig = (rawOffer && rawOffer.eligibility) || {};
+
+        const eligibility = {
+          sf50: rawElig.sf50 ?? true,
+          sf49: rawElig.sf49 ?? true,
+          sell: rawElig.sell ?? true,
+        };
+
+        return res.json({
+          wps_forecast: row.wps_forecast ?? null,
+          offer_skd: {
+            ...rawOffer,
+            eligibility,
+          },
+        });
+      } catch (err) {
+        console.error("GET /api/cases/:id/skd-offer error", err);
+        res.status(500).json({ error: "Server error" });
       }
+    });
 
-      const rawElig = (rawOffer && rawOffer.eligibility) || {};
-
-      const eligibility = {
-        sf50: rawElig.sf50 ?? true,
-        sf49: rawElig.sf49 ?? true,
-        sell: rawElig.sell ?? true,
-      };
-
-      return res.json({
-        wps_forecast: row.wps_forecast ?? null,
-        offer_skd: {
-          ...rawOffer,
-          eligibility,
-        },
-      });
-    } catch (err) {
-      console.error("GET /api/cases/:id/skd-offer error", err);
-      res.status(500).json({ error: "Server error" });
-    }
-  });
-
-  // === ZAPIS WPS BASIC ===
+  // === ZAPIS WPS BASIC → WPS (prognoza) ===
   app.patch(
-  "/api/cases/:id/wps-basic",
-  mediumApiLimit,
-  requireAuth,
-  denyUnknownFields(["wps_basic"]),
-  async (req, res) => {
-
-    const user = (req as any).user;
-    const idRaw = req.params.id;
-    const caseId = Number(idRaw);
-
-    if (!Number.isFinite(caseId)) {
-      return res.status(400).json({ error: "Nieprawidłowe ID sprawy." });
-    }
-
-    const allowed = await verifyCaseOwnership(caseId, user);
-    if (allowed === null) {
-      return res.status(404).json({ error: "Nie znaleziono sprawy." });
-    }
-    if (!allowed) {
-      return res.status(403).json({ error: "Brak dostępu do tej sprawy" });
-    }
-
-    try {
-      const { wps_basic } = req.body || {};
-
-      const wpsNumber = Number(wps_basic);
-      if (!Number.isFinite(wpsNumber)) {
-        return res.status(400).json({ error: "Nieprawidłowa wartość WPS." });
-      }
-console.log(`[WPS-BASIC] user=${user.id}, role=${user.role}, case=${caseId}, value=${wpsNumber}`);
-
-      const result = await pool.query(
-        `
-        UPDATE cases
-        SET wps_basic = $1
-        WHERE id = $2
-        RETURNING id, wps_basic
-        `,
-        [wpsNumber, caseId]
-      );
-
-      if (result.rowCount === 0) {
-        return res.status(404).json({ error: "Nie znaleziono sprawy." });
-      }
-
-      return res.json({
-        ok: true,
-        case: result.rows[0],
-      });
-    } catch (err) {
-      console.error("Błąd PATCH /api/cases/:id/wps-basic:", err);
-      return res
-        .status(500)
-        .json({ error: "Błąd serwera przy zapisie WPS." });
-    }
-  });
-
-// === ZAPIS OFERTY SKD (PUT — twarda walidacja) ===
-app.put(
-  "/api/cases/:id/skd-offer",
-  mediumApiLimit,
-  requireAuth,
-  denyUnknownFields(["wps_forecast", "offer_skd"]),
-  async (req, res) => {
-    try {
+    "/api/cases/:id/wps-basic",
+    mediumApiLimit,
+    requireAuth,
+    // ⬇️ teraz spodziewamy się pola "wps_forecast"
+    denyUnknownFields(["wps_forecast"]),
+    async (req, res) => {
       const user = (req as any).user;
-      const caseId = Number(req.params.id);
+      const idRaw = req.params.id;
+      const caseId = Number(idRaw);
 
       if (!Number.isFinite(caseId)) {
         return res.status(400).json({ error: "Nieprawidłowe ID sprawy." });
       }
 
-      // 🔐 Sprawdzenie własności sprawy
       const allowed = await verifyCaseOwnership(caseId, user);
-      if (allowed === null) return res.status(404).json({ error: "Nie znaleziono sprawy." });
-      if (!allowed)      return res.status(403).json({ error: "Brak dostępu do tej sprawy" });
-
-      // ============================
-      // 1) Pobranie surowych danych
-      // ============================
-      const body = req.body || {};
-      let { wps_forecast, offer_skd } = body;
-
-      // ============================
-      // 2) WPS forecast — twarde granice
-      // ============================
-      const wf = Number(wps_forecast);
-      if (!Number.isFinite(wf) || wf < 0 || wf > 1_000_000) {
-        return res.status(400).json({ error: "Nieprawidłowa wartość WPS forecast." });
+      if (allowed === null) {
+        return res.status(404).json({ error: "Nie znaleziono sprawy." });
+      }
+      if (!allowed) {
+        return res.status(403).json({ error: "Brak dostępu do tej sprawy" });
       }
 
-      // ============================
-      // 3) offer_skd — musi być obiektem
-      // ============================
-      if (!offer_skd || typeof offer_skd !== "object") {
-        return res.status(400).json({ error: "offer_skd musi być obiektem." });
+      try {
+        // ⬇️ zamiast wps_basic pobieramy wps_forecast
+        const { wps_forecast } = req.body || {};
+
+        const wpsNumber = Number(wps_forecast);
+        if (!Number.isFinite(wpsNumber)) {
+          return res.status(400).json({ error: "Nieprawidłowa wartość WPS (prognoza)." });
+        }
+
+        console.log(
+          `[WPS-BASIC] user=${user.id}, role=${user.role}, case=${caseId}, wps_forecast=${wpsNumber}`
+        );
+
+        const result = await pool.query(
+          `
+        UPDATE cases
+        SET wps_forecast = $1
+        WHERE id = $2
+        RETURNING id, wps_forecast
+        `,
+          [wpsNumber, caseId]
+        );
+
+        if (result.rowCount === 0) {
+          return res.status(404).json({ error: "Nie znaleziono sprawy." });
+        }
+
+        return res.json({
+          ok: true,
+          case: result.rows[0],
+        });
+      } catch (err) {
+        console.error("Błąd PATCH /api/cases/:id/wps-basic:", err);
+        return res
+          .status(500)
+          .json({ error: "Błąd serwera przy zapisie WPS (prognoza)." });
       }
+    }
+  );
 
-      // ============================
-      // 4) Variant — tylko 3 opcje
-      // ============================
-      const variant = offer_skd.variant;
-      const allowedVariants = ["sf50", "sf49", "sell"];
-      if (!allowedVariants.includes(variant)) {
-        return res.status(400).json({ error: "Nieprawidłowy wariant oferty SKD." });
-      }
+  // === ZAPIS OFERTY SKD (PUT — twarda walidacja) ===
+  app.put(
+    "/api/cases/:id/skd-offer",
+    mediumApiLimit,
+    requireAuth,
+    denyUnknownFields(["wps_forecast", "offer_skd"]),
+    async (req, res) => {
+      try {
+        const user = (req as any).user;
+        const caseId = Number(req.params.id);
 
-      // ============================
-      // 5) buyout_pct — tylko jeśli SELL
-      // --- BUYOUT (10–15% w UI; 0.10–0.15 w bazie) ---
-let buyout_pct: number | null = null;
+        if (!Number.isFinite(caseId)) {
+          return res.status(400).json({ error: "Nieprawidłowe ID sprawy." });
+        }
 
-if (variant === "sell") {
-  // może przyjść 12, "12", 0.12, "0,12" itd.
-  const raw = sanitizeNumberLike(offer_skd.buyout_pct);
+        // 🔐 Sprawdzenie własności sprawy
+        const allowed = await verifyCaseOwnership(caseId, user);
+        if (allowed === null) return res.status(404).json({ error: "Nie znaleziono sprawy." });
+        if (!allowed) return res.status(403).json({ error: "Brak dostępu do tej sprawy" });
 
-  if (raw === null) {
-    return res
-      .status(400)
-      .json({ error: "buyout_pct musi być liczbą w zakresie 10–15%." });
-  }
+        // ============================
+        // 1) Pobranie surowych danych
+        // ============================
+        const body = req.body || {};
+        let { wps_forecast, offer_skd } = body;
 
-  // jeśli ktoś poda 12 → zamieniamy na 0.12
-  // jeśli 0.12 → zostawiamy
-  let normalized = raw > 1 ? raw / 100 : raw;
+        // ============================
+        // 2) WPS forecast — twarde granice
+        // ============================
+        const wf = Number(wps_forecast);
+        if (!Number.isFinite(wf) || wf < 0 || wf > 1_000_000) {
+          return res.status(400).json({ error: "Nieprawidłowa wartość WPS forecast." });
+        }
 
-  if (normalized < 0.10 || normalized > 0.15) {
-    return res.status(400).json({
-      error: "buyout_pct musi zawierać się między 10 a 15 procent.",
-    });
-  }
+        // ============================
+        // 3) offer_skd — musi być obiektem
+        // ============================
+        if (!offer_skd || typeof offer_skd !== "object") {
+          return res.status(400).json({ error: "offer_skd musi być obiektem." });
+        }
 
-  buyout_pct = normalized; // w bazie zawsze 0.10–0.15
-} else {
-  buyout_pct = null;
-}
+        // ============================
+        // 4) Variant — tylko 3 opcje
+        // ============================
+        const variant = offer_skd.variant;
+        const allowedVariants = ["sf50", "sf49", "sell"];
+        if (!allowedVariants.includes(variant)) {
+          return res.status(400).json({ error: "Nieprawidłowy wariant oferty SKD." });
+        }
 
-      // ============================
-      // 6) future_interest — opcjonalne, czyszczone
-      // ============================
-      let future_interest = sanitizeNumberLike(offer_skd.future_interest) ?? 0;
-if (future_interest < 0) future_interest = 0;
+        // ============================
+        // 5) buyout_pct — tylko jeśli SELL
+        // --- BUYOUT (10–15% w UI; 0.10–0.15 w bazie) ---
+        let buyout_pct: number | null = null;
 
-      // ============================
-      // 7) eligibility — twardy boolean-cast
-      // ============================
-      const elig = offer_skd.eligibility || {};
-      const eligibility = {
-        sf50: Boolean(elig.sf50),
-        sf49: Boolean(elig.sf49),
-        sell: Boolean(elig.sell),
-      };
+        if (variant === "sell") {
+          // może przyjść 12, "12", 0.12, "0,12" itd.
+          const raw = sanitizeNumberLike(offer_skd.buyout_pct);
 
-      // ============================
-      // 8) Finalny obiekt zapisowy
-      // ============================
-      const finalOffer = {
-        variant,
-        buyout_pct,
-        future_interest,
-        eligibility,
-      };
+          if (raw === null) {
+            return res
+              .status(400)
+              .json({ error: "buyout_pct musi być liczbą w zakresie 10–15%." });
+          }
 
-      // ============================
-      // 9) Zapis do bazy
-      // ============================
-      const result = await pool.query(
-        `
+          // jeśli ktoś poda 12 → zamieniamy na 0.12
+          // jeśli 0.12 → zostawiamy
+          let normalized = raw > 1 ? raw / 100 : raw;
+
+          if (normalized < 0.10 || normalized > 0.15) {
+            return res.status(400).json({
+              error: "buyout_pct musi zawierać się między 10 a 15 procent.",
+            });
+          }
+
+          buyout_pct = normalized; // w bazie zawsze 0.10–0.15
+        } else {
+          buyout_pct = null;
+        }
+
+        // ============================
+        // 6) future_interest — opcjonalne, czyszczone
+        // ============================
+        let future_interest = sanitizeNumberLike(offer_skd.future_interest) ?? 0;
+        if (future_interest < 0) future_interest = 0;
+
+        // ============================
+        // 7) eligibility — twardy boolean-cast
+        // ============================
+        const elig = offer_skd.eligibility || {};
+        const eligibility = {
+          sf50: Boolean(elig.sf50),
+          sf49: Boolean(elig.sf49),
+          sell: Boolean(elig.sell),
+        };
+
+        // ============================
+        // 8) Finalny obiekt zapisowy
+        // ============================
+        const finalOffer = {
+          variant,
+          buyout_pct,
+          future_interest,
+          eligibility,
+        };
+
+        // ============================
+        // 9) Zapis do bazy
+        // ============================
+        const result = await pool.query(
+          `
         UPDATE cases
         SET
           wps_forecast = $1,
@@ -1319,50 +1324,50 @@ if (future_interest < 0) future_interest = 0;
         WHERE id = $3
         RETURNING id, wps_forecast, offer_skd
         `,
-        [wf, finalOffer, caseId]
-      );
+          [wf, finalOffer, caseId]
+        );
 
-      if (!result.rowCount) {
-        return res.status(404).json({ error: "Nie znaleziono sprawy." });
+        if (!result.rowCount) {
+          return res.status(404).json({ error: "Nie znaleziono sprawy." });
+        }
+
+        // ============================
+        // 10) AUDYT
+        // ============================
+        console.log(
+          `[SKD-PUT] user=${user.id} role=${user.role} case=${caseId} variant=${variant} buyout=${buyout_pct ?? "-"}`
+        );
+
+        // ============================
+        // 11) OK
+        // ============================
+        return res.json({ ok: true, case: result.rows[0] });
+
+      } catch (err) {
+        console.error("Błąd PUT /api/cases/:id/skd-offer:", err);
+        return res.status(500).json({ error: "Błąd serwera przy zapisie oferty SKD." });
+      }
+    }
+  );
+
+  // === POBIERANIE PLIKU (download) ===
+  app.get(
+    "/api/files/:fileId",
+    softApiLimit,
+    requireAuth,
+    async (req, res) => {
+      const user = (req as any).user;
+      const rawId = req.params.fileId;
+      const fileId = Number(rawId);
+
+      if (!Number.isFinite(fileId)) {
+        return res.status(400).json({ error: "Nieprawidłowe ID pliku" });
       }
 
-      // ============================
-      // 10) AUDYT
-      // ============================
-      console.log(
-        `[SKD-PUT] user=${user.id} role=${user.role} case=${caseId} variant=${variant} buyout=${buyout_pct ?? "-"}`
-      );
-
-      // ============================
-      // 11) OK
-      // ============================
-      return res.json({ ok: true, case: result.rows[0] });
-
-    } catch (err) {
-      console.error("Błąd PUT /api/cases/:id/skd-offer:", err);
-      return res.status(500).json({ error: "Błąd serwera przy zapisie oferty SKD." });
-    }
-  }
-);
-
-// === POBIERANIE PLIKU (download) ===
-app.get(
-  "/api/files/:fileId",
-  softApiLimit,
-  requireAuth,
-  async (req, res) => {
-    const user = (req as any).user;
-    const rawId = req.params.fileId;
-    const fileId = Number(rawId);
-
-    if (!Number.isFinite(fileId)) {
-      return res.status(400).json({ error: "Nieprawidłowe ID pliku" });
-    }
-
-    try {
-      // 1) Pobieramy info o pliku + właściciela sprawy
-      const q = await pool.query(
-        `
+      try {
+        // 1) Pobieramy info o pliku + właściciela sprawy
+        const q = await pool.query(
+          `
         SELECT
           cf.id,
           cf.case_id,
@@ -1375,99 +1380,99 @@ app.get(
         JOIN cases c ON c.id = cf.case_id
         WHERE cf.id = $1
         `,
-        [fileId]
-      );
+          [fileId]
+        );
 
-      if (q.rowCount === 0) {
-        return res.status(404).json({ error: "Plik nie istnieje" });
-      }
-
-      const row = q.rows[0];
-
-      // 2) Sprawdzamy uprawnienia (admin albo właściciel sprawy)
-      if (user.role !== "admin" && row.owner_id !== user.id) {
-        return res.status(403).json({ error: "Brak dostępu do tej sprawy" });
-      }
-
-      // 3) Budujemy bezpieczną ścieżkę do pliku
-      const uploadsRoot = path.join(process.cwd(), "uploads", "cases");
-      const filePath = path.join(
-        uploadsRoot,
-        String(row.case_id),
-        row.stored_name
-      );
-      const resolved = path.resolve(filePath);
-
-      // ⛔ twarda kontrola, żeby ktoś nie wyszedł poza katalog uploads/cases
-      if (!resolved.startsWith(uploadsRoot)) {
-        console.error("Próba wyjścia poza katalog uploads:", resolved);
-        return res.status(400).json({ error: "Nieprawidłowa ścieżka pliku" });
-      }
-
-      // 4) Sprawdź czy plik fizycznie istnieje
-      try {
-        await fsPromises.stat(resolved);
-      } catch (err: any) {
-        if (err.code === "ENOENT") {
-          return res.status(404).json({ error: "Plik nie istnieje na dysku" });
+        if (q.rowCount === 0) {
+          return res.status(404).json({ error: "Plik nie istnieje" });
         }
-        console.error("Błąd stat dla pliku:", err);
-        return res.status(500).json({ error: "Błąd serwera przy odczycie pliku" });
-      }
 
-      // 5) Nagłówki i wysyłka pliku
-      const mime = row.mime_type || "application/octet-stream";
-      const orig = row.original_name || "plik";
+        const row = q.rows[0];
 
-      res.setHeader("Content-Type", mime);
-      res.setHeader(
-        "Content-Disposition",
-        `attachment; filename="${encodeURIComponent(orig)}"`
-      );
+        // 2) Sprawdzamy uprawnienia (admin albo właściciel sprawy)
+        if (user.role !== "admin" && row.owner_id !== user.id) {
+          return res.status(403).json({ error: "Brak dostępu do tej sprawy" });
+        }
 
-      return res.sendFile(resolved, (err) => {
-        if (err) {
-          console.error("sendFile error:", err);
-          if (!res.headersSent) {
-            res.status(500).json({ error: "Błąd podczas wysyłania pliku" });
+        // 3) Budujemy bezpieczną ścieżkę do pliku
+        const uploadsRoot = path.join(process.cwd(), "uploads", "cases");
+        const filePath = path.join(
+          uploadsRoot,
+          String(row.case_id),
+          row.stored_name
+        );
+        const resolved = path.resolve(filePath);
+
+        // ⛔ twarda kontrola, żeby ktoś nie wyszedł poza katalog uploads/cases
+        if (!resolved.startsWith(uploadsRoot)) {
+          console.error("Próba wyjścia poza katalog uploads:", resolved);
+          return res.status(400).json({ error: "Nieprawidłowa ścieżka pliku" });
+        }
+
+        // 4) Sprawdź czy plik fizycznie istnieje
+        try {
+          await fsPromises.stat(resolved);
+        } catch (err: any) {
+          if (err.code === "ENOENT") {
+            return res.status(404).json({ error: "Plik nie istnieje na dysku" });
           }
+          console.error("Błąd stat dla pliku:", err);
+          return res.status(500).json({ error: "Błąd serwera przy odczycie pliku" });
         }
-      });
-    } catch (err) {
-      console.error("GET /api/files/:fileId error:", err);
-      return res
-        .status(500)
-        .json({ error: "Błąd serwera przy pobieraniu pliku" });
+
+        // 5) Nagłówki i wysyłka pliku
+        const mime = row.mime_type || "application/octet-stream";
+        const orig = row.original_name || "plik";
+
+        res.setHeader("Content-Type", mime);
+        res.setHeader(
+          "Content-Disposition",
+          `attachment; filename="${encodeURIComponent(orig)}"`
+        );
+
+        return res.sendFile(resolved, (err) => {
+          if (err) {
+            console.error("sendFile error:", err);
+            if (!res.headersSent) {
+              res.status(500).json({ error: "Błąd podczas wysyłania pliku" });
+            }
+          }
+        });
+      } catch (err) {
+        console.error("GET /api/files/:fileId error:", err);
+        return res
+          .status(500)
+          .json({ error: "Błąd serwera przy pobieraniu pliku" });
+      }
     }
-  }
-);
+  );
 
   // === DOKUMENTY SPRAWY: LISTA PLIKÓW ===
   app.get(
-  "/api/cases/:id/files",
-  softApiLimit,
-  requireAuth,
-  async (req, res) => {
+    "/api/cases/:id/files",
+    softApiLimit,
+    requireAuth,
+    async (req, res) => {
 
-    const user = (req as any).user;
-    const idRaw = req.params.id;
-    const id = Number(idRaw);
+      const user = (req as any).user;
+      const idRaw = req.params.id;
+      const id = Number(idRaw);
 
-    if (!Number.isFinite(id)) {
-      return res.status(400).json({ error: "Nieprawidłowe ID sprawy" });
-    }
+      if (!Number.isFinite(id)) {
+        return res.status(400).json({ error: "Nieprawidłowe ID sprawy" });
+      }
 
-    const allowed = await verifyCaseOwnership(id, user);
-    if (allowed === null) {
-      return res.status(404).json({ error: "Sprawa nie istnieje" });
-    }
-    if (!allowed) {
-      return res.status(403).json({ error: "Brak dostępu do tej sprawy" });
-    }
+      const allowed = await verifyCaseOwnership(id, user);
+      if (allowed === null) {
+        return res.status(404).json({ error: "Sprawa nie istnieje" });
+      }
+      if (!allowed) {
+        return res.status(403).json({ error: "Brak dostępu do tej sprawy" });
+      }
 
-    try {
-      const result = await pool.query(
-        `
+      try {
+        const result = await pool.query(
+          `
         SELECT
           id,
           case_id,
@@ -1480,30 +1485,30 @@ app.get(
         WHERE case_id = $1
         ORDER BY uploaded_at DESC
         `,
-        [id]
-      );
+          [id]
+        );
 
-      return res.json({ files: result.rows });
-    } catch (err) {
-      console.error("GET /api/cases/:id/files error", err);
-      return res.status(500).json({ error: "Błąd serwera przy pobieraniu plików" });
-    }
-  });
+        return res.json({ files: result.rows });
+      } catch (err) {
+        console.error("GET /api/cases/:id/files error", err);
+        return res.status(500).json({ error: "Błąd serwera przy pobieraniu plików" });
+      }
+    });
 
   // === USUWANIE PLIKU PO ID (z kontrolą właściciela) ===
-app.delete("/api/files/:fileId", hardApiLimit, requireAuth, async (req, res) => {
-  const user = (req as any).user;
-  const rawId = req.params.fileId;
-  const fileId = Number(rawId);
+  app.delete("/api/files/:fileId", hardApiLimit, requireAuth, async (req, res) => {
+    const user = (req as any).user;
+    const rawId = req.params.fileId;
+    const fileId = Number(rawId);
 
-  if (!Number.isFinite(fileId)) {
-    return res.status(400).json({ error: "Nieprawidłowe ID pliku" });
-  }
+    if (!Number.isFinite(fileId)) {
+      return res.status(400).json({ error: "Nieprawidłowe ID pliku" });
+    }
 
-  try {
-    // 1) Pobieramy info o pliku + właściciela sprawy
-    const q = await pool.query(
-      `
+    try {
+      // 1) Pobieramy info o pliku + właściciela sprawy
+      const q = await pool.query(
+        `
       SELECT
         cf.case_id,
         cf.stored_name,
@@ -1512,179 +1517,179 @@ app.delete("/api/files/:fileId", hardApiLimit, requireAuth, async (req, res) => 
       JOIN cases c ON c.id = cf.case_id
       WHERE cf.id = $1
       `,
-      [fileId]
-    );
+        [fileId]
+      );
 
-    if (q.rowCount === 0) {
-      return res.status(404).json({ error: "Plik nie istnieje" });
-    }
-
-    const row = q.rows[0];
-
-    // 2) Sprawdzamy uprawnienia
-    if (user.role !== "admin" && row.owner_id !== user.id) {
-      return res.status(403).json({ error: "Brak dostępu do tej sprawy" });
-    }
-
-    // 3) Usuwamy fizyczny plik z dysku
-    const filePath = path.join(
-      process.cwd(),
-      "uploads",
-      "cases",
-      String(row.case_id),
-      row.stored_name
-    );
-
-    try {
-      await fsPromises.unlink(filePath);
-    } catch (err: any) {
-      if (err.code !== "ENOENT") {
-        console.error("Błąd usuwania pliku z dysku:", err);
+      if (q.rowCount === 0) {
+        return res.status(404).json({ error: "Plik nie istnieje" });
       }
-      // jeśli pliku fizycznie nie ma (ENOENT) – i tak usuwamy rekord z DB
+
+      const row = q.rows[0];
+
+      // 2) Sprawdzamy uprawnienia
+      if (user.role !== "admin" && row.owner_id !== user.id) {
+        return res.status(403).json({ error: "Brak dostępu do tej sprawy" });
+      }
+
+      // 3) Usuwamy fizyczny plik z dysku
+      const filePath = path.join(
+        process.cwd(),
+        "uploads",
+        "cases",
+        String(row.case_id),
+        row.stored_name
+      );
+
+      try {
+        await fsPromises.unlink(filePath);
+      } catch (err: any) {
+        if (err.code !== "ENOENT") {
+          console.error("Błąd usuwania pliku z dysku:", err);
+        }
+        // jeśli pliku fizycznie nie ma (ENOENT) – i tak usuwamy rekord z DB
+      }
+
+      // 4) Usuwamy rekord z bazy
+      await pool.query("DELETE FROM case_files WHERE id = $1", [fileId]);
+
+      console.log("🗑️ Usunięto plik id =", fileId);
+      return res.json({ ok: true });
+    } catch (err) {
+      console.error("DELETE /api/files/:fileId error:", err);
+      return res
+        .status(500)
+        .json({ error: "Błąd serwera przy usuwaniu pliku" });
     }
-
-    // 4) Usuwamy rekord z bazy
-    await pool.query("DELETE FROM case_files WHERE id = $1", [fileId]);
-
-    console.log("🗑️ Usunięto plik id =", fileId);
-    return res.json({ ok: true });
-  } catch (err) {
-    console.error("DELETE /api/files/:fileId error:", err);
-    return res
-      .status(500)
-      .json({ error: "Błąd serwera przy usuwaniu pliku" });
-  }
-});
+  });
 
   // === UPLOAD PLIKÓW DO SPRAWY ===
   app.post(
-  "/api/cases/:id/files",
-  hardApiLimit,       // ⬅️ upload = ryzyko → twardy limiter
-  requireAuth,
-  upload.array("files", 10),   // ⬅️ max 10 plików jednorazowo
-  async (req, res) => {
-    const user = (req as any).user;
-    const idRaw = req.params.id;
-    const caseId = Number(idRaw);
+    "/api/cases/:id/files",
+    hardApiLimit,       // ⬅️ upload = ryzyko → twardy limiter
+    requireAuth,
+    upload.array("files", 10),   // ⬅️ max 10 plików jednorazowo
+    async (req, res) => {
+      const user = (req as any).user;
+      const idRaw = req.params.id;
+      const caseId = Number(idRaw);
 
-    if (!Number.isFinite(caseId)) {
-      return res.status(400).json({ error: "Nieprawidłowe ID sprawy" });
-    }
+      if (!Number.isFinite(caseId)) {
+        return res.status(400).json({ error: "Nieprawidłowe ID sprawy" });
+      }
 
-    // 1️⃣ uprawnienia
-    const allowed = await verifyCaseOwnership(caseId, user);
-    if (allowed === null) {
-      return res.status(404).json({ error: "Sprawa nie istnieje" });
-    }
-    if (!allowed) {
-      return res.status(403).json({ error: "Brak dostępu do tej sprawy" });
-    }
+      // 1️⃣ uprawnienia
+      const allowed = await verifyCaseOwnership(caseId, user);
+      if (allowed === null) {
+        return res.status(404).json({ error: "Sprawa nie istnieje" });
+      }
+      if (!allowed) {
+        return res.status(403).json({ error: "Brak dostępu do tej sprawy" });
+      }
 
-    // 2️⃣ pliki
-    const files = (req.files as Express.Multer.File[]) || [];
+      // 2️⃣ pliki
+      const files = (req.files as Express.Multer.File[]) || [];
 
-    if (!files.length) {
-      return res.status(400).json({ error: "Brak plików do dodania" });
-    }
+      if (!files.length) {
+        return res.status(400).json({ error: "Brak plików do dodania" });
+      }
 
-   // 3️⃣ TYLKO limit rozmiaru (20 MB) – reszta jest robiona w fileFilter
-const maxSize = MAX_FILE_SIZE; // 20 MB
+      // 3️⃣ TYLKO limit rozmiaru (20 MB) – reszta jest robiona w fileFilter
+      const maxSize = MAX_FILE_SIZE; // 20 MB
 
-for (const f of files) {
-  if (f.size > maxSize) {
-    return res.status(400).json({
-      error: `Plik jest zbyt duży (max 20 MB): ${f.originalname}`,
-    });
-  }
-}
+      for (const f of files) {
+        if (f.size > maxSize) {
+          return res.status(400).json({
+            error: `Plik jest zbyt duży (max 20 MB): ${f.originalname}`,
+          });
+        }
+      }
 
-    try {
-      const values: any[] = [];
-      const placeholders: string[] = [];
+      try {
+        const values: any[] = [];
+        const placeholders: string[] = [];
 
-      files.forEach((f, index) => {
-        const baseIndex = index * 5;
-        placeholders.push(
-          `($${baseIndex + 1}, $${baseIndex + 2}, $${baseIndex + 3}, $${baseIndex + 4}, $${baseIndex + 5})`
-        );
-        values.push(
-          caseId,
-          f.originalname,
-          f.filename,
-          f.mimetype,
-          f.size
-        );
-      });
+        files.forEach((f, index) => {
+          const baseIndex = index * 5;
+          placeholders.push(
+            `($${baseIndex + 1}, $${baseIndex + 2}, $${baseIndex + 3}, $${baseIndex + 4}, $${baseIndex + 5})`
+          );
+          values.push(
+            caseId,
+            f.originalname,
+            f.filename,
+            f.mimetype,
+            f.size
+          );
+        });
 
-      const sql = `
+        const sql = `
         INSERT INTO case_files (case_id, original_name, stored_name, mime_type, size)
         VALUES ${placeholders.join(", ")}
         RETURNING id, case_id, original_name, stored_name, mime_type, size, uploaded_at
       `;
 
-      const result = await pool.query(sql, values);
+        const result = await pool.query(sql, values);
 
-      console.log(
-        `📎 [UPLOAD] user=${user.id}, case=${caseId}, count=${result.rowCount}`
-      );
+        console.log(
+          `📎 [UPLOAD] user=${user.id}, case=${caseId}, count=${result.rowCount}`
+        );
 
-      return res.json({
-        ok: true,
-        files: result.rows,
-      });
-    } catch (err) {
-      console.error("❌ Błąd przy POST /api/cases/:id/files:", err);
-      return res.status(500).json({ error: "Błąd serwera przy zapisie plików" });
+        return res.json({
+          ok: true,
+          files: result.rows,
+        });
+      } catch (err) {
+        console.error("❌ Błąd przy POST /api/cases/:id/files:", err);
+        return res.status(500).json({ error: "Błąd serwera przy zapisie plików" });
+      }
     }
-  }
-);
+  );
 
-// === USUWANIE SPRAWY (DELETE) ===
-app.delete(
-  "/api/cases/:id",
-  hardApiLimit,
-  requireAuth,
-  async (req, res) => {
+  // === USUWANIE SPRAWY (DELETE) ===
+  app.delete(
+    "/api/cases/:id",
+    hardApiLimit,
+    requireAuth,
+    async (req, res) => {
 
-    const user = (req as any).user;
-    const idRaw = req.params.id;
-    const id = Number(idRaw);
+      const user = (req as any).user;
+      const idRaw = req.params.id;
+      const id = Number(idRaw);
 
-    console.log(`[DELETE /api/cases/${id}] by user=${user.id}, role=${user.role}`);
-    
-    if (!Number.isFinite(id)) {
-      return res.status(400).json({ error: "Nieprawidłowe ID sprawy" });
-    }
+      console.log(`[DELETE /api/cases/${id}] by user=${user.id}, role=${user.role}`);
 
-    const allowed = await verifyCaseOwnership(id, user);
-    if (allowed === null) {
-      return res.status(404).json({ error: "Sprawa nie istnieje" });
-    }
-    if (!allowed) {
-      return res.status(403).json({ error: "Brak dostępu do tej sprawy" });
-    }
-
-    try {
-      const result = await pool.query(
-        "DELETE FROM cases WHERE id = $1 RETURNING id",
-        [id]
-      );
-
-      if (result.rowCount === 0) {
-        return res.status(404).json({ error: "Sprawa nie istnieje" });
+      if (!Number.isFinite(id)) {
+        return res.status(400).json({ error: "Nieprawidłowe ID sprawy" });
       }
 
-      console.log("🗑️ Usunięto sprawę id =", id);
-      return res.json({ success: true });
-    } catch (err) {
-      console.error("Błąd przy DELETE /api/cases/:id:", err);
-      return res
-        .status(500)
-        .json({ error: "Błąd serwera przy usuwaniu sprawy" });
+      const allowed = await verifyCaseOwnership(id, user);
+      if (allowed === null) {
+        return res.status(404).json({ error: "Sprawa nie istnieje" });
+      }
+      if (!allowed) {
+        return res.status(403).json({ error: "Brak dostępu do tej sprawy" });
+      }
+
+      try {
+        const result = await pool.query(
+          "DELETE FROM cases WHERE id = $1 RETURNING id",
+          [id]
+        );
+
+        if (result.rowCount === 0) {
+          return res.status(404).json({ error: "Sprawa nie istnieje" });
+        }
+
+        console.log("🗑️ Usunięto sprawę id =", id);
+        return res.json({ success: true });
+      } catch (err) {
+        console.error("Błąd przy DELETE /api/cases/:id:", err);
+        return res
+          .status(500)
+          .json({ error: "Błąd serwera przy usuwaniu sprawy" });
+      }
     }
-  }
-);
+  );
 
   console.log("➡️ routes: GET/POST/PATCH/PUT/DELETE /api/cases registered");
 }
