@@ -3013,82 +3013,89 @@ window.addEventListener("beforeunload", (e) => {
 });
 
 // ==========================================
-//    DELETE CASE (działa w case.html)
+//    DELETE CASE + POWIADOMIENIA
 // ==========================================
 document.addEventListener("DOMContentLoaded", () => {
   const btn = document.getElementById("deleteCaseBtn");
   console.log("[caseDelete] init, btn =", btn);
-  if (!btn) return;
 
-  btn.addEventListener("click", async () => {
-    console.log("[caseDelete] klik!");
-    let caseId = null;
+  // ⬇️ Jeśli przycisk istnieje → podpinamy kasowanie
+  if (btn) {
+    btn.addEventListener("click", async () => {
+      console.log("[caseDelete] klik!");
+      let caseId = null;
 
-    // 1) spróbuj z ukrytego pola, jak przy WPS
-    const caseIdInput = document.getElementById("wpsCaseId");
-    if (caseIdInput && caseIdInput.value) {
-      const parsed = Number(caseIdInput.value);
-      if (Number.isFinite(parsed)) caseId = parsed;
-    }
-
-    // 2) fallback: window.currentCaseId
-    if (!caseId && window.currentCaseId) {
-      const parsed = Number(window.currentCaseId);
-      if (Number.isFinite(parsed)) caseId = parsed;
-    }
-
-    // 3) fallback: z URL (ostatnia liczba w ścieżce)
-    if (!caseId) {
-      const path = window.location.pathname;
-      const matches = path.match(/\d+/g);
-      if (matches && matches.length > 0) {
-        const last = Number(matches[matches.length - 1]);
-        if (Number.isFinite(last)) caseId = last;
+      // 1) spróbuj z ukrytego pola
+      const caseIdInput = document.getElementById("wpsCaseId");
+      if (caseIdInput && caseIdInput.value) {
+        const parsed = Number(caseIdInput.value);
+        if (Number.isFinite(parsed)) caseId = parsed;
       }
-    }
 
-    console.log("[caseDelete] caseId →", caseId);
+      // 2) fallback: window.currentCaseId
+      if (!caseId && window.currentCaseId) {
+        const parsed = Number(window.currentCaseId);
+        if (Number.isFinite(parsed)) caseId = parsed;
+      }
 
-    if (!caseId) {
-      alert("Brak ID sprawy – nie mogę usunąć.");
-      return;
-    }
+      // 3) fallback: z URL
+      if (!caseId) {
+        const path = window.location.pathname;
+        const matches = path.match(/\d+/g);
+        if (matches && matches.length > 0) {
+          const last = Number(matches[matches.length - 1]);
+          if (Number.isFinite(last)) caseId = last;
+        }
+      }
 
-    // Potrójne potwierdzenie
-    if (!confirm("Czy na pewno chcesz usunąć tę sprawę?")) return;
-    if (!confirm("Ta operacja jest nieodwracalna. Usunąć?")) return;
+      console.log("[caseDelete] caseId →", caseId);
 
-    const phrase = prompt('Aby potwierdzić, wpisz słowo: USUŃ');
-    if (!phrase || phrase.trim().toUpperCase() !== "USUŃ") {
-      alert("Nie potwierdziłeś usunięcia.");
-      return;
-    }
-
-    try {
-      const res = await fetch(`/api/cases/${caseId}`, {
-        method: "DELETE",
-        headers: { "Content-Type": "application/json" },
-      });
-
-      if (!res.ok) {
-        console.error("Błąd podczas usuwania sprawy:", res.status);
-        alert("Błąd podczas usuwania sprawy.");
+      if (!caseId) {
+        alert("Brak ID sprawy – nie mogę usunąć.");
         return;
       }
 
-      alert("Sprawa została trwale usunięta.");
-      window.location.href = "/dashboard.html";
-    } catch (e) {
-      console.error("Błąd DELETE:", e);
-      alert("Nie udało się usunąć sprawy.");
-    }
-  });
+      // triple confirm
+      if (!confirm("Czy na pewno chcesz usunąć tę sprawę?")) return;
+      if (!confirm("Ta operacja jest nieodwracalna. Usunąć?")) return;
+
+      const phrase = prompt('Aby potwierdzić, wpisz słowo: USUŃ');
+      if (!phrase || phrase.trim().toUpperCase() !== "USUŃ") {
+        alert("Nie potwierdziłeś usunięcia.");
+        return;
+      }
+
+      try {
+        const res = await fetch(`/api/cases/${caseId}`, {
+          method: "DELETE",
+          headers: { "Content-Type": "application/json" },
+        });
+
+        if (!res.ok) {
+          console.error("Błąd podczas usuwania sprawy:", res.status);
+          alert("Błąd podczas usuwania sprawy.");
+          return;
+        }
+
+        alert("Sprawa została trwale usunięta.");
+        window.location.href = "/dashboard.html";
+      } catch (e) {
+        console.error("Błąd DELETE:", e);
+        alert("Nie udało się usunąć sprawy.");
+      }
+    });
+  }
+
+  // ============================
+  // POWIADOMIENIA
+  // ============================
 
   async function fetchNotifications(onlyUnread = true) {
     try {
-      const res = await fetch(`/api/notifications?onlyUnread=${onlyUnread ? "1" : "0"}`, {
-        credentials: "include",
-      });
+      const res = await fetch(
+        `/api/notifications?onlyUnread=${onlyUnread ? "1" : "0"}`,
+        { credentials: "include" }
+      );
 
       const data = await res.json();
       if (!data.ok) return;
@@ -3105,24 +3112,23 @@ document.addEventListener("DOMContentLoaded", () => {
         badge.style.display = "none";
       }
 
-      // Panel list
+      // Lista
       list.innerHTML = "";
-      items.forEach(n => {
+      items.forEach((n) => {
         const div = document.createElement("div");
         div.className = "notif-item unread";
         div.dataset.id = n.id;
         div.innerHTML = `
-        <div>${n.title}</div>
-        <div class="notif-item-time">${new Date(n.created_at).toLocaleString()}</div>
-        <div style="font-size:12px; color:#555">${n.body}</div>
-      `;
+          <div>${n.title}</div>
+          <div class="notif-item-time">${new Date(n.created_at).toLocaleString()}</div>
+          <div style="font-size:12px; color:#555">${n.body}</div>
+        `;
         div.addEventListener("click", () => {
           markNotificationsRead([n.id]);
           div.classList.remove("unread");
         });
         list.appendChild(div);
       });
-
     } catch (err) {
       console.error("fetchNotifications error:", err);
     }
@@ -3140,27 +3146,26 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   function initNotifications() {
-    const btn = document.getElementById("notificationsButton");
+    const btnNotif = document.getElementById("notificationsButton");
     const panel = document.getElementById("notificationsPanel");
 
-    if (!btn || !panel) return;
+    if (!btnNotif || !panel) return;
 
-    btn.addEventListener("click", () => {
+    btnNotif.addEventListener("click", () => {
       panel.style.display = panel.style.display === "none" ? "block" : "none";
+
       if (panel.style.display === "block") {
         fetchNotifications(true);
       }
     });
 
-    // Initial fetch
+    // initial fetch
     fetchNotifications(true);
 
-    // Auto-refresh every 60s
+    // auto-refresh co 60 sek
     setInterval(() => fetchNotifications(true), 60000);
   }
 
-  document.addEventListener("DOMContentLoaded", () => {
-    initNotifications();
-  });
+  initNotifications();
 });
 

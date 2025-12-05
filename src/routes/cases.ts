@@ -10,7 +10,7 @@ import path from "path";
 import pool from "../db";
 import { requireAuth } from "../middleware/requireAuth";
 import { denyUnknownFields } from "./denyUnknownFields";
-
+import { createNotification } from "../utils/createNotification";
 // Logika biznesowa (statusy)
 import { updateCaseStatus } from "../services/caseStatus";
 import { isValidCaseStatus } from "../domain/caseStatus";
@@ -652,7 +652,6 @@ export default function casesRoutes(app: Express) {
     requireAuth,
     denyUnknownFields(["client", "loan_amount", "bank"]),
     async (req, res) => {
-
       const user = (req as any).user;
 
       if (!user) {
@@ -671,9 +670,9 @@ export default function casesRoutes(app: Express) {
         let s = v.trim();
 
         // usuń znaki mogące rodzić XSS / dziwne injection
-        s = s.replace(/[<>]/g, "");       // blokada HTML injection
-        s = s.replace(/[\u0000-\u001F]/g, ""); // control chars
-        s = s.substring(0, max);          // twardy limit długości
+        s = s.replace(/[<>]/g, "");             // blokada HTML injection
+        s = s.replace(/[\u0000-\u001F]/g, "");  // control chars
+        s = s.substring(0, max);                // twardy limit długości
 
         return s || null;
       };
@@ -688,9 +687,7 @@ export default function casesRoutes(app: Express) {
       // --- KWOTA ---
       const toNumber = (v: any) => {
         if (v == null) return null;
-        const n = Number(
-          String(v).replace(/\s+/g, "").replace(",", ".")
-        );
+        const n = Number(String(v).replace(/\s+/g, "").replace(",", "."));
         return Number.isFinite(n) ? n : null;
       };
 
@@ -719,8 +716,41 @@ export default function casesRoutes(app: Express) {
         const params = [client, amountVal, bank ?? null, user.id];
 
         const result = await pool.query(sql, params);
+        const createdCase = result.rows[0];
 
-        return res.json(result.rows[0]);
+        // ================================
+        // 4) POWIADOMIENIE DLA WŁAŚCICIELA
+        // ================================
+        try {
+          const amountStr = Number(createdCase.loan_amount ?? 0).toLocaleString("pl-PL", {
+            style: "currency",
+            currency: "PLN",
+            maximumFractionDigits: 0,
+          });
+
+          await createNotification({
+            userId: user.id,                // na razie powiadamiamy właściciela (też admina)
+            caseId: createdCase.id,
+            type: "case_created",
+            title: "Nowa sprawa została utworzona",
+            body: `Klient: ${createdCase.client}, kwota: ${amountStr}.`,
+            meta: {
+              caseId: createdCase.id,
+              ownerId: createdCase.owner_id,
+              createdBy: user.id,
+              role: user.role,
+            },
+          });
+
+          console.log(
+            `[NOTIF] case_created → user=${user.id}, case=${createdCase.id}`
+          );
+        } catch (notifErr) {
+          console.error("[NOTIF] createNotification error:", notifErr);
+          // nie blokujemy odpowiedzi do frontu
+        }
+
+        return res.json(createdCase);
       } catch (e: any) {
         console.error("Błąd przy POST /api/cases:", e);
         return res.status(500).json({
@@ -1141,12 +1171,11 @@ export default function casesRoutes(app: Express) {
       }
     });
 
-  // === ZAPIS WPS BASIC → WPS (prognoza) ===
+  // === ZAPIS WPS BASIC → WPS (prognoza) + powiadomienie ===
   app.patch(
     "/api/cases/:id/wps-basic",
     mediumApiLimit,
     requireAuth,
-    // ⬇️ teraz spodziewamy się pola "wps_forecast"
     denyUnknownFields(["wps_forecast"]),
     async (req, res) => {
       const user = (req as any).user;
@@ -1166,12 +1195,13 @@ export default function casesRoutes(app: Express) {
       }
 
       try {
-        // ⬇️ zamiast wps_basic pobieramy wps_forecast
         const { wps_forecast } = req.body || {};
-
         const wpsNumber = Number(wps_forecast);
+
         if (!Number.isFinite(wpsNumber)) {
-          return res.status(400).json({ error: "Nieprawidłowa wartość WPS (prognoza)." });
+          return res
+            .status(400)
+            .json({ error: "Nieprawidłowa wartość WPS (prognoza)." });
         }
 
         console.log(
@@ -1183,7 +1213,7 @@ export default function casesRoutes(app: Express) {
         UPDATE cases
         SET wps_forecast = $1
         WHERE id = $2
-        RETURNING id, wps_forecast
+        RETURNING id, client, loan_amount, bank, wps_forecast
         `,
           [wpsNumber, caseId]
         );
@@ -1192,9 +1222,31 @@ export default function casesRoutes(app: Express) {
           return res.status(404).json({ error: "Nie znaleziono sprawy." });
         }
 
+        const row = result.rows[0];
+
+        // 🔔 POWIADOMIENIE: zapisano WPS (prognoza)
+        try {
+          await createNotification({
+            userId: user.id,          // na razie powiadamiamy tego, kto zapisał
+            caseId,
+            type: "wps_forecast_saved",
+            title: `Zapisano WPS (prognoza) dla sprawy #${row.id}`,
+            body: `Nowa prognoza WPS: ${wpsNumber.toLocaleString("pl-PL")} PLN` +
+              (row.client ? ` (klient: ${row.client})` : ""),
+            meta: {
+              wps_forecast: wpsNumber,
+              loan_amount: row.loan_amount,
+              bank: row.bank,
+            },
+          });
+        } catch (notifErr) {
+          console.warn("[NOTIF] wps_forecast_saved error:", notifErr);
+          // nie blokujemy odpowiedzi dla klienta
+        }
+
         return res.json({
           ok: true,
-          case: result.rows[0],
+          case: row,
         });
       } catch (err) {
         console.error("Błąd PATCH /api/cases/:id/wps-basic:", err);
@@ -1339,7 +1391,47 @@ export default function casesRoutes(app: Express) {
         );
 
         // ============================
-        // 11) OK
+        // 11) POWIADOMIENIE
+        // ============================
+        try {
+          const row = result.rows[0];
+          const offerSkd: any = row.offer_skd || {};
+
+          const variantLabel =
+            offerSkd.variant === "sf49"
+              ? "Success Fee 51% dla klienta"
+              : offerSkd.variant === "sell"
+                ? "Sprzedaż roszczenia"
+                : "Success Fee 50/50";
+
+          await createNotification({
+            userId: user.id, // na razie powiadamiamy autora zmian (admina)
+            caseId,
+            type: "skd_offer_saved",
+            title: `Oferta SKD zapisana dla sprawy #${row.id}`,
+            body:
+              `Wariant: ${variantLabel}` +
+              (row.client ? ` (klient: ${row.client})` : "") +
+              (typeof row.wps_forecast === "number"
+                ? `, WPS: ${row.wps_forecast.toLocaleString("pl-PL")} PLN`
+                : ""),
+            meta: {
+              variant: offerSkd.variant || null,
+              wps_forecast: row.wps_forecast ?? null,
+              bank: row.bank,
+              loan_amount: row.loan_amount,
+            },
+          });
+
+          console.log(
+            `[NOTIF] skd_offer_saved → user=${user.id} case=${caseId}`
+          );
+        } catch (notifErr) {
+          console.warn("[NOTIF] skd_offer_saved error:", notifErr);
+        }
+
+        // ============================
+        // 12) OK
         // ============================
         return res.json({ ok: true, case: result.rows[0] });
 

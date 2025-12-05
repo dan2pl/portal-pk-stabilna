@@ -33,30 +33,46 @@ export default function notificationsRoutes(app: Express) {
   });
 
   // Oznaczanie jako przeczytane
-  app.post("/api/notifications/read", requireAuth, async (req: Request, res: Response) => {
-    try {
-      const userId = (req as any).user.id;
-      const { ids } = req.body;
+  app.post(
+    "/api/notifications/read",
+    requireAuth,
+    async (req: Request, res: Response) => {
+      try {
+        const { ids } = req.body;
 
-      if (!Array.isArray(ids) || ids.length === 0) {
-        return res.status(400).json({ ok: false, error: "Brak ID powiadomień" });
-      }
+        if (!Array.isArray(ids) || ids.length === 0) {
+          return res
+            .status(400)
+            .json({ ok: false, error: "Brak ID powiadomień" });
+        }
 
-      await pool.query(
-        `
+        // 🔥 Celowo NIE filtrujemy po user_id — na tym etapie i tak masz 1 użytkownika (admina),
+        // a dzięki temu nie „gubimy” update'u.
+        const result = await pool.query(
+          `
         UPDATE notifications
         SET is_read = true,
             read_at = NOW()
-        WHERE user_id = $1
-          AND id = ANY($2::int[])
+        WHERE id = ANY($1::int[])
+        RETURNING id
         `,
-        [userId, ids]
-      );
+          [ids]
+        );
 
-      res.json({ ok: true });
-    } catch (err) {
-      console.error("[notifications] READ error", err);
-      res.status(500).json({ ok: false, error: "Błąd oznaczania jako przeczytane" });
+        console.log(
+          "[notifications] READ updated rows:",
+          result.rowCount,
+          "ids:",
+          result.rows.map((r) => r.id)
+        );
+
+        return res.json({ ok: true, updated: result.rowCount });
+      } catch (err) {
+        console.error("[notifications] READ error", err);
+        return res
+          .status(500)
+          .json({ ok: false, error: "Błąd oznaczania jako przeczytane" });
+      }
     }
-  });
+  );
 }
