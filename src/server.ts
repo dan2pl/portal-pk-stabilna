@@ -132,22 +132,7 @@ app.use(
 // ==========================================
 app.use(
   cors({
-    origin(origin, callback) {
-      const allowed = [
-        FRONTEND_URL,
-        "http://localhost:4000", // zostawiamy DEV na sztywno, żeby nie zwariować :)
-      ];
-
-      // Brak origin (np. Postman, curl) → OK
-      if (!origin) return callback(null, true);
-
-      if (allowed.includes(origin)) {
-        return callback(null, true);
-      }
-
-      console.warn("🚫 CORS blocked:", origin);
-      return callback(new Error("CORS blocked: " + origin), false);
-    },
+    origin: true,      // 🔥 ZEZWÓL NA WSZYSTKIE ORIGIN (TYLKO NA TESTY!)
     credentials: true,
   })
 );
