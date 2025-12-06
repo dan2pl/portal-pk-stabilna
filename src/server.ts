@@ -5,7 +5,7 @@ import dotenv from "dotenv";
 import cookieParser from "cookie-parser";
 import session from "express-session";
 import helmet from "helmet";
-
+import publicLeadsRoutes from "./routes/publicLeads";
 const PgSession = require("connect-pg-simple")(session);
 
 import adminRoutes from "./routes/admin";
@@ -67,18 +67,18 @@ app.use(
     // ✅ CSP: w DEV wyłączone, w PROD – włączone z rozsądnymi ustawieniami
     contentSecurityPolicy: isProd
       ? {
-          directives: {
-            defaultSrc: ["'self'"],
-            scriptSrc: ["'self'", "'unsafe-inline'"],
-            styleSrc: ["'self'", "'unsafe-inline'"],
-            imgSrc: ["'self'", "data:", "https:"],
-            connectSrc: ["'self'"],
-            fontSrc: ["'self'", "data:"],
-            objectSrc: ["'none'"],
-            baseUri: ["'self'"],
-            frameAncestors: ["'none'"],
-          },
-        }
+        directives: {
+          defaultSrc: ["'self'"],
+          scriptSrc: ["'self'", "'unsafe-inline'"],
+          styleSrc: ["'self'", "'unsafe-inline'"],
+          imgSrc: ["'self'", "data:", "https:"],
+          connectSrc: ["'self'"],
+          fontSrc: ["'self'", "data:"],
+          objectSrc: ["'none'"],
+          baseUri: ["'self'"],
+          frameAncestors: ["'none'"],
+        },
+      }
       : false,
   })
 );
@@ -178,13 +178,13 @@ app.use(
     resave: false,
     saveUninitialized: false,
 
-        cookie: {
-  httpOnly: true,
-  secure: isProd,
-  sameSite: "lax",
-  maxAge: 1000 * 60 * 60 * 8,
-  path: "/",
-},
+    cookie: {
+      httpOnly: true,
+      secure: isProd,
+      sameSite: "lax",
+      maxAge: 1000 * 60 * 60 * 8,
+      path: "/",
+    },
   })
 );
 // === GLOBAL: blokuje nieznane pola w req.body ===
@@ -211,6 +211,7 @@ authRoutes(app);
 casesRoutes(app);
 adminRoutes(app);
 notificationsRoutes(app);
+publicLeadsRoutes(app);
 // ==========================================
 //   404 — musi być NA KOŃCU
 // ==========================================
