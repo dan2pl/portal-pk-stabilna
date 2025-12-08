@@ -22,7 +22,7 @@
             Utworzono: <span id="caseCreatedAt">01.10.2025</span> · Prowadzący:
             <span id="caseOwner">Jan Kowalski</span>
           </div>
-          <input type="hidden" id="caseId" />
+          <input type="hidden" id="caseIdValue" />
           <div class="case-tags">
             <span class="tag tag-primary" id="caseStatus">NOWA</span>
             <span class="tag" id="caseBank">mBank</span>
@@ -555,45 +555,6 @@
                     <!-- Tu w Etapie 14C podłączymy historię z bazy -->
                     <div class="case-history-list" id="caseHistoryList">
                       <!-- Na razie mock – później podmienimy na dane z API -->
-                      <div
-                        class="case-history-item case-anim case-anim-delay-1"
-                      >
-                        <div class="case-history-dot"></div>
-                        <div class="case-history-content">
-                          <div class="case-history-title">Sprawa utworzona</div>
-                          <div class="case-history-meta">
-                            12.10.2025 · system
-                          </div>
-                        </div>
-                      </div>
-
-                      <div
-                        class="case-history-item case-anim case-anim-delay-2"
-                      >
-                        <div class="case-history-dot"></div>
-                        <div class="case-history-content">
-                          <div class="case-history-title">
-                            Dodano dane kredytu
-                          </div>
-                          <div class="case-history-meta">
-                            14.10.2025 · Jan Kowalski
-                          </div>
-                        </div>
-                      </div>
-
-                      <div
-                        class="case-history-item case-anim case-anim-delay-3"
-                      >
-                        <div class="case-history-dot"></div>
-                        <div class="case-history-content">
-                          <div class="case-history-title">
-                            Przygotowanie SKD
-                          </div>
-                          <div class="case-history-meta">
-                            21.10.2025 · Jan Kowalski
-                          </div>
-                        </div>
-                      </div>
                     </div>
                   </div>
                 </div>
@@ -624,34 +585,11 @@
         CLOSED_FAIL: "Zakończona – Przegrana",
         CLIENT_RESIGNED: "Rezygnacja klienta",
       };
-      // === LOGIKA TABS ===
-      const tabButtons = document.querySelectorAll(".case-tab");
-      const tabPanels = document.querySelectorAll(".tab-panel");
-
-      tabButtons.forEach((btn) => {
-        btn.addEventListener("click", () => {
-          const tab = btn.dataset.tab;
-
-          tabButtons.forEach((b) => b.classList.remove("active"));
-          btn.classList.add("active");
-
-          tabPanels.forEach((panel) => {
-            const panelTab = panel.dataset.tabPanel;
-            panel.classList.toggle("active", panelTab === tab);
-          });
-        });
-      });
-
-      // === LOGIKA ACCORDION ===
-      document.querySelectorAll(".accordion-header").forEach((header) => {
-        header.addEventListener("click", () => {
-          const item = header.closest(".accordion-item");
-          const isOpen = item.classList.contains("open");
-          item.classList.toggle("open", !isOpen);
-        });
-      });
 
       // === POMOCNICZE ===
+      function $(id) {
+        return document.getElementById(id);
+      }
 
       function getCaseIdFromUrl() {
         const params = new URLSearchParams(window.location.search);
@@ -678,212 +616,6 @@
             maximumFractionDigits: 0,
           }) + " zł"
         );
-      }
-
-      function $(id) {
-        return document.getElementById(id);
-      }
-
-      // === PROGRES ETAPU SPRAWY (NOWY SYSTEM) ===
-
-      function stageToProgress(statusCode) {
-        switch (statusCode) {
-          case "NEW":
-            return 5;
-
-          case "ANALYSIS":
-            return 20;
-
-          case "ANALYSIS_DOCS_NEEDED":
-            return 25;
-
-          case "ANALYSIS_POSITIVE":
-            return 35;
-
-          case "ANALYSIS_NEGATIVE":
-            return 0;
-
-          case "CONTRACT_PREP":
-            return 50;
-
-          case "CONTRACT_DOCS_NEEDED":
-            return 55;
-
-          case "CONTRACT_AT_AGENT":
-            return 65;
-
-          case "CONTRACT_SIGNED":
-            return 75;
-
-          case "IN_PROGRESS":
-            return 85;
-
-          case "CLOSED_SUCCESS":
-            return 100;
-
-          case "CLOSED_FAIL":
-          case "CLIENT_RESIGNED":
-            return 0;
-
-          default:
-            return 0;
-        }
-      }
-
-      function updateCaseProgress(statusCode) {
-        const fill = document.getElementById("caseProgressFill");
-        if (!fill) return;
-        const percent = stageToProgress(statusCode);
-        fill.style.width = percent + "%";
-      }
-
-      // 🔹 JEDNO globalne caseStageSelect + caseIdInput
-      const caseStageSelect = document.getElementById("caseStage");
-      const caseIdInput = document.getElementById("caseId");
-
-      async function saveCaseStatus() {
-        if (!caseStageSelect) return;
-
-        const caseId =
-          Number(caseIdInput?.value) ||
-          Number(new URLSearchParams(window.location.search).get("id"));
-
-        const status = caseStageSelect.value;
-
-        if (!caseId || !status) {
-          console.warn("Brak caseId lub statusu przy zapisie etapu", {
-            caseId,
-            status,
-          });
-          return;
-        }
-
-        try {
-          const res = await fetch(`${API_BASE}/cases/update-status`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ caseId, status }),
-          });
-
-          const data = await res.json();
-          if (!data.ok) {
-            console.error("Błąd przy zmianie statusu", data);
-            alert("Nie udało się zapisać etapu sprawy.");
-            return;
-          }
-
-          console.log("✅ Status sprawy zapisany:", data.case);
-
-          updateCaseProgress(status);
-        } catch (err) {
-          console.error("Błąd requestu przy zmianie statusu:", err);
-          alert("Wystąpił błąd przy zapisie etapu sprawy.");
-        }
-      }
-
-      if (caseStageSelect) {
-        caseStageSelect.addEventListener("change", saveCaseStatus);
-      }
-
-      // === WYPEŁNIANIE DANYCH Z API ===
-
-      function fillCaseHeader(data) {
-        const caseIdHidden = document.getElementById("caseId");
-        if (caseIdHidden) {
-          caseIdHidden.value = data.id ?? data.caseId ?? "";
-        }
-
-        const caseId = data.id ?? data.caseId ?? "";
-        const clientName =
-          data.client ??
-          data.clientName ??
-          data.client_name ??
-          data.client_full_name ??
-          "—";
-
-        const createdAt =
-          data.contract_date ?? data.createdAt ?? data.created_at ?? null;
-
-        const owner =
-          data.ownerName ?? data.owner_name ?? data.caseOwner ?? "—";
-
-        const status =
-          data.status ?? data.caseStatus ?? data.case_status ?? "—";
-
-        const bank =
-          data.bank ??
-          data.bankName ??
-          data.bank_name ??
-          data.creditBank ??
-          "—";
-
-        const product =
-          data.productType ?? data.product_type ?? "Kredyt gotówkowy";
-
-        const skdActive =
-          data.skdActive ?? data.skd_active ?? data.hasSkd ?? false;
-
-        $("caseId").textContent = caseId ? `#${caseId}` : "—";
-        $("caseClientName").textContent = clientName;
-        $("caseCreatedAt").textContent = createdAt
-          ? new Date(createdAt).toLocaleDateString("pl-PL")
-          : "—";
-        $("caseOwner").textContent = owner;
-
-        const statusEl = $("caseStatus");
-        statusEl.textContent = status || "—";
-
-        $("caseBank").textContent = bank;
-        $("caseProductType").textContent = product;
-
-        const skdTag = $("caseSkdTag");
-        if (skdActive) {
-          skdTag.textContent = "SKD aktywna";
-          skdTag.classList.add("tag-success");
-        } else {
-          skdTag.textContent = "SKD brak";
-          skdTag.classList.remove("tag-success");
-        }
-      }
-
-      function fillSidebar(data) {
-        const creditAmount =
-          data.loan_amount ??
-          data.creditAmount ??
-          data.credit_amount ??
-          data.loanAmount;
-
-        const totalCost =
-          data.total_cost ??
-          data.creditTotalCost ??
-          data.credit_total_cost ??
-          null;
-
-        const skdPotential = data.skd_potential ?? data.skdPotential ?? null;
-
-        const wps = data.wps_forecast ?? data.wps_final ?? data.wps ?? null;
-
-        const stage =
-          data.stage ??
-          data.caseStage ??
-          data.status_stage ??
-          data.status ??
-          "—";
-
-        const skdStatus = data.skd_status ?? data.skdStatus ?? "—";
-
-        const lastUpdate = data.updated_at ?? data.updatedAt ?? null;
-
-        $("summaryAmount").textContent = formatCurrency(creditAmount);
-        $("summaryTotalCost").textContent = formatCurrency(totalCost);
-        $("summarySkdPotential").textContent = formatCurrency(skdPotential);
-        $("summaryWps").textContent = formatCurrency(wps);
-
-        $("summaryStage").textContent = stage;
-        $("summarySkdStatus").textContent = skdStatus;
-        $("summaryLastUpdate").textContent = lastUpdate
-          ? new Date(lastUpdate).toLocaleDateString("pl-PL")
-          : "—";
       }
 
       function splitAddress(address) {
@@ -913,7 +645,8 @@
 
         return { street, city, postcode };
       }
-      // === IBAN – autoformatowanie w polu "Numer konta klienta" ===
+
+      // === IBAN – formatowanie i walidacja ===
       function attachIbanFormatter() {
         const input = $("contractIban");
         if (!input) return;
@@ -922,19 +655,15 @@
           const raw = input.value || "";
           const clean = raw.replace(/\s+/g, "").toUpperCase();
 
-          // jeśli krócej niż 3 znaki – nie kombinujemy
           if (clean.length <= 2) {
             input.value = clean;
             return;
           }
 
-          const first2 = clean.slice(0, 2); // np. "PL" / "97"
-          const rest = clean.slice(2); // reszta po tych 2 znakach
-
-          // resztę grupujemy po 4 znaki
+          const first2 = clean.slice(0, 2);
+          const rest = clean.slice(2);
           const restGrouped = rest.replace(/(.{4})/g, "$1 ").trim();
 
-          // składamy wynik: "PL" + spacja + grupy po 4
           input.value = restGrouped ? `${first2} ${restGrouped}` : first2;
         }
 
@@ -946,7 +675,6 @@
         const input = $("contractIban");
         if (!input) return;
 
-        // Tworzymy mały element z błędem (na żywo, bez HTML-a)
         const errorBox = document.createElement("div");
         errorBox.style.color = "#d9534f";
         errorBox.style.fontSize = "12px";
@@ -959,24 +687,17 @@
           const raw = input.value.replace(/\s+/g, "");
           let isValid = true;
 
-          // Dopuszczamy też czyste wpisywanie PL… lub same cyfry
-          const hasPL = /^[A-Z]{2}\d+$/.test(raw);
-
-          // Zasada walidacji:
-          // 26 cyfr (PL pomijamy, bo formatowanie je doda)
           if (!/^\d{0,26}$/.test(raw.replace(/[A-Z]/gi, ""))) {
             isValid = false;
           }
 
           if (raw.length > 0 && raw.length < 26) {
-            // Za krótki — ale nie traktujemy tego jako error, póki użytkownik pisze
             isValid = true;
             errorBox.style.display = "none";
             input.style.borderColor = "";
             return;
           }
 
-          // Jeśli użytkownik wpisze PL… — pozwalamy, ale sprawdzamy, czy reszta to cyfry
           if (raw.startsWith("PL") && raw.length !== 28) {
             isValid = false;
           }
@@ -990,8 +711,289 @@
           }
         });
       }
+
+      // === PROGRES ETAPU SPRAWY ===
+      function stageToProgress(statusCode) {
+        switch (statusCode) {
+          case "NEW":
+            return 5;
+          case "ANALYSIS":
+            return 20;
+          case "ANALYSIS_DOCS_NEEDED":
+            return 25;
+          case "ANALYSIS_POSITIVE":
+            return 35;
+          case "ANALYSIS_NEGATIVE":
+            return 0;
+          case "CONTRACT_PREP":
+            return 50;
+          case "CONTRACT_DOCS_NEEDED":
+            return 55;
+          case "CONTRACT_AT_AGENT":
+            return 65;
+          case "CONTRACT_SIGNED":
+            return 75;
+          case "IN_PROGRESS":
+            return 85;
+          case "CLOSED_SUCCESS":
+            return 100;
+          case "CLOSED_FAIL":
+          case "CLIENT_RESIGNED":
+            return 0;
+          default:
+            return 0;
+        }
+      }
+
+      function updateCaseProgress(statusCode) {
+        const fill = document.getElementById("caseProgressFill");
+        if (!fill) return;
+        const percent = stageToProgress(statusCode);
+        fill.style.width = percent + "%";
+      }
+
+      function showSaveToast(message) {
+        const existing = document.querySelector(".case-toast");
+        if (existing) {
+          existing.remove();
+        }
+
+        const toast = document.createElement("div");
+        toast.className = "case-toast";
+        toast.textContent = message || "Zapisano ✅";
+
+        document.body.appendChild(toast);
+
+        requestAnimationFrame(() => {
+          toast.classList.add("case-toast--visible");
+        });
+
+        setTimeout(() => {
+          toast.classList.remove("case-toast--visible");
+          setTimeout(() => toast.remove(), 300);
+        }, 1800);
+      }
+
+      function handleSectionSaved(btn, message) {
+        showSaveToast(message || "Zapisano zmiany ✅");
+      }
+
+      function attachFieldChangeMicroFX() {
+        const inputs = document.querySelectorAll(
+          "#panelClient input, #panelClient select, #panelClient textarea," +
+            " #panelCredit input, #panelCredit select, #panelCredit textarea," +
+            " #panelSkd input, #panelSkd select, #panelSkd textarea," +
+            " #panelNotes textarea"
+        );
+
+        inputs.forEach((el) => {
+          let lastValue = el.value;
+          el.addEventListener("change", () => {
+            if (el.value === lastValue) return;
+            lastValue = el.value;
+
+            el.classList.remove("case-input-changed");
+            void el.offsetWidth;
+            el.classList.add("case-input-changed");
+
+            setTimeout(() => {
+              el.classList.remove("case-input-changed");
+            }, 500);
+          });
+        });
+      }
+
+      // === TABS ===
+      const tabButtons = document.querySelectorAll(".case-tab");
+      const tabPanels = document.querySelectorAll(".tab-panel");
+
+      tabButtons.forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const tab = btn.dataset.tab;
+
+          tabButtons.forEach((b) => b.classList.remove("active"));
+          btn.classList.add("active");
+
+          tabPanels.forEach((panel) => {
+            const panelTab = panel.dataset.tabPanel;
+            panel.classList.toggle("active", panelTab === tab);
+          });
+        });
+      });
+
+      // === ACCORDION ===
+      document.querySelectorAll(".accordion-header").forEach((header) => {
+        header.addEventListener("click", () => {
+          const item = header.closest(".accordion-item");
+          const isOpen = item.classList.contains("open");
+          item.classList.toggle("open", !isOpen);
+        });
+      });
+
+      // === ETAP SPRAWY – zapis tylko przez /cases/update-status ===
+      const caseStageSelect = $("caseStage");
+      const caseIdInput = $("caseIdValue");
+
+      async function saveCaseStatus() {
+        if (!caseStageSelect) return;
+
+        const caseId =
+          Number(caseIdInput?.value) ||
+          Number(new URLSearchParams(window.location.search).get("id"));
+
+        const status = caseStageSelect.value;
+
+        if (!caseId || !status) {
+          console.warn("Brak caseId lub statusu przy zapisie etapu", {
+            caseId,
+            status,
+          });
+          return;
+        }
+
+        try {
+          const res = await fetch(`${API_BASE}/cases/update-status`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ caseId, status }),
+          });
+
+          const data = await res.json().catch(() => ({}));
+          if (!data.ok) {
+            console.error("Błąd przy zmianie statusu", data);
+            alert("Nie udało się zapisać etapu sprawy.");
+            return;
+          }
+
+          console.log("✅ Status sprawy zapisany:", data.case);
+          updateCaseProgress(status);
+          showSaveToast("Etap sprawy zapisany ✅");
+        } catch (err) {
+          console.error("Błąd requestu przy zmianie statusu:", err);
+          alert("Wystąpił błąd przy zapisie etapu sprawy.");
+        }
+      }
+
+      if (caseStageSelect) {
+        caseStageSelect.addEventListener("change", saveCaseStatus);
+      }
+
+      // === WYPEŁNIANIE DANYCH Z API ===
+
+      function fillCaseHeader(data) {
+        const caseIdHidden = $("caseIdValue");
+        const caseId = data.id ?? data.caseId ?? "";
+
+        if (caseIdHidden) {
+          caseIdHidden.value = caseId || "";
+        }
+
+        const clientName =
+          data.client ??
+          data.clientName ??
+          data.client_name ??
+          data.client_full_name ??
+          "—";
+
+        const createdAt =
+          data.contract_date ?? data.createdAt ?? data.created_at ?? null;
+
+        const owner =
+          data.ownerName ?? data.owner_name ?? data.caseOwner ?? "—";
+
+        const status =
+          data.status ?? data.caseStatus ?? data.case_status ?? "—";
+
+        const bank =
+          data.bank ??
+          data.bankName ??
+          data.bank_name ??
+          data.creditBank ??
+          "—";
+
+        const product =
+          data.productType ?? data.product_type ?? "Kredyt gotówkowy";
+
+        const skdActive =
+          data.skdActive ?? data.skd_active ?? data.hasSkd ?? false;
+
+        const caseIdLabel = $("caseIdLabel");
+        if (caseIdLabel) {
+          caseIdLabel.textContent = caseId ? `#${caseId}` : "—";
+        }
+
+        $("caseClientName").textContent = clientName;
+        $("caseCreatedAt").textContent = createdAt
+          ? new Date(createdAt).toLocaleDateString("pl-PL")
+          : "—";
+        $("caseOwner").textContent = owner;
+
+        const statusEl = $("caseStatus");
+        if (statusEl) {
+          statusEl.textContent =
+            CASE_STATUS_LABELS[String(status)] || status || "—";
+        }
+
+        $("caseBank").textContent = bank;
+        $("caseProductType").textContent = product;
+
+        const skdTag = $("caseSkdTag");
+        if (skdTag) {
+          if (skdActive) {
+            skdTag.textContent = "SKD aktywna";
+            skdTag.classList.add("tag-success");
+          } else {
+            skdTag.textContent = "SKD brak";
+            skdTag.classList.remove("tag-success");
+          }
+        }
+      }
+
+      function fillSidebar(data) {
+        const creditAmount =
+          data.loan_amount ??
+          data.creditAmount ??
+          data.credit_amount ??
+          data.loanAmount;
+
+        const totalCost =
+          data.total_cost ??
+          data.creditTotalCost ??
+          data.credit_total_cost ??
+          null;
+
+        const skdPotential = data.skd_potential ?? data.skdPotential ?? null;
+
+        const wps = data.wps_forecast ?? data.wps_final ?? data.wps ?? null;
+
+        const stageCode =
+          data.status_code ??
+          data.stage ??
+          data.caseStage ??
+          data.status_stage ??
+          data.status ??
+          "NEW";
+
+        const skdStatus = data.skd_status ?? data.skdStatus ?? "—";
+
+        const lastUpdate = data.updated_at ?? data.updatedAt ?? null;
+
+        $("summaryAmount").textContent = formatCurrency(creditAmount);
+        $("summaryTotalCost").textContent = formatCurrency(totalCost);
+        $("summarySkdPotential").textContent = formatCurrency(skdPotential);
+        $("summaryWps").textContent = formatCurrency(wps);
+
+        $("summaryStage").textContent =
+          CASE_STATUS_LABELS[String(stageCode)] || stageCode || "—";
+        $("summarySkdStatus").textContent = skdStatus;
+        $("summaryLastUpdate").textContent = lastUpdate
+          ? new Date(lastUpdate).toLocaleDateString("pl-PL")
+          : "—";
+
+        updateCaseProgress(stageCode);
+      }
+
       function fillClientSection(data) {
-        // --- Dane klienta ---
         $("clientName").value =
           data.client ??
           data.clientName ??
@@ -1017,7 +1019,6 @@
 
         $("clientNotes").value = data.clientNotes ?? data.client_notes ?? "";
 
-        // --- IBAN (jeśli backend go zwraca) ---
         const ibanInput = $("contractIban");
         if (ibanInput) {
           const ibanFromData =
@@ -1026,18 +1027,13 @@
         }
 
         // --- ETAP SPRAWY / STATUS_CODE ---
-
-        // 1. Najpierw próbujemy status_code z backendu (docelowe pole)
         let statusCode = data.status_code;
 
-        // 2. Jeśli nie ma status_code – próbujemy odczytać go ze starego pola "status"
         if (!statusCode) {
           const raw = data.status;
 
           if (raw) {
             const upper = String(raw).toUpperCase();
-
-            // pełna lista naszych kodów statusu
             const known = [
               "NEW",
               "ANALYSIS",
@@ -1055,10 +1051,8 @@
             ];
 
             if (known.includes(upper)) {
-              // 🟢 w bazie już siedzi nowy kod → używamy go 1:1
               statusCode = upper;
             } else {
-              // 🔙 stary schemat z polskimi nazwami typu "analiza", "przygotowanie" itd.
               const legacy = String(raw).toLowerCase();
               switch (legacy) {
                 case "nowa":
@@ -1088,7 +1082,6 @@
           }
         }
 
-        // 3. Ustawiamy dropdown "Etap sprawy" i pasek postępu
         if (caseStageSelect && statusCode) {
           caseStageSelect.value = statusCode;
           updateCaseProgress(statusCode);
@@ -1163,9 +1156,8 @@
         if (offerTextArea) {
           offerTextArea.value = offerText;
         }
-
-        // NIC nie ruszamy w etapie / pasku
       }
+
       function fillNotesSection(data) {
         $("caseNotes").value =
           data.notes ?? data.caseNotes ?? data.case_notes ?? "";
@@ -1188,7 +1180,7 @@
         return await res.json();
       }
 
-      // === ZAPISY DO BACKENDU ===
+      // === ZAPISY DO BACKENDU (sekcje) ===
       async function saveSection(caseId, section, payload) {
         let url = null;
         let method = "PATCH";
@@ -1222,189 +1214,6 @@
         return res.json().catch(() => ({}));
       }
 
-      function showSaveToast(message) {
-        const existing = document.querySelector(".case-toast");
-        if (existing) {
-          existing.remove();
-        }
-
-        const toast = document.createElement("div");
-        toast.className = "case-toast";
-        toast.textContent = message || "Zapisano ✅";
-
-        document.body.appendChild(toast);
-
-        requestAnimationFrame(() => {
-          toast.classList.add("case-toast--visible");
-        });
-
-        setTimeout(() => {
-          toast.classList.remove("case-toast--visible");
-          setTimeout(() => toast.remove(), 300);
-        }, 1800);
-      }
-
-      function handleSectionSaved(btn, message) {
-        showSaveToast(message || "Zapisano zmiany ✅");
-      }
-
-      function attachFieldChangeMicroFX() {
-        const inputs = document.querySelectorAll(
-          "#panelClient input, #panelClient select, #panelClient textarea," +
-            " #panelCredit input, #panelCredit select, #panelCredit textarea," +
-            " #panelSkd input, #panelSkd select, #panelSkd textarea," +
-            " #panelNotes textarea"
-        );
-
-        inputs.forEach((el) => {
-          let lastValue = el.value;
-          el.addEventListener("change", () => {
-            if (el.value === lastValue) return;
-            lastValue = el.value;
-
-            el.classList.remove("case-input-changed");
-            void el.offsetWidth;
-            el.classList.add("case-input-changed");
-
-            setTimeout(() => {
-              el.classList.remove("case-input-changed");
-            }, 500);
-          });
-        });
-      }
-
-      function attachSaveHandlers(caseId) {
-        // === KLIENT – dane podstawowe ===
-        const btnClient = $("btnClientSave");
-        btnClient?.addEventListener("click", async () => {
-          const ibanRaw = $("contractIban").value.trim();
-          const payload = {
-            client: $("clientName").value.trim(),
-            pesel: $("clientPesel").value.trim(),
-            phone: $("clientPhone").value.trim(),
-            email: $("clientEmail").value.trim(),
-            address: `${$("clientPostcode").value.trim()} ${$(
-              "clientCity"
-            ).value.trim()}, ${$("clientStreet").value.trim()}`,
-            iban: ibanRaw.replace(/\s+/g, "") || null, // zapisujemy BEZ spacji
-          };
-
-          try {
-            await saveSection(caseId, "client", payload);
-            handleSectionSaved(btnClient, "Dane klienta zapisane");
-          } catch (e) {
-            console.error(e);
-            showSaveToast("Błąd zapisu danych klienta ❌");
-          }
-        });
-
-        // === KLIENT – notatki (jak chcesz, może na razie zostać mockiem) ===
-        $("btnClientNotesSave")?.addEventListener("click", async () => {
-          const payload = {
-            clientNotes: $("clientNotes").value.trim(),
-          };
-          try {
-            await saveSection(caseId, "client-notes", payload);
-            showSaveToast("Uwagi o kliencie zapisane ✅");
-          } catch (e) {
-            console.error(e);
-            showSaveToast("Błąd zapisu uwag o kliencie ❌");
-          }
-        });
-
-        // === KREDYT ===
-        const btnCredit = $("btnCreditSave");
-        btnCredit?.addEventListener("click", async () => {
-          const payload = {
-            loan_amount: $("creditAmount").value
-              ? Number($("creditAmount").value)
-              : undefined,
-            contract_date: $("creditStartDate").value || undefined,
-            bank: $("creditBank").value.trim() || undefined,
-          };
-
-          try {
-            await saveSection(caseId, "credit", payload);
-            handleSectionSaved(btnCredit, "Dane kredytu zapisane");
-          } catch (e) {
-            console.error(e);
-            showSaveToast("Błąd zapisu danych kredytu ❌");
-          }
-        });
-
-        // === SKD – dane podstawowe (NA RAZIE tylko front, bez zapisu pól SKD) ===
-        $("btnSkdSave")?.addEventListener("click", () => {
-          showSaveToast("Dane SKD zapisane (lokalnie) ✅");
-        });
-
-        // === ETAP SPRAWY – tu ROBIMY PRAWDZIWY ZAPIS (pole status) ===
-        $("caseStage")?.addEventListener("change", async () => {
-          const stageValue = $("caseStage").value;
-
-          // 1) animacja paska
-          updateCaseProgress(stageValue);
-
-          // 2) payload zgodny z backendem – backend zna tylko "status"
-          const payload = { status: stageValue };
-
-          try {
-            await saveSection(caseId, "skd", payload);
-            showSaveToast("Etap sprawy zapisany ✅");
-
-            // 3) odśwież mini-podsumowanie w sidebarze
-            const summaryStage = $("summaryStage");
-            if (summaryStage) {
-              summaryStage.textContent = stageValue;
-            }
-          } catch (e) {
-            console.error(e);
-            showSaveToast("Błąd zapisu etapu ❌");
-          }
-        });
-
-        // === SKD – oferta ===
-        $("btnSkdOfferSave")?.addEventListener("click", async () => {
-          const payload = {
-            skdOfferText: $("skdOfferText").value.trim(),
-          };
-          try {
-            await saveSection(caseId, "skd-offer", payload);
-            showSaveToast("Oferta SKD zapisana ✅");
-          } catch (e) {
-            console.error(e);
-            showSaveToast("Błąd zapisu oferty SKD ❌");
-          }
-        });
-
-        // === NOTATKI SPRAWY ===
-        const btnCaseNotes = $("btnCaseNotesSave");
-        btnCaseNotes?.addEventListener("click", async () => {
-          const payload = {
-            notes: $("caseNotes").value.trim() || null,
-          };
-
-          try {
-            await saveSection(caseId, "notes", payload);
-            handleSectionSaved(btnCaseNotes, "Notatki zapisane");
-          } catch (e) {
-            console.error(e);
-            showSaveToast("Błąd zapisu notatek ❌");
-          }
-        });
-
-        // === GLOBALNY "ZAPISZ ZMIANY" ===
-        $("btnSaveAll")?.addEventListener("click", () => {
-          alert(
-            "Docelowo tu zrobimy zbiorczy zapis wszystkich sekcji. Na razie używaj przycisków w sekcjach. 🙂"
-          );
-        });
-
-        // === POWRÓT ===
-        $("btnBack")?.addEventListener("click", () => {
-          window.history.back();
-        });
-      }
-
       // === UPLOAD PLIKÓW DOKUMENTÓW DO BACKENDU ===
       async function uploadCaseFiles(caseId, files) {
         if (!files || !files.length) return;
@@ -1434,67 +1243,6 @@
           console.error("Błąd uploadCaseFiles:", err);
           alert("Nie udało się dodać plików (błąd sieci) ❌");
         }
-      }
-
-      // === GŁÓWNE ŁADOWANIE SPRAWY ===
-      async function loadCaseDetails() {
-        const caseId = getCaseIdFromUrl();
-
-        if (!caseId) {
-          console.error("Brak parametru id w URL (case.html?id=...)");
-          alert("Brak ID sprawy w adresie URL");
-          return;
-        }
-
-        try {
-          console.log("Pobieram dane sprawy", caseId);
-          const data = await fetchCaseDetails(caseId);
-          console.log("Dane sprawy z API:", data);
-
-          fillCaseHeader(data);
-          fillSidebar(data);
-          fillClientSection(data);
-          fillCreditSection(data);
-          fillSkdSection(data);
-          fillNotesSection(data);
-          await loadCaseFiles(caseId);
-          initCaseDocuments(caseId);
-
-          attachSaveHandlers(caseId);
-          attachFieldChangeMicroFX();
-          attachIbanFormatter();
-          attachIbanValidator();
-        } catch (e) {
-          console.error("Błąd ładowania szczegółów sprawy:", e);
-
-          // Tymczasowo: bez alertu, bez przekierowania,
-          // żeby zobaczyć dokładny błąd w konsoli
-          // alert("Sprawa nie istnieje lub nie masz do niej dostępu.");
-          // window.location.href = "dashboard.html";
-        }
-      }
-
-      // === Pobieranie dokumentów sprawy ===
-      async function loadCaseFiles(caseId) {
-        try {
-          const res = await fetch(`/api/cases/${caseId}/files`);
-          if (!res.ok) {
-            console.error("Błąd pobierania dokumentów:", res.status);
-            return renderCaseFiles([]);
-          }
-
-          const data = await res.json();
-          console.log("LOAD_CASE_FILES RESULT =", data);
-
-          const files = Array.isArray(data) ? data : data.files || [];
-          renderCaseFiles(files);
-        } catch (err) {
-          console.error("Błąd loadCaseFiles:", err);
-          renderCaseFiles([]);
-        }
-
-        console.log("LOAD_CASE_FILES → caseId =", caseId);
-        console.log("FETCHING:", `/api/cases/${caseId}/files`);
       }
 
       // === Renderowanie listy dokumentów ===
@@ -1527,6 +1275,29 @@
           wrapper.appendChild(row);
         });
         console.log("RENDER FILES →", files);
+      }
+
+      // === Pobieranie dokumentów sprawy ===
+      async function loadCaseFiles(caseId) {
+        try {
+          const res = await fetch(`/api/cases/${caseId}/files`);
+          if (!res.ok) {
+            console.error("Błąd pobierania dokumentów:", res.status);
+            return renderCaseFiles([]);
+          }
+
+          const data = await res.json();
+          console.log("LOAD_CASE_FILES RESULT =", data);
+
+          const files = Array.isArray(data) ? data : data.files || [];
+          renderCaseFiles(files);
+        } catch (err) {
+          console.error("Błąd loadCaseFiles:", err);
+          renderCaseFiles([]);
+        }
+
+        console.log("LOAD_CASE_FILES → caseId =", caseId);
+        console.log("FETCHING:", `/api/cases/${caseId}/files`);
       }
 
       // === DRAG & DROP DOKUMENTÓW (case.html) ===
@@ -1628,112 +1399,181 @@
         }
       }
 
-      // Start
+      function attachSaveHandlers(caseId) {
+        // === KLIENT – dane podstawowe ===
+        const btnClient = $("btnClientSave");
+        btnClient?.addEventListener("click", async () => {
+          const ibanRaw = $("contractIban").value.trim();
+          const payload = {
+            client: $("clientName").value.trim(),
+            pesel: $("clientPesel").value.trim(),
+            phone: $("clientPhone").value.trim(),
+            email: $("clientEmail").value.trim(),
+            address: `${$("clientPostcode").value.trim()} ${$(
+              "clientCity"
+            ).value.trim()}, ${$("clientStreet").value.trim()}`,
+            iban: ibanRaw.replace(/\s+/g, "") || null,
+          };
+
+          try {
+            await saveSection(caseId, "client", payload);
+            handleSectionSaved(btnClient, "Dane klienta zapisane");
+          } catch (e) {
+            console.error(e);
+            showSaveToast("Błąd zapisu danych klienta ❌");
+          }
+        });
+
+        // === KLIENT – notatki: na razie MOCK (bez backendu) ===
+        $("btnClientNotesSave")?.addEventListener("click", () => {
+          showSaveToast("Uwagi o kliencie zapisane (lokalnie) ✅");
+        });
+
+        // === KREDYT ===
+        const btnCredit = $("btnCreditSave");
+        btnCredit?.addEventListener("click", async () => {
+          const payload = {
+            loan_amount: $("creditAmount").value
+              ? Number($("creditAmount").value)
+              : undefined,
+            contract_date: $("creditStartDate").value || undefined,
+            bank: $("creditBank").value.trim() || undefined,
+          };
+
+          try {
+            await saveSection(caseId, "credit", payload);
+            handleSectionSaved(btnCredit, "Dane kredytu zapisane");
+          } catch (e) {
+            console.error(e);
+            showSaveToast("Błąd zapisu danych kredytu ❌");
+          }
+        });
+
+        // === SKD – dane podstawowe (na razie front-only) ===
+        $("btnSkdSave")?.addEventListener("click", () => {
+          showSaveToast("Dane SKD zapisane (lokalnie) ✅");
+        });
+
+        // === SKD – oferta ===
+        $("btnSkdOfferSave")?.addEventListener("click", async () => {
+          const payload = {
+            skdOfferText: $("skdOfferText").value.trim(),
+          };
+          try {
+            await saveSection(caseId, "skd-offer", payload);
+            showSaveToast("Oferta SKD zapisana ✅");
+          } catch (e) {
+            console.error(e);
+            showSaveToast("Błąd zapisu oferty SKD ❌");
+          }
+        });
+
+        // === NOTATKI SPRAWY ===
+        const btnCaseNotes = $("btnCaseNotesSave");
+        btnCaseNotes?.addEventListener("click", async () => {
+          const payload = {
+            notes: $("caseNotes").value.trim() || null,
+          };
+
+          try {
+            await saveSection(caseId, "notes", payload);
+            handleSectionSaved(btnCaseNotes, "Notatki zapisane");
+          } catch (e) {
+            console.error(e);
+            showSaveToast("Błąd zapisu notatek ❌");
+          }
+        });
+
+        // === GLOBALNY "ZAPISZ ZMIANY" ===
+        $("btnSaveAll")?.addEventListener("click", () => {
+          alert(
+            "Docelowo tu zrobimy zbiorczy zapis wszystkich sekcji. Na razie używaj przycisków w sekcjach. 🙂"
+          );
+        });
+
+        // === POWRÓT ===
+        $("btnBack")?.addEventListener("click", () => {
+          window.history.back();
+        });
+
+        // === USUŃ SPRAWĘ ===
+        $("deleteCaseBtn")?.addEventListener("click", async () => {
+          console.log("[case] delete clicked, caseId =", caseId);
+
+          const numericId = Number(caseId);
+          if (!numericId) {
+            alert("Brak ID sprawy – nie mogę usunąć.");
+            return;
+          }
+
+          if (!confirm("Czy na pewno chcesz usunąć tę sprawę?")) return;
+          if (!confirm("Ta operacja jest nieodwracalna. Usunąć?")) return;
+
+          const phrase = prompt("Aby potwierdzić, wpisz słowo: USUŃ");
+          if (!phrase || phrase.trim().toUpperCase() !== "USUŃ") {
+            alert("Nie potwierdziłeś usunięcia.");
+            return;
+          }
+
+          try {
+            const res = await fetch(`/api/cases/${numericId}`, {
+              method: "DELETE",
+              headers: { "Content-Type": "application/json" },
+            });
+
+            if (!res.ok) {
+              console.error("Błąd DELETE:", res.status);
+              alert("Błąd podczas usuwania sprawy.");
+              return;
+            }
+
+            alert("Sprawa została trwale usunięta.");
+            window.location.href = "/dashboard.html";
+          } catch (err) {
+            console.error("Błąd DELETE:", err);
+            alert("Nie udało się usunąć sprawy.");
+          }
+        });
+      }
+
+      // === GŁÓWNE ŁADOWANIE SPRAWY ===
+      async function loadCaseDetails() {
+        const caseId = getCaseIdFromUrl();
+
+        if (!caseId) {
+          console.error("Brak parametru id w URL (case.html?id=...)");
+          alert("Brak ID sprawy w adresie URL");
+          return;
+        }
+
+        try {
+          console.log("Pobieram dane sprawy", caseId);
+          const data = await fetchCaseDetails(caseId);
+          console.log("Dane sprawy z API:", data);
+
+          fillCaseHeader(data);
+          fillSidebar(data);
+          fillClientSection(data);
+          fillCreditSection(data);
+          fillSkdSection(data);
+          fillNotesSection(data);
+          await loadCaseFiles(caseId);
+          initCaseDocuments(caseId);
+
+          attachSaveHandlers(caseId);
+          attachFieldChangeMicroFX();
+          attachIbanFormatter();
+          attachIbanValidator();
+        } catch (e) {
+          console.error("Błąd ładowania szczegółów sprawy:", e);
+          // na razie bez redirectu, żeby widzieć błąd w konsoli
+        }
+      }
+
+      // START
       loadCaseDetails();
     </script>
 
-    <script>
-      function getCaseIdFromUrl() {
-        const params = new URLSearchParams(window.location.search);
-        const id = params.get("id");
-        return id ? Number(id) : null;
-      }
-      document.addEventListener("DOMContentLoaded", () => {
-        const backBtn = document.getElementById("btnBack");
-        const saveBtn = document.getElementById("btnSaveAll");
-        const deleteBtn = document.getElementById("deleteCaseBtn");
-
-        console.log("[caseWire] init", { backBtn, saveBtn, deleteBtn });
-
-        // ===== POWRÓT =====
-        if (backBtn) {
-          backBtn.addEventListener("click", () => {
-            console.log("[caseWire] back clicked");
-            window.location.href = "/dashboard.html";
-          });
-        }
-
-        // ===== ZAPISZ ZMIANY =====
-        if (saveBtn) {
-          saveBtn.addEventListener("click", async () => {
-            console.log("[caseWire] save clicked");
-            alert(
-              "Tu podpinamy zapis danych case (PATCH /api/cases/:id) — zrobimy to w następnym kroku."
-            );
-          });
-        }
-
-        // ===== USUŃ SPRAWĘ =====
-        if (deleteBtn) {
-          deleteBtn.addEventListener("click", async () => {
-            console.log("[caseWire] delete clicked");
-
-            // 1) ID z URL (?id=40)
-            let caseId = getCaseIdFromUrl();
-            console.log("[caseWire] ID from URL =", caseId);
-
-            // 2) hidden input (fallback)
-            if (!caseId) {
-              const hiddenId = document.getElementById("wpsCaseId");
-              if (hiddenId && hiddenId.value) {
-                const parsed = Number(hiddenId.value);
-                if (Number.isFinite(parsed)) caseId = parsed;
-              }
-            }
-
-            // 3) window.currentCaseId (fallback)
-            if (!caseId && window.currentCaseId) {
-              const parsed = Number(window.currentCaseId);
-              if (Number.isFinite(parsed)) caseId = parsed;
-            }
-
-            // 4) ID z pathname (fallback)
-            if (!caseId) {
-              const matches = window.location.pathname.match(/\d+/g);
-              if (matches && matches.length > 0) {
-                const last = Number(matches[matches.length - 1]);
-                if (Number.isFinite(last)) caseId = last;
-              }
-            }
-
-            console.log("[caseWire] FINAL caseId =", caseId);
-
-            if (!caseId) {
-              alert("Brak ID sprawy – nie mogę usunąć.");
-              return;
-            }
-
-            if (!confirm("Czy na pewno chcesz usunąć tę sprawę?")) return;
-            if (!confirm("Ta operacja jest nieodwracalna. Usunąć?")) return;
-
-            const phrase = prompt("Aby potwierdzić, wpisz słowo: USUŃ");
-            if (!phrase || phrase.trim().toUpperCase() !== "USUŃ") {
-              alert("Nie potwierdziłeś usunięcia.");
-              return;
-            }
-
-            try {
-              const res = await fetch(`/api/cases/${caseId}`, {
-                method: "DELETE",
-                headers: { "Content-Type": "application/json" },
-              });
-
-              if (!res.ok) {
-                console.error("Błąd DELETE:", res.status);
-                alert("Błąd podczas usuwania sprawy.");
-                return;
-              }
-
-              alert("Sprawa została trwale usunięta.");
-              window.location.href = "/dashboard.html";
-            } catch (err) {
-              console.error("Błąd DELETE:", err);
-              alert("Nie udało się usunąć sprawy.");
-            }
-          });
-        }
-      });
-    </script>
     <script>
       (function () {
         // Jeśli user ma prefers-reduced-motion, nie bawimy się w obserwacje

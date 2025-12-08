@@ -489,6 +489,28 @@ app.post("/api/cases/update-status", requireAuth, async (req, res) => {
   }
 });
 
+// ============================================
+//  GET /api/cases/:id/logs – historia sprawy
+// ============================================
+app.get("/api/cases/:id/logs", requireAuth, async (req, res) => {
+  try {
+    const caseId = Number(req.params.id);
+    if (!caseId || Number.isNaN(caseId)) {
+      return res.status(400).json({ error: "Invalid case id" });
+    }
+
+    const logs = await fetchCaseLogs(caseId);
+
+    return res.json({
+      ok: true,
+      logs,
+    });
+  } catch (err) {
+    console.error("❌ GET /api/cases/:id/logs error:", err);
+    return res.status(500).json({ error: "Server error" });
+  }
+});
+
   // === ULTRA-SAFE LISTA SPRAW (GET /api/cases) ===
   app.get("/api/cases",
     softApiLimit,       // lekkie ograniczenie dla list
