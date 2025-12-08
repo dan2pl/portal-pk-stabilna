@@ -608,6 +608,22 @@
       // === KONFIG ===
       const API_BASE = "/api";
 
+      // === GLOBALNE ETYKIETY STATUSÓW (jedyna prawda) ===
+      const CASE_STATUS_LABELS = {
+        NEW: "Nowa",
+        ANALYSIS: "W analizie",
+        ANALYSIS_DOCS_NEEDED: "Braki dokumentów do analizy",
+        ANALYSIS_POSITIVE: "Analiza pozytywna",
+        ANALYSIS_NEGATIVE: "Analiza negatywna",
+        CONTRACT_PREP: "Przygotowanie umowy",
+        CONTRACT_DOCS_NEEDED: "Oczekiwanie na dokumenty",
+        CONTRACT_AT_AGENT: "Umowa u agenta",
+        CONTRACT_SIGNED: "Umowa zawarta",
+        IN_PROGRESS: "W toku",
+        CLOSED_SUCCESS: "Zakończona – Sukces",
+        CLOSED_FAIL: "Zakończona – Przegrana",
+        CLIENT_RESIGNED: "Rezygnacja klienta",
+      };
       // === LOGIKA TABS ===
       const tabButtons = document.querySelectorAll(".case-tab");
       const tabPanels = document.querySelectorAll(".tab-panel");

@@ -7,6 +7,7 @@ import { requireAdmin } from "../middleware/requireAuth";
 // korzystamy z tych samych limiterów co w cases.ts
 import { softApiLimit, mediumApiLimit } from "./cases";
 import { denyUnknownFields } from "./denyUnknownFields";
+import { addCaseLog, type CaseLogAction } from "../utils/caseLogs";
 
 export default function adminRoutes(app: Express) {
   console.log("➡️ routes: admin loaded");
@@ -313,31 +314,54 @@ export default function adminRoutes(app: Express) {
         const clientName: string = lead.full_name || "Klient z leada";
 
         const caseResult = await pool.query(
-          `
-          INSERT INTO cases (client, status)
-          VALUES ($1, $2)
-          RETURNING id
-        `,
-          [clientName, "nowa"]
-        );
+  `
+  INSERT INTO cases (client, status)
+  VALUES ($1, $2)
+  RETURNING id
+`,
+  [clientName, "nowa"]
+);
 
-        const newCaseId = caseResult.rows[0].id;
+const newCaseId = caseResult.rows[0].id;
 
-        // 3. Oznacz leada jako "processed"
-        await pool.query(
-          `
-          UPDATE leads
-          SET status = 'processed'
-          WHERE id = $1
-        `,
-          [leadId]
-        );
+// ------------------------------------
+// LOG: sprawa utworzona z leada
+// ------------------------------------
+try {
+  const anyReq = req as any;
+  const user = anyReq.user || anyReq.currentUser || null;
+  const userId = user?.id ?? null;
 
-        return res.json({
-          ok: true,
-          case_id: newCaseId,
-          lead_id: leadId,
-        });
+  await addCaseLog({
+  caseId: newCaseId,
+  userId,
+  action: "LEAD_CONVERTED" as CaseLogAction,
+  message: `Sprawa utworzona z leada ID ${leadId}`,
+  meta: {
+    leadId,
+    source: "lead_conversion",
+    createdBy: userId,
+  },
+});
+} catch (e) {
+  console.warn("addCaseLog CASE_CREATED_FROM_LEAD error:", e);
+}
+
+// 3. Oznacz leada jako "processed"
+await pool.query(
+  `
+  UPDATE leads
+  SET status = 'processed'
+  WHERE id = $1
+`,
+  [leadId]
+);
+
+return res.json({
+  ok: true,
+  case_id: newCaseId,
+  lead_id: leadId,
+});
       } catch (err) {
         console.error("POST /api/admin/leads/:id/convert-to-case ERROR:", err);
         return res
