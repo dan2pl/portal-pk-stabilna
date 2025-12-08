@@ -146,130 +146,299 @@
         background: #f0f0f0;
         border: none;
       }
+      /* Hover na tabeli spraw w panelu admina */
+#adminCasesTable tbody tr {
+  transition: background-color 0.15s ease;
+  cursor: pointer;
+}
+
+#adminCasesTable tbody tr:hover {
+  background-color: #f8f9ff;
+}
+      
     </style>
   </head>
 
-  <body>
-    <div class="container">
-      <div class="admin-header">Panel administratora</div>
+ <body>
+  <div class="container">
+    <div class="admin-header">Panel administratora</div>
 
-      <div class="admin-tabs">
-        <div class="admin-tab active" data-tab="users">Użytkownicy</div>
-        <div class="admin-tab" data-tab="cases">Sprawy</div>
-        <div class="admin-tab" data-tab="stats">Statystyki</div>
-      </div>
+    <!-- TABS -->
+    <div class="admin-tabs">
+      <div class="admin-tab active" data-tab="users">Użytkownicy</div>
+      <div class="admin-tab" data-tab="cases">Sprawy</div>
+      <div class="admin-tab" data-tab="stats">Statystyki</div>
+      <div class="admin-tab" data-tab="leads">Leady</div>
+    </div>
 
-      <!-- PANEL: Użytkownicy -->
-      <div class="admin-panel active" data-panel="users">
-        <div class="btn-add-user" id="btnAddUser">+ Dodaj użytkownika</div>
+    <!-- PANEL: Użytkownicy -->
+    <div class="admin-panel active" data-panel="users">
+      <div class="btn-add-user" id="btnAddUser">+ Dodaj użytkownika</div>
 
-        <table class="admin-table" id="usersTable">
-          <thead>
-            <tr>
-              <th>ID</th>
-              <th>Email</th>
-              <th>Imię</th>
-              <th>Rola</th>
-              <th>Aktywny</th>
-              <th>Ostatnie logowanie</th>
-            </tr>
-          </thead>
-          <tbody></tbody>
-        </table>
-      </div>
+      <table class="admin-table" id="usersTable">
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Email</th>
+            <th>Imię</th>
+            <th>Rola</th>
+            <th>Aktywny</th>
+            <th>Ostatnie logowanie</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
 
-      <!-- PANEL: Sprawy -->
-      <div class="admin-panel" data-panel="cases">
-        <div class="card">
-          <header class="card-h">
-            <div class="card-title">Lista wszystkich spraw</div>
-          </header>
-          <div class="card-b">
-            <div id="adminCasesEmpty" class="table-empty">
-              Brak spraw w systemie
-            </div>
-            <div class="table-wrapper">
-              <table class="table" id="adminCasesTable">
-                <thead>
-                  <tr>
-                    <th>#</th>
-                    <th>Klient</th>
-                    <th>Bank</th>
-                    <th>Kwota</th>
-                    <th>Status</th>
-                    <th>Owner</th>
-                    <th>Utworzono</th>
-                  </tr>
-                </thead>
-                <tbody></tbody>
-              </table>
-            </div>
+    <!-- PANEL: Sprawy -->
+    <div class="admin-panel" data-panel="cases">
+      <div class="card">
+        <header class="card-h">
+          <div class="card-title">Lista wszystkich spraw</div>
+        </header>
+
+        <div class="card-b">
+          <!-- FILTRY NAD TABELĄ -->
+          <div class="admin-filters">
+            <input
+              type="text"
+              id="casesSearchInput"
+              placeholder="Szukaj po kliencie, banku, ID..."
+            />
+
+            <select id="casesStatusFilter">
+              <option value="">Status: wszystkie</option>
+              <option value="nowa">Nowa</option>
+              <option value="w_trakcie">W trakcie</option>
+              <option value="zakonczona">Zakończona</option>
+              <option value="archiwalna">Archiwalna</option>
+            </select>
+
+            <select id="casesOwnerFilter">
+              <option value="">Wszyscy ownerzy</option>
+              <!-- opcje wstrzyknie JS -->
+            </select>
           </div>
+
+          <div id="adminCasesEmpty" class="table-empty">
+            Brak spraw w systemie
+          </div>
+
+          <div class="table-wrapper">
+            <table class="table" id="adminCasesTable">
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>Klient</th>
+                  <th>Bank</th>
+                  <th>Kwota</th>
+                  <th>Status</th>
+                  <th>Owner</th>
+                  <th>Utworzono</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+
+          <div id="adminCasesPagination" class="admin-pagination"></div>
         </div>
       </div>
+    </div>
 
-      <!-- PANEL: STATYSTYKI -->
-<div class="admin-panel" data-panel="stats">
-  <h2>Statystyki</h2>
+    <!-- PANEL: STATYSTYKI -->
+    <div class="admin-panel" data-panel="stats">
+      <h2>Statystyki</h2>
 
-  <!-- Główne KPI -->
-  <div id="adminStatsKpi" class="stats-grid">
-    <!-- JS wstawi kafelki -->
-  </div>
-
-  <h3>Najpopularniejsze banki</h3>
-  <div id="adminStatsBanks" class="stats-box">
-    <!-- lista banków -->
-  </div>
-
-  <h3>Najaktywniejsi agenci</h3>
-  <div id="adminStatsAgents" class="stats-box">
-    <!-- lista agentów -->
-  </div>
-
-  <h3>Sprawy w ostatnich 7 dniach</h3>
-  <div id="adminStatsLast7" class="stats-box">
-    <!-- prosty pseudo-wykres słupkowy -->
-  </div>
-</div>
-    <!-- === MODAL: Dodawanie użytkownika === -->
-<div id="addUserModal" class="modal">
-  <div class="modal-content">
-    <h3>Dodaj użytkownika</h3>
-
-    <form id="addUserForm" onsubmit="return false;">
-      <label>Email:</label>
-      <input type="email" id="newUserEmail" autocomplete="username" />
-
-      <label>Imię:</label>
-      <input 
-  type="text" 
-  id="newUserName" 
-  autocomplete="username" 
-/>
-
-      <label>Hasło:</label>
-      <input type="password" id="newUserPassword" autocomplete="new-password" />
-
-      <label>Rola:</label>
-      <select id="newUserRole">
-        <option value="agent">Agent</option>
-        <option value="admin">Admin</option>
-      </select>
-
-      <div class="modal-actions">
-        <button type="button" class="btn btn-outline" id="cancelNewUser">
-          Anuluj
-        </button>
-        <button type="button" class="btn btn-primary" id="saveNewUser">
-          Zapisz
-        </button>
+      <!-- Główne KPI -->
+      <div id="adminStatsKpi" class="stats-grid">
+        <!-- JS wstawi kafelki -->
       </div>
-    </form>
+
+      <h3>Najpopularniejsze banki</h3>
+      <div id="adminStatsBanks" class="stats-box"></div>
+
+      <h3>Najaktywniejsi agenci</h3>
+      <div id="adminStatsAgents" class="stats-box"></div>
+
+      <h3>Sprawy w ostatnich 7 dniach</h3>
+      <div id="adminStatsLast7" class="stats-box"></div>
+    </div>
+
+    <!-- PANEL: LEADY -->
+    <div class="admin-panel" data-panel="leads">
+      <h2>Leady z formularzy</h2>
+
+      <div id="leadsEmpty" class="table-empty" style="display:none;">
+        Brak leadów
+      </div>
+
+      <table class="admin-table" id="leadsTable">
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Typ</th>
+            <th>Źródło</th>
+            <th>Imię i nazwisko</th>
+            <th>Email</th>
+            <th>Telefon</th>
+            <th>Status</th>
+            <th>Data</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+
+    <!-- MODAL: szczegóły leada + status + utworzenie sprawy -->
+    <div id="leadModal" class="modal">
+      <div class="modal-content">
+        <h3>Szczegóły leada</h3>
+
+        <div id="leadDetailsBox">
+          <!-- JS wstawi szczegóły -->
+        </div>
+
+        <label>Status leada:</label>
+        <select id="leadStatusSelect">
+          <option value="new">Nowy</option>
+          <option value="in_progress">W analizie</option>
+          <option value="qualified">Kwalifikuje się</option>
+          <option value="rejected">Nie kwalifikuje się</option>
+          <option value="processed">Przerobiony</option>
+        </select>
+
+        <div class="modal-buttons">
+          <button type="button" id="leadConvertBtn">
+            Utwórz sprawę z leada
+          </button>
+          <button type="button" id="leadStatusSaveBtn">
+            Zapisz status
+          </button>
+          <button type="button" id="leadModalCloseBtn">
+            Zamknij
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- MODAL: Dodawanie użytkownika -->
+    <div id="addUserModal" class="modal">
+      <div class="modal-content">
+        <h3>Dodaj użytkownika</h3>
+
+        <form id="addUserForm" onsubmit="return false;">
+          <label>Email:</label>
+          <input type="email" id="newUserEmail" autocomplete="username" />
+
+          <label>Imię:</label>
+          <input
+            type="text"
+            id="newUserName"
+            autocomplete="username"
+          />
+
+          <label>Hasło:</label>
+          <input
+            type="password"
+            id="newUserPassword"
+            autocomplete="new-password"
+          />
+
+          <label>Rola:</label>
+          <select id="newUserRole">
+            <option value="agent">Agent</option>
+            <option value="admin">Admin</option>
+          </select>
+
+          <div class="modal-actions">
+            <button type="button" class="btn btn-outline" id="cancelNewUser">
+              Anuluj
+            </button>
+            <button type="button" class="btn btn-primary" id="saveNewUser">
+              Zapisz
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+<!-- MODAL: Szczegóły leada -->
+<div id="leadDetailsModal" class="modal">
+  <div class="modal-content" style="max-width: 520px;">
+    <h3 id="leadDetailsTitle">Szczegóły leada</h3>
+
+    <p style="font-size: 13px; color:#555;">
+      Status: <strong id="leadStatusLabel">—</strong><br>
+      ID: <span id="leadDetailsId">—</span><br>
+      Data: <span id="leadDetailsCreated">—</span>
+    </p>
+
+    <div style="font-size: 14px; margin-top: 10px;">
+      <p><strong>Typ:</strong> <span id="leadDetailsType">—</span></p>
+      <p><strong>Źródło:</strong> <span id="leadDetailsSource">—</span></p>
+      <p><strong>Imię i nazwisko:</strong> <span id="leadDetailsName">—</span></p>
+      <p><strong>Telefon:</strong> <span id="leadDetailsPhone">—</span></p>
+      <p><strong>E-mail:</strong> <span id="leadDetailsEmail">—</span></p>
+    </div>
+
+    <div style="margin-top: 10px;">
+      <p><strong>Dodatkowe dane (meta):</strong></p>
+      <pre id="leadDetailsMeta"
+           style="max-height: 220px; overflow:auto; background:#f7f7f7; padding:8px; border-radius:8px; font-size:12px;"></pre>
+    </div>
+
+    <div class="modal-buttons" style="margin-top: 18px; text-align: right;">
+      <button type="button" id="leadDetailsClose">Zamknij</button>
+      <button type="button"
+              id="leadMarkProcessed"
+              style="background:#0c7a22; color:#fff; border:none; padding:8px 12px; border-radius:8px; margin-left:10px;">
+        Oznacz jako przetworzony
+      </button>
+    </div>
+  </div>
+</div>
+...
+<!-- tu kończą się panele admina -->
+
+<!-- === MODAL: Lead === -->
+<div id="leadModal" class="modal">
+  <div class="modal-content" style="width: 500px;">
+    <h3>Szczegóły leada</h3>
+
+    <div id="leadDetailsBox" style="margin-bottom: 20px;">
+      <!-- JS wstawi dane leada -->
+    </div>
+
+    <label>Status leada:</label>
+    <select id="leadStatusSelect">
+      <option value="new">Nowy</option>
+      <option value="in_progress">W analizie</option>
+      <option value="qualified">Kwalifikuje się</option>
+      <option value="rejected">Nie kwalifikuje się</option>
+      <option value="processed">Przerobiony</option>
+    </select>
+
+    <button
+  type="button"
+  id="leadConvertBtn"
+  class="btn btn-primary"
+  style="margin-top: 10px; width: 100%;"
+>
+  ➕ Utwórz sprawę z tego leada
+</button>
+    <div class="modal-buttons" style="margin-top: 20px;">
+      <button id="leadStatusSaveBtn" style="background:#d80032;color:white;border:none;padding:8px 14px;border-radius:8px;">
+        Zapisz status
+      </button>
+      <button id="leadModalCloseBtn" style="background:#f0f0f0;border:none;padding:8px 14px;border-radius:8px;">
+        Zamknij
+      </button>
+    </div>
   </div>
 </div>
 
-<!-- SKRYPT NA SAMYM KOŃCU -->
 <script src="admin.js"></script>
-  </body>
+</body>
 </html>

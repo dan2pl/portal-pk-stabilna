@@ -137,7 +137,7 @@ async function loadCurrentUser() {
       credentials: "include",
     });
 
-    // ⛔️ TYLKO 401 = niezalogowany → login
+    // ⛔️ Niezalogowany → login
     if (res.status === 401) {
       console.warn("❌ /api/me zwrócił 401 — przekierowanie na login");
       window.location.href = "login.html";
@@ -156,6 +156,35 @@ async function loadCurrentUser() {
     }
 
     console.log("🔐 Użytkownik zalogowany:", data.user);
+
+    // ==========================================
+    //  WSTAWIENIE DANYCH USERA DO TOPBARA
+    // ==========================================
+    const userEl = document.getElementById("currentUserLabel");
+
+    if (userEl) {
+      const roleLabel =
+        data.user.role === "admin"
+          ? "Administrator"
+          : data.user.role === "agent"
+            ? "Agent"
+            : data.user.role;
+
+      userEl.textContent = `${data.user.name} (${roleLabel})`;
+
+      // ==========================================
+      //   Jeśli ADMIN → klik przenosi do admin.html
+      // ==========================================
+      if (data.user.role === "admin") {
+        userEl.style.cursor = "pointer";
+        userEl.title = "Przejdź do panelu administratora";
+
+        userEl.addEventListener("click", () => {
+          window.location.href = "admin.html";
+        });
+      }
+    }
+
     return data.user;
   } catch (err) {
     console.error("❌ Wyjątek w loadCurrentUser():", err);
