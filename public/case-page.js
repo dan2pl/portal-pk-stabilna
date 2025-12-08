@@ -593,36 +593,38 @@ function fillNotesSection(data) {
     data.notes ?? data.caseNotes ?? data.case_notes ?? "";
 }
 // === HISTORIA ZMIAN – RENDEROWANIE ===
+// === HISTORIA ZMIAN (oś czasu) ===
 function renderCaseHistory(logs) {
   const list = document.getElementById("caseHistoryList");
-  if (!list) return;
+  if (!list) {
+    console.warn("⚠️ Brak #caseHistoryList w DOM");
+    return;
+  }
 
   list.innerHTML = "";
 
   if (!logs || !logs.length) {
     list.innerHTML =
-      '<div class="case-history-empty">Brak zarejestrowanych zmian dla tej sprawy.</div>';
+      '<div class="case-history-empty">Brak zarejestrowanych zdarzeń dla tej sprawy.</div>';
     return;
   }
 
-  logs.forEach((log, idx) => {
+  logs.forEach((log, index) => {
     const item = document.createElement("div");
-    item.className = "case-history-item case-anim case-anim-delay-" + ((idx % 3) + 1);
+    item.className = `case-history-item case-anim case-anim-delay-${(index % 4) +
+      1}`;
 
-    const created =
-      log.created_at
-        ? new Date(log.created_at).toLocaleString("pl-PL")
-        : "";
+    const createdAt = log.created_at
+      ? new Date(log.created_at).toLocaleString("pl-PL")
+      : "—";
 
     const who =
-      log.user_name || log.user_email
-        ? (log.user_name || "Użytkownik") +
-          (log.user_email ? ` (${log.user_email})` : "")
-        : "system";
+      log.user_name ||
+      log.user_email ||
+      (log.user_id ? `Użytkownik #${log.user_id}` : "system");
 
-    // Ładniejszy tytuł na podstawie action_type
     let title = log.message || "";
-    if (!title && log.action_type) {
+    if (!title) {
       switch (log.action_type) {
         case "CASE_CREATED":
           title = "Sprawa utworzona";
@@ -633,17 +635,17 @@ function renderCaseHistory(logs) {
         case "LEAD_CONVERTED":
           title = "Sprawa utworzona z leada";
           break;
-        case "FILE_ADDED":
-          title = "Dodano dokument";
-          break;
-        case "FILE_REMOVED":
-          title = "Usunięto dokument";
-          break;
         case "NOTE_ADDED":
           title = "Dodano notatkę";
           break;
+        case "FILE_ADDED":
+          title = "Dodano plik";
+          break;
+        case "FILE_REMOVED":
+          title = "Usunięto plik";
+          break;
         default:
-          title = log.action_type;
+          title = log.action_type || "Zdarzenie";
       }
     }
 
@@ -652,7 +654,7 @@ function renderCaseHistory(logs) {
       <div class="case-history-content">
         <div class="case-history-title">${title}</div>
         <div class="case-history-meta">
-          ${created ? created + " · " : ""}${who}
+          ${createdAt} · ${who}
         </div>
       </div>
     `;
@@ -663,41 +665,25 @@ function renderCaseHistory(logs) {
 
 // === HISTORIA ZMIAN – API ===
 async function loadCaseHistory(caseId) {
-  const list = document.getElementById("caseHistoryList");
-
   try {
     const res = await fetch(
       `${API_BASE}/cases/${encodeURIComponent(caseId)}/logs`
     );
 
-    if (res.status === 404) {
-      // brak endpointu lub brak logów – nie wywalaj użytkownika, tylko pokaż pustą listę
-      console.warn("Brak endpointu /api/cases/:id/logs lub brak logów");
-      if (list) {
-        list.innerHTML =
-          '<div class="case-history-empty">Historia zmian nie jest jeszcze dostępna.</div>';
-      }
-      return;
-    }
-
     if (!res.ok) {
-      console.error("Błąd pobierania historii:", res.status);
-      if (list) {
-        list.innerHTML =
-          '<div class="case-history-empty">Nie udało się pobrać historii zmian.</div>';
-      }
+      console.error("Błąd pobierania historii sprawy:", res.status);
+      renderCaseHistory([]);
       return;
     }
 
     const data = await res.json();
     const logs = Array.isArray(data) ? data : data.logs || [];
+
+    console.log("📜 LOGI SPRAWY:", logs);
     renderCaseHistory(logs);
   } catch (err) {
-    console.error("Błąd loadCaseHistory:", err);
-    if (list) {
-      list.innerHTML =
-        '<div class="case-history-empty">Błąd połączenia podczas pobierania historii.</div>';
-    }
+    console.error("Wyjątek przy loadCaseHistory:", err);
+    renderCaseHistory([]);
   }
 }
 // === FETCH DANYCH ===
