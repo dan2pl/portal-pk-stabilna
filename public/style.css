@@ -2471,3 +2471,74 @@ body {
   opacity: 0.4;
   cursor: default;
 }
+
+/* ===========================
+   NOTYFIKACJE – dropdown
+   =========================== */
+
+#notificationsPanel {
+  position: fixed;
+  /* zawsze przy górnej belce */
+  right: 32px;
+  top: 64px;
+
+  background: rgba(15, 23, 42, 0.96);
+  /* ciemne tło, lekko półprzezroczyste */
+  color: #f9fafb;
+  border-radius: 12px;
+  padding: 8px 0;
+  min-width: 320px;
+  max-width: 360px;
+  max-height: 420px;
+  overflow-y: auto;
+
+  box-shadow: 0 18px 45px rgba(15, 23, 42, 0.55);
+  border: 1px solid rgba(148, 163, 184, 0.5);
+  z-index: 1200;
+
+  /* jakby domyślnie był blokowy */
+  display: none;
+}
+
+/* pojedyncza notyfikacja */
+#notificationsPanel .notif-item {
+  padding: 10px 14px;
+  font-size: 13px;
+  line-height: 1.35;
+  cursor: pointer;
+
+  background: transparent;
+  color: #f9fafb;
+  border-bottom: 1px solid rgba(55, 65, 81, 0.7);
+}
+
+#notificationsPanel .notif-item:last-child {
+  border-bottom: none;
+}
+
+/* nieprzeczytane – lekkie podświetlenie */
+#notificationsPanel .notif-item.unread {
+  background: rgba(30, 64, 175, 0.25);
+}
+
+/* czas notyfikacji */
+#notificationsPanel .notif-item-time {
+  margin-top: 2px;
+  font-size: 11px;
+  color: #9ca3af;
+}
+
+/* hover */
+#notificationsPanel .notif-item:hover {
+  background: rgba(31, 41, 55, 0.95);
+}
+
+/* opcjonalnie delikatny scroll */
+#notificationsPanel::-webkit-scrollbar {
+  width: 6px;
+}
+
+#notificationsPanel::-webkit-scrollbar-thumb {
+  background: rgba(75, 85, 99, 0.8);
+  border-radius: 999px;
+}

@@ -213,9 +213,9 @@ function handleSectionSaved(_btn, message) {
 function attachFieldChangeMicroFX() {
   const inputs = document.querySelectorAll(
     "#panelClient input, #panelClient select, #panelClient textarea," +
-      " #panelCredit input, #panelCredit select, #panelCredit textarea," +
-      " #panelSkd input, #panelSkd select, #panelSkd textarea," +
-      " #panelNotes textarea"
+    " #panelCredit input, #panelCredit select, #panelCredit textarea," +
+    " #panelSkd input, #panelSkd select, #panelSkd textarea," +
+    " #panelNotes textarea"
   );
 
   inputs.forEach((el) => {
@@ -593,13 +593,14 @@ function fillNotesSection(data) {
     data.notes ?? data.caseNotes ?? data.case_notes ?? "";
 }
 // === HISTORIA ZMIAN – RENDEROWANIE ===
-// === HISTORIA ZMIAN (oś czasu) ===
 function renderCaseHistory(logs) {
   const list = document.getElementById("caseHistoryList");
   if (!list) {
     console.warn("⚠️ Brak #caseHistoryList w DOM");
     return;
   }
+
+  console.log("[renderCaseHistory] logs =", logs);
 
   list.innerHTML = "";
 
@@ -611,53 +612,36 @@ function renderCaseHistory(logs) {
 
   logs.forEach((log, index) => {
     const item = document.createElement("div");
-    item.className = `case-history-item case-anim case-anim-delay-${(index % 4) +
-      1}`;
+    item.className = "case-history-item case-anim";
 
     const createdAt = log.created_at
       ? new Date(log.created_at).toLocaleString("pl-PL")
       : "—";
 
-    const who =
-      log.user_name ||
-      log.user_email ||
-      (log.user_id ? `Użytkownik #${log.user_id}` : "system");
+    const userLabel = log.user_name
+      ? `${log.user_name} (${log.user_email || "—"})`
+      : "system";
 
-    let title = log.message || "";
-    if (!title) {
-      switch (log.action_type) {
-        case "CASE_CREATED":
-          title = "Sprawa utworzona";
-          break;
-        case "CASE_STATUS_CHANGED":
-          title = "Zmiana statusu sprawy";
-          break;
-        case "LEAD_CONVERTED":
-          title = "Sprawa utworzona z leada";
-          break;
-        case "NOTE_ADDED":
-          title = "Dodano notatkę";
-          break;
-        case "FILE_ADDED":
-          title = "Dodano plik";
-          break;
-        case "FILE_REMOVED":
-          title = "Usunięto plik";
-          break;
-        default:
-          title = log.action_type || "Zdarzenie";
-      }
-    }
+    const title =
+      log.message ||
+      ({
+        CASE_CREATED: "Sprawa utworzona",
+        CASE_STATUS_CHANGED: "Zmiana statusu sprawy",
+        LEAD_CONVERTED: "Sprawa utworzona z leada",
+      }[log.action_type] || log.action_type || "Zdarzenie");
 
     item.innerHTML = `
       <div class="case-history-dot"></div>
       <div class="case-history-content">
         <div class="case-history-title">${title}</div>
         <div class="case-history-meta">
-          ${createdAt} · ${who}
+          ${createdAt} · ${userLabel}
         </div>
       </div>
     `;
+
+    // 🔥 kluczowa linijka – od razu pokazujemy element
+    item.classList.add("in-view");
 
     list.appendChild(item);
   });
@@ -665,25 +649,30 @@ function renderCaseHistory(logs) {
 
 // === HISTORIA ZMIAN – API ===
 async function loadCaseHistory(caseId) {
+  const list = document.getElementById("caseHistoryList");
+  if (!list) return;
+
   try {
     const res = await fetch(
       `${API_BASE}/cases/${encodeURIComponent(caseId)}/logs`
     );
 
     if (!res.ok) {
-      console.error("Błąd pobierania historii sprawy:", res.status);
-      renderCaseHistory([]);
+      console.error("Błąd pobierania historii:", res.status);
+      list.innerHTML =
+        '<div class="case-history-empty">Nie udało się pobrać historii zmian.</div>';
       return;
     }
 
     const data = await res.json();
-    const logs = Array.isArray(data) ? data : data.logs || [];
+    console.log("[loadCaseHistory] response =", data);
 
-    console.log("📜 LOGI SPRAWY:", logs);
+    const logs = Array.isArray(data) ? data : data.logs || [];
     renderCaseHistory(logs);
   } catch (err) {
-    console.error("Wyjątek przy loadCaseHistory:", err);
-    renderCaseHistory([]);
+    console.error("Błąd loadCaseHistory:", err);
+    list.innerHTML =
+      '<div class="case-history-empty">Błąd połączenia podczas pobierania historii.</div>';
   }
 }
 // === FETCH DANYCH ===
@@ -922,6 +911,51 @@ function initCaseDocuments(caseId) {
   }
 }
 
+function initCaseFilesUpload(caseId) {
+  const input = document.getElementById("caseFilesInput");
+  const btn = document.getElementById("caseFilesUploadBtn");
+  const empty = document.getElementById("caseFilesEmpty");
+
+  if (!input || !btn) {
+    console.warn("[FILES] Brak #caseFilesInput lub #caseFilesUploadBtn – pomijam init uploadu");
+    return;
+  }
+
+  btn.addEventListener("click", async (e) => {
+    e.preventDefault();
+
+    const files = Array.from(input.files || []);
+    if (!files.length) {
+      alert("Wybierz przynajmniej jeden plik.");
+      return;
+    }
+
+    const formData = new FormData();
+    files.forEach((f) => formData.append("files", f));
+
+    try {
+      console.log("[FILES] Upload plików dla sprawy", caseId, files);
+
+      await apiFetch(`/api/cases/${encodeURIComponent(caseId)}/files`, {
+        method: "POST",
+        body: formData,
+      });
+
+      input.value = "";
+      if (empty) empty.style.display = "none";
+
+      // PRZEŁADOWANIE LISTY W ZAKŁADCE DOKUMENTY
+      if (typeof loadCaseFiles === "function") {
+        await loadCaseFiles(caseId);
+      }
+
+      alert("Pliki zostały zapisane do sprawy.");
+    } catch (err) {
+      console.error("[FILES] Błąd uploadu:", err);
+      alert("Nie udało się zapisać plików. Sprawdź konsolę.");
+    }
+  });
+}
 function attachSaveHandlers(caseId) {
   // === KLIENT – dane podstawowe ===
   const btnClient = $("btnClientSave");
@@ -1080,8 +1114,16 @@ async function loadCaseDetails() {
     fillCreditSection(data);
     fillSkdSection(data);
     fillNotesSection(data);
+
+    // 🔹 dokumenty z API → lista
     await loadCaseFiles(caseId);
+
+    // 🔹 upload plików dla tej sprawy
+    initCaseFilesUpload(caseId);   // 👈 DODAJ TĘ LINIJKĘ
+
+    // jeśli initCaseDocuments robi inne rzeczy UI (np. podglądy / zakładki) – zostaw:
     initCaseDocuments(caseId);
+
     attachSaveHandlers(caseId);
     attachFieldChangeMicroFX();
     attachIbanFormatter();

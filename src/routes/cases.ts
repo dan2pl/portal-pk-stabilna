@@ -439,77 +439,77 @@ export default function casesRoutes(app: Express) {
     return Number.isFinite(num) ? num : null;
   }
 
-//  ZMIANA STATUSU SPRAWY
-app.post("/api/cases/update-status", requireAuth, async (req, res) => {
-  try {
-    const { caseId, status } = req.body;
-
-    // Walidacja caseId
-    const idNum = Number(caseId);
-    if (!idNum || Number.isNaN(idNum)) {
-      return res.status(400).json({ error: "Invalid caseId" });
-    }
-
-    // Walidacja statusu względem CaseStatus
-    if (!isValidCaseStatus(status)) {
-      return res.status(400).json({ error: "Invalid case status" });
-    }
-
-    // użytkownik (agent / admin)
-    const userId = (req as any).user?.id ?? null;
-
-    // aktualizacja sprawy
-    const updated = await updateCaseStatus(idNum, status);
-
-    // ===============================================
-    // 3.5 LOG — CASE_STATUS_CHANGED
-    // ===============================================
+  //  ZMIANA STATUSU SPRAWY
+  app.post("/api/cases/update-status", requireAuth, async (req, res) => {
     try {
-      await addCaseLog({
-        caseId: idNum,
-        userId,
-        action: "CASE_STATUS_CHANGED",
-        message: `Status zmieniony na '${status}'`,
-        meta: {
-          newStatus: status,
-          changedBy: userId,
-        },
+      const { caseId, status } = req.body;
+
+      // Walidacja caseId
+      const idNum = Number(caseId);
+      if (!idNum || Number.isNaN(idNum)) {
+        return res.status(400).json({ error: "Invalid caseId" });
+      }
+
+      // Walidacja statusu względem CaseStatus
+      if (!isValidCaseStatus(status)) {
+        return res.status(400).json({ error: "Invalid case status" });
+      }
+
+      // użytkownik (agent / admin)
+      const userId = (req as any).user?.id ?? null;
+
+      // aktualizacja sprawy
+      const updated = await updateCaseStatus(idNum, status);
+
+      // ===============================================
+      // 3.5 LOG — CASE_STATUS_CHANGED
+      // ===============================================
+      try {
+        await addCaseLog({
+          caseId: idNum,
+          userId,
+          action: "CASE_STATUS_CHANGED",
+          message: `Status zmieniony na '${status}'`,
+          meta: {
+            newStatus: status,
+            changedBy: userId,
+          },
+        });
+      } catch (err) {
+        console.warn("⚠️ addCaseLog CASE_STATUS_CHANGED error:", err);
+      }
+
+      return res.json({
+        ok: true,
+        case: updated,
       });
     } catch (err) {
-      console.warn("⚠️ addCaseLog CASE_STATUS_CHANGED error:", err);
+      console.error("❌ /api/cases/update-status error:", err);
+      return res.status(500).json({ error: "Server error" });
     }
+  });
 
-    return res.json({
-      ok: true,
-      case: updated,
-    });
-  } catch (err) {
-    console.error("❌ /api/cases/update-status error:", err);
-    return res.status(500).json({ error: "Server error" });
-  }
-});
+  // ============================================
+  //  GET /api/cases/:id/logs – historia sprawy
+  // ============================================
+  app.get("/api/cases/:id/logs", requireAuth, async (req, res) => {
+    try {
+      const caseId = Number(req.params.id);
+      if (!caseId || Number.isNaN(caseId)) {
+        return res.status(400).json({ error: "Invalid case id" });
+      }
 
-// ============================================
-//  GET /api/cases/:id/logs – historia sprawy
-// ============================================
-app.get("/api/cases/:id/logs", requireAuth, async (req, res) => {
-  try {
-    const caseId = Number(req.params.id);
-    if (!caseId || Number.isNaN(caseId)) {
-      return res.status(400).json({ error: "Invalid case id" });
+      const logs = await fetchCaseLogs(caseId);
+
+      return res.json({
+        ok: true,
+        logs,
+      });
+    } catch (err) {
+      console.error("❌ GET /api/cases/:id/logs error:", err);
+      return res.status(500).json({ error: "Server error" });
     }
-
-    const logs = await fetchCaseLogs(caseId);
-
-    return res.json({
-      ok: true,
-      logs,
-    });
-  } catch (err) {
-    console.error("❌ GET /api/cases/:id/logs error:", err);
-    return res.status(500).json({ error: "Server error" });
-  }
-});
+  });
 
   // === ULTRA-SAFE LISTA SPRAW (GET /api/cases) ===
   app.get("/api/cases",
@@ -569,24 +569,27 @@ app.get("/api/cases/:id/logs", requireAuth, async (req, res) => {
         // 4) POBIERZ STRONĘ
         // -------------------------
         const rowsSql = `
-        SELECT
-          id,
-          client,
-          bank,
-          loan_amount,
-          COALESCE(wps_forecast, wps) AS wps,
-          status,
-          contract_date,
-          owner_id,
-          phone,
-          email,
-          address
-        FROM cases
-        ${whereSql}
-        ORDER BY id DESC
-        LIMIT $${params.length + 1}
-        OFFSET $${params.length + 2}
-      `;
+  SELECT
+    id,
+    client,
+    bank,
+    loan_amount,
+    COALESCE(wps_forecast, wps) AS wps,
+    status,          -- legacy (opisowy), zostawiamy
+    status_code,     -- 🔥 NOWE – źródło prawdy dla dashboardu
+    contract_date,
+    owner_id,
+    phone,
+    email,
+    address,
+    created_at,
+    updated_at
+  FROM cases
+  ${whereSql}
+  ORDER BY id DESC
+  LIMIT $${params.length + 1}
+  OFFSET $${params.length + 2}
+`;
 
         const rows = await pool.query(rowsSql, [...params, limit, offset]);
 
@@ -756,28 +759,28 @@ app.get("/api/cases/:id/logs", requireAuth, async (req, res) => {
         const params = [client, amountVal, bank ?? null, user.id];
 
         const result = await pool.query(sql, params);
-const createdCase = result.rows[0];
+        const createdCase = result.rows[0];
 
-// ================================
-// 3.5) LOG ZDARZENIA – CASE_CREATED
-// ================================
-try {
-  const anyReq = req as any;
-  const userFromReq = anyReq.user || anyReq.currentUser || null;
-  const userId = userFromReq?.id ?? null;
+        // ================================
+        // 3.5) LOG ZDARZENIA – CASE_CREATED
+        // ================================
+        try {
+          const anyReq = req as any;
+          const userFromReq = anyReq.user || anyReq.currentUser || null;
+          const userId = userFromReq?.id ?? null;
 
-  await addCaseLog({
-    caseId: createdCase.id,
-    userId,
-    action: "CASE_CREATED",
-    message: "Sprawa utworzona ręcznie z dashboardu",
-    meta: {
-      source: "manual_dashboard",
-    },
-  });
-} catch (e) {
-  console.warn("addCaseLog CASE_CREATED error:", e);
-}
+          await addCaseLog({
+            caseId: createdCase.id,
+            userId,
+            action: "CASE_CREATED",
+            message: "Sprawa utworzona ręcznie z dashboardu",
+            meta: {
+              source: "manual_dashboard",
+            },
+          });
+        } catch (e) {
+          console.warn("addCaseLog CASE_CREATED error:", e);
+        }
         // ================================
         // 4) POWIADOMIENIE DLA WŁAŚCICIELA
         // ================================
@@ -1647,26 +1650,26 @@ try {
       }
     });
 
-// timeline sprawy
-app.get("/api/cases/:id/logs", softApiLimit, requireAuth, async (req, res) => {
-  try {
-    const caseId = Number(req.params.id);
-    if (!caseId) {
-      return res.status(400).json({ error: "Brak ID sprawy" });
+  // timeline sprawy
+  app.get("/api/cases/:id/logs", softApiLimit, requireAuth, async (req, res) => {
+    try {
+      const caseId = Number(req.params.id);
+      if (!caseId) {
+        return res.status(400).json({ error: "Brak ID sprawy" });
+      }
+
+      // opcjonalnie: możesz tu kiedyś dorzucić sprawdzenie,
+      // czy użytkownik ma dostęp do tej sprawy (admin / owner)
+
+      const logs = await fetchCaseLogs(caseId);
+      res.json({ ok: true, logs });
+    } catch (err) {
+      console.error("GET /api/cases/:id/logs error:", err);
+      res
+        .status(500)
+        .json({ error: "Błąd serwera przy pobieraniu historii sprawy" });
     }
-
-    // opcjonalnie: możesz tu kiedyś dorzucić sprawdzenie,
-    // czy użytkownik ma dostęp do tej sprawy (admin / owner)
-
-    const logs = await fetchCaseLogs(caseId);
-    res.json({ ok: true, logs });
-  } catch (err) {
-    console.error("GET /api/cases/:id/logs error:", err);
-    res
-      .status(500)
-      .json({ error: "Błąd serwera przy pobieraniu historii sprawy" });
-  }
-});
+  });
   // === USUWANIE PLIKU PO ID (z kontrolą właściciela) ===
   app.delete("/api/files/:fileId", hardApiLimit, requireAuth, async (req, res) => {
     const user = (req as any).user;

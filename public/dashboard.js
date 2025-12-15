@@ -58,7 +58,7 @@ window.setActiveKpi = window.setActiveKpi || function (key) {
 // === FLAGS + logger ===
 const FLAGS = {
   SAFE_BOOT: false,     // gdy true → nie robi zewnętrznych fetchy w bootstrapie
-  VERBOSE_LOGS: true,   // rozbudowane logi
+  VERBOSE_LOGS: false,   // rozbudowane logi
   STRICT_ERRORS: true   // przerwij boot przy krytycznym błędzie
 };
 const log = (...a) => FLAGS.VERBOSE_LOGS && console.log('[PK]', ...a);
@@ -415,17 +415,26 @@ async function initTableAndKpi() {
             ? fmtPL(c.wps)
             : '—';
 
-        // 🔹 Nowe: status jako kod → ładna etykieta
-        const rawCode =
-          c.status_code ??
-          c.status ??
-          c.stage ??
-          c.caseStage ??
-          null;
+        // 1) główne źródło prawdy – status_code z bazy
+        let rawCode = c.status_code;
 
-        const statusStr = rawCode
-          ? (CASE_STATUS_LABELS[String(rawCode).toUpperCase()] || String(rawCode))
-          : "—";
+        // 2) jeśli brak status_code, spróbuj zmapować stare opisy
+        if (!rawCode) {
+          rawCode =
+            normalizeLegacyStatus(c.status) ||
+            normalizeLegacyStatus(c.status2) ||
+            normalizeLegacyStatus(c.stage);
+        }
+
+        // 3) ostateczny fallback – cokolwiek było (ale to raczej legacy)
+        if (!rawCode) {
+          rawCode = c.stage || c.status || c.status2 || (tmpWps ? "WPS" : null);
+        }
+
+        // 4) etykieta do wyświetlenia
+        const statusStr =
+          CASE_STATUS_LABELS[String(rawCode).toUpperCase()] ||
+          (rawCode ? String(rawCode) : "—");
 
         return `
 <tr data-id="${c.id ?? ''}">
@@ -602,56 +611,181 @@ function initAddCaseForm() {
     }
   });
 }
-// Status → normalizacja
-function normStatus(s) {
-  const x = String(s || "")
-    .trim()
-    .toLowerCase();
-  if (["w toku", "in_progress", "open", "otwarta"].includes(x))
+// ==========================================
+//  STATUSY → KODY → KUBEŁKI
+// ============================
+
+// 1) Tekst PL → kod (NEW / ANALYSIS / ...)
+function normalizeLegacyStatus(raw) {
+  if (!raw) return null;
+  const v = String(raw).toLowerCase();
+
+  switch (v) {
+    case "nowa":
+    case "nowy":
+    case "new":
+      return "NEW";
+
+    case "analiza":
+    case "w analizie":
+      return "ANALYSIS";
+
+    case "braki dokumentów do analizy":
+      return "ANALYSIS_DOCS_NEEDED";
+
+    case "analiza pozytywna":
+      return "ANALYSIS_POSITIVE";
+
+    case "analiza negatywna":
+    case "odrzucona w analizie":
+      return "ANALYSIS_NEGATIVE";
+
+    case "przygotowanie umowy":
+    case "przygotowanie":
+      return "CONTRACT_PREP";
+
+    case "ocz. na dokumenty do wykupu":
+    case "oczekiwanie na dokumenty":
+      return "CONTRACT_DOCS_NEEDED";
+
+    case "umowa u agenta":
+      return "CONTRACT_AT_AGENT";
+
+    case "umowa zawarta":
+      return "CONTRACT_SIGNED";
+
+    case "w toku":
+    case "in_progress":
+    case "open":
+    case "otwarta":
+      return "IN_PROGRESS";
+
+    case "zakończona – sukces":
+    case "sukces":
+    case "closed_success":
+      return "CLOSED_SUCCESS";
+
+    case "zakończona – przegrana":
+    case "przegrana":
+    case "closed_fail":
+      return "CLOSED_FAIL";
+
+    case "rezygnacja klienta":
+      return "CLIENT_RESIGNED";
+
+    default:
+      return null;
+  }
+}
+
+// 2) Wyciągnięcie KODU statusu z rekordu sprawy
+function getStatusCodeFromRow(row) {
+  if (!row) return null;
+
+  let code = row.status_code;
+
+  if (!code) {
+    code =
+      normalizeLegacyStatus(row.status) ||
+      normalizeLegacyStatus(row.status2) ||
+      normalizeLegacyStatus(row.stage) ||
+      normalizeLegacyStatus(row.case_status);
+  }
+
+  if (!code && row.status) {
+    code = row.status;
+  }
+
+  return code ? String(code).toUpperCase() : null;
+}
+
+// 3) Kod → kubełek KPI wg ustalonej logiki
+//   "Nowe"              → NEW, ANALYSIS, ANALYSIS_DOCS_NEEDED
+//   "Analiza pozytywna" → ANALYSIS_POSITIVE, CONTRACT_PREP, CONTRACT_DOCS_NEEDED, CONTRACT_AT_AGENT
+//   "W toku"            → CONTRACT_SIGNED, IN_PROGRESS
+//   "Odrzucone"         → ANALYSIS_NEGATIVE, CLIENT_RESIGNED, CLOSED_FAIL
+function statusBucketFromCode(code) {
+  if (!code) return "other";
+  const c = String(code).toUpperCase();
+
+  if (["NEW", "ANALYSIS", "ANALYSIS_DOCS_NEEDED"].includes(c)) {
+    return "new";
+  }
+
+  if (
+    [
+      "ANALYSIS_POSITIVE",
+      "CONTRACT_PREP",
+      "CONTRACT_DOCS_NEEDED",
+      "CONTRACT_AT_AGENT",
+    ].includes(c)
+  ) {
+    return "analysis_positive";
+  }
+
+  if (["CONTRACT_SIGNED", "IN_PROGRESS"].includes(c)) {
     return "in_progress";
-  if (
-    [
-      "sukces",
-      "wygrana",
-      "zakończona",
-      "closed",
-      "done",
-      "finished",
-      "success",
-      "analiza pozytywna",
-      "analiza",
-    ].includes(x)
-  )
-    return "success";
-  if (
-    [
-      "przegrana",
-      "odrzucona",
-      "lost",
-      "rejected",
-      "zamknięta bez sukcesu",
-    ].includes(x)
-  )
-    return "lost";
-  if (["nowa", "nowy", "new"].includes(x)) return "new";
+  }
+
+  if (["ANALYSIS_NEGATIVE", "CLIENT_RESIGNED", "CLOSED_FAIL"].includes(c)) {
+    return "rejected";
+  }
+
   return "other";
 }
 
+// rekord → kubełek
+function statusBucketFromRow(row) {
+  return statusBucketFromCode(getStatusCodeFromRow(row));
+}
+
+// Co przychodzi z filtra/KPI → kubełek
+function mapFilterToBucket(filter) {
+  const v = String(filter || "").toLowerCase();
+  if (!v) return "";
+
+  if (v === "new") return "new";
+
+  if (v === "success" || v === "analysis_positive" || v === "positive") {
+    return "analysis_positive";
+  }
+
+  if (v === "in_progress") {
+    return "in_progress";
+  }
+
+  if (v === "lost" || v === "rejected") {
+    return "rejected";
+  }
+
+  return "";
+}
+
+// ===== KPI: liczenie po kubełkach =====
 function computeKpis(items) {
   const list = Array.isArray(items) ? items : [];
   const total = list.length;
-  let open = 0,
-    success = 0,
-    lost = 0,
-    newly = 0;
-  for (const c of list) {
-    const st = normStatus(c.status || c.case_status);
-    if (st === "in_progress") open++;
-    else if (st === "success") success++;
-    else if (st === "lost") lost++;
-    else if (st === "new") newly++;
+  let newly = 0;
+  let analysisPositive = 0;
+  let inProgress = 0;
+  let rejected = 0;
+
+  for (const row of list) {
+    const bucket = statusBucketFromRow(row);
+    if (bucket === "new") newly++;
+    else if (bucket === "analysis_positive") analysisPositive++;
+    else if (bucket === "in_progress") inProgress++;
+    else if (bucket === "rejected") rejected++;
   }
-  return { total, open, success, lost, newly };
+
+  // zachowujemy stare nazwy pól, żeby renderKpis nic nie musiał wiedzieć o kubełkach
+  return {
+    total,
+    newly,
+    success: analysisPositive,
+    open: inProgress,
+    lost: rejected,
+  };
 }
 
 function renderKpis(k) {
@@ -659,11 +793,11 @@ function renderKpis(k) {
     const el = document.getElementById(id);
     if (!el) return;
     el.textContent = String(val);
-    el.classList.remove('kpiValue-updated');
+    el.classList.remove("kpiValue-updated");
     // trigger reflow, żeby animacja ruszyła za każdym razem
     // eslint-disable-next-line no-unused-expressions
     el.offsetWidth;
-    el.classList.add('kpiValue-updated');
+    el.classList.add("kpiValue-updated");
   };
 
   set("kpiAll", k.total);
@@ -672,140 +806,181 @@ function renderKpis(k) {
   set("kpiInProgress", k.open);
   set("kpiRejected", k.lost);
 }
-function computeWpsAgg(items) {
-  const list = Array.isArray(items) ? items : [];
-  const wpsSum = sumNum(list, (x) => x.wps);
-  const loanSum = sumNum(list, (x) => x.loan_amount ?? x.amount);
-  const wpsCnt = list.reduce((n, x) => n + (x.wps !== null && x.wps !== undefined && x.wps !== "" ? 1 : 0), 0);
-  const wpsAvg = wpsCnt ? wpsSum / wpsCnt : 0;
-  return { wpsSum, loanSum, wpsAvg };
-}
+// Normalizacja statusów → 4 grupy KPI
+function normalizeStatusCode(raw) {
+  if (!raw) return 'NEW';
+  const v = String(raw).trim().toUpperCase();
 
-function renderWpsKpis(a) {
-  const set = (id, val) => {
-    const el = document.getElementById(id);
-    if (!el) return;
-    el.textContent = String(val);
-    el.classList.remove('kpiValue-updated');
-    // trigger reflow, żeby animacja ruszyła za każdym razem
-    // eslint-disable-next-line no-unused-expressions
-    el.offsetWidth;
-    el.classList.add('kpiValue-updated');
-  };
+  if (['NEW', 'ANALYSIS', 'ANALYSIS_DOCS_NEEDED'].includes(v))
+    return 'NEW';
 
-  set("kpiWpsTotal", a.wpsSum);
-  set("kpiLoanTotal", a.loanSum);
-  set("kpiWpsAvg", a.wpsAvg);
+  if (
+    ['ANALYSIS_POSITIVE', 'CONTRACT_PREP', 'CONTRACT_DOCS_NEEDED', 'CONTRACT_AT_AGENT']
+      .includes(v)
+  )
+    return 'POSITIVE';
+
+  if (['CONTRACT_SIGNED', 'IN_PROGRESS'].includes(v))
+    return 'IN_PROGRESS';
+
+  if (['ANALYSIS_NEGATIVE', 'CLOSED_FAIL', 'CLIENT_RESIGNED'].includes(v))
+    return 'REJECTED';
+
+  return 'NEW';
 }
 // —— WPS KPI (wszystkie / w toku) — agregaty + render ——
 
+// (parseNum, sumBy, setFirst masz wyżej – zostają BEZ zmian)
 // bezpieczny parse (spacje, przecinki)
-const parseNum = (v) => {
-  if (v === null || v === undefined || v === '') return null;
-  const n = Number(String(v).replace(/\s/g, '').replace(',', '.'));
+function parseNum(v) {
+  if (v === null || v === undefined || v === "") return null;
+  const n = Number(String(v).replace(/\s/g, "").replace(",", "."));
   return Number.isFinite(n) ? n : null;
-};
+}
 
 // sumy pomocnicze
-const sumBy = (arr, pick) =>
-  (Array.isArray(arr) ? arr : []).reduce((acc, x) => {
+function sumBy(arr, pick) {
+  return (Array.isArray(arr) ? arr : []).reduce((acc, x) => {
     const n = parseNum(pick(x));
     return n === null ? acc : acc + n;
   }, 0);
+}
 
 // żeby pisać do pierwszego istniejącego elementu (obsługa różnych ID)
-const setFirst = (ids, val) => {
-  const text = Number(val ?? 0).toLocaleString('pl-PL');
+function setFirst(ids, val) {
+  const text = Number(val ?? 0).toLocaleString("pl-PL");
   for (const id of ids) {
     const el = document.getElementById(id);
-    if (el) { el.textContent = text; return true; }
+    if (el) {
+      el.textContent = text;
+      return true;
+    }
   }
-  console.warn('WPS KPI element not found for ids:', ids);
+  console.warn("WPS KPI element not found for ids:", ids);
   return false;
-};
-
-// główna funkcja: policz i wyrenderuj
-function computeAndRenderWpsKpis(itemsAll) {
-  const list = Array.isArray(itemsAll) ? itemsAll : [];
-
-  // 1) suma WPS (wszystkie)
-  const sumAll = sumBy(list, x => x.wps);
-
-  // filtr „w toku”
-  const inProg = list.filter(c => normStatus(c.status || c.case_status) === 'in_progress');
-
-  // 2) suma WPS (w toku)
-  const sumInProg = sumBy(inProg, x => x.wps);
-
-  // 3) średni WPS (w toku)
-  const cntInProg = inProg.reduce((n, c) => n + (parseNum(c.wps) !== null ? 1 : 0), 0);
-  const avgInProg = cntInProg ? (sumInProg / cntInProg) : 0;
-
-  // render (Twoje ID + fallbacki)
-  setFirst(['kpiWpsAll', 'kpiWpsTotal', 'kpiWpsTotalAll'], sumAll);
-  setFirst(['kpiWpsInProgress', 'kpiWpsTotalInProgress'], sumInProg);
-  setFirst(['kpiWpsAvgInProgress', 'kpiWpsAvg'], avgInProg);
-
-  console.log('📊 WPS KPI:', { sumAll, sumInProg, avgInProg, cntInProg });
 }
 
 // Formatery
 const fmtPL = (n) => Number(n ?? 0).toLocaleString("pl-PL");
+
 const fmtDate = (raw) => {
-  const norm = raw ? (String(raw).includes("T") ? raw : String(raw).replace(" ", "T")) : "";
+  const norm = raw
+    ? String(raw).includes("T")
+      ? raw
+      : String(raw).replace(" ", "T")
+    : "";
   const d = norm ? new Date(norm) : null;
   return d && !isNaN(d) ? d.toLocaleDateString("pl-PL") : "—";
 };
 
 // Bezpieczna suma liczb (obsługa spacji i przecinków)
-const sumNum = (arr, pick) =>
-  arr.reduce((acc, x) => {
+function sumNum(arr, pick) {
+  return (arr || []).reduce((acc, x) => {
     const raw = pick(x);
     if (raw === null || raw === undefined || raw === "") return acc;
     const num = Number(String(raw).replace(/\s/g, "").replace(",", "."));
     return Number.isFinite(num) ? acc + num : acc;
   }, 0);
+}
 
-// Główny loader tabeli + KPI
-async function loadCases(filterStatus = '') {
-  console.log('loadCases() start');
-  const tBody = document.getElementById('caseTableBody');
-  if (!tBody) { console.warn('Brak #caseTableBody'); return; }
+// główna funkcja: policz i wyrenderuj WPS KPI
+function computeAndRenderWpsKpis(itemsAll) {
+  const list = Array.isArray(itemsAll) ? itemsAll : [];
+
+  // 🔍 weź WPS z dowolnego sensownego pola
+  const pickWps = (row) => {
+    const v =
+      row.wps ??
+      row.wps_forecast ??
+      row.wps_basic ??
+      row.wps_value ??
+      row.wps_calc ??
+      null;
+    return parseNum(v);
+  };
+
+  let sumAll = 0;
+  let sumInProg = 0;
+  let cntInProgWithWps = 0;
+
+  for (const c of list) {
+    const wpsVal = pickWps(c);
+    if (wpsVal === null) continue;
+
+    // 1) suma WPS (wszystkie)
+    sumAll += wpsVal;
+
+    // 2) „w toku” wg naszej normalizacji statusu
+    const st = normalizeStatusCode(c.status_code || c.status || c.case_status);
+    if (st === "IN_PROGRESS" || st === "CONTRACT_SIGNED") {
+      sumInProg += wpsVal;
+      cntInProgWithWps++;
+    }
+  }
+
+  const avgInProg = cntInProgWithWps ? sumInProg / cntInProgWithWps : 0;
+
+  // render (Twoje ID + fallbacki)
+  setFirst(["kpiWpsAll", "kpiWpsTotal", "kpiWpsTotalAll"], sumAll);
+  setFirst(["kpiWpsInProgress", "kpiWpsTotalInProgress"], sumInProg);
+  setFirst(["kpiWpsAvgInProgress", "kpiWpsAvg"], avgInProg);
+
+  console.log("📊 WPS KPI:", {
+    sumAll,
+    sumInProg,
+    avgInProg,
+    cntInProgWithWps,
+  });
+}
+
+// ============================
+//  GŁÓWNY LOADER TABELI + KPI
+// ============================
+async function loadCases(filterKey = "") {
+  console.log("loadCases() START, filterKey =", filterKey);
+  const tBody = document.getElementById("caseTableBody");
+  if (!tBody) {
+    console.warn("Brak #caseTableBody");
+    return;
+  }
 
   tBody.innerHTML = '<tr><td colspan="5">Ładowanie…</td></tr>';
 
   let data;
   try {
-    data = await fetchJSON('/api/cases');
+    data = await fetchJSON("/api/cases");
   } catch (e) {
+    console.error("/api/cases error:", e);
     tBody.innerHTML = `<tr><td colspan="5">Błąd /api/cases: ${e.message}</td></tr>`;
     return;
   }
 
   // Obsłuż {items:[...]} / {cases:[...]} / [...]
-  const itemsAll =
-    Array.isArray(data?.items) ? data.items :
-      Array.isArray(data?.cases) ? data.cases :
-        Array.isArray(data) ? data : [];
+  const itemsAll = Array.isArray(data?.items)
+    ? data.items
+    : Array.isArray(data?.cases)
+      ? data.cases
+      : Array.isArray(data)
+        ? data
+        : [];
 
-  window.__PK_ITEMS_ALL__ = itemsAll; // przyda się do ponownego przeliczenia KPI
+  console.log("📦 itemsAll length =", itemsAll.length);
+  window.__PK_ITEMS_ALL__ = itemsAll;
   window.casesCache = itemsAll;
-  console.log('📦 itemsAll count =', itemsAll.length);
 
-  const targetStatus = String(filterStatus || '').toLowerCase();
-  const items = targetStatus
-    ? itemsAll.filter(c => normStatus(c.status || c.case_status) === targetStatus)
+  // ← tu zamieniamy filtr (new/success/in_progress/lost/analysis_positive/rejected) na kubełek
+  const bucket = mapFilterToBucket(filterKey);
+  const items = bucket
+    ? itemsAll.filter((row) => statusBucketFromRow(row) === bucket)
     : itemsAll;
 
-  // KPI zawsze z pełnego źródła
+  // KPI z pełnej listy
   try {
     const k = computeKpis(itemsAll);
     renderKpis(k);
-    console.log('📊 KPI:', k);
     computeAndRenderWpsKpis(itemsAll);
-
   } catch (e) {
-    console.error('KPI error:', e);
+    console.error("KPI error:", e);
   }
 
   if (!items.length) {
@@ -813,36 +988,34 @@ async function loadCases(filterStatus = '') {
     return;
   }
 
-  // Render wierszy – z twardą ochroną na błędy
-  try {
-    const rowsHtml = items.map(c => {
-      const clientStr = c.client ?? '—';
-      const bankStr = c.bank ? String(c.bank) : '—';
-      const amountStr = (c.loan_amount ?? c.amount ?? null) != null ? fmtPL(c.loan_amount ?? c.amount) : '—';
-      const wpsStr = (c.wps ?? '') !== '' ? fmtPL(c.wps) : '—';
-      const caseNoStr = c.case_number ? String(c.case_number) : '';
+  // PROSTE RENDEROWANIE WIERSZY + szukajka (data-search)
+  const rowsHtml = items
+    .map((c) => {
+      const clientStr = c.client ?? "—";
+      const bankStr = c.bank ? String(c.bank) : "—";
+      const amountStr =
+        (c.loan_amount ?? c.amount ?? null) != null
+          ? fmtPL(c.loan_amount ?? c.amount)
+          : "—";
+      const wpsStr =
+        (c.wps ?? "") !== "" ? fmtPL(c.wps) : "—";
+      const caseNoStr = c.case_number ? String(c.case_number) : "";
 
-      // 🔍 zbierz wszystkie pola, których NAZWA zawiera phone/tel/email
+      // status: najpierw z kodu
+      const code = getStatusCodeFromRow(c);
+      const statusStr = code
+        ? CASE_STATUS_LABELS[code] || code
+        : c.status
+          ? String(c.status)
+          : "—";
+
+      // 🔍 blob do wyszukiwarki (nazwisko, bank, kwoty, status, kontakt, nr sprawy)
       const contactBlob = Object.entries(c || {})
         .filter(([key]) => /phone|tel|email/i.test(key))
-        .map(([, val]) => (val == null ? '' : String(val)))
-        .join(' ');
+        .map(([, val]) => (val == null ? "" : String(val)))
+        .join(" ");
 
-      // 🔹 Status jako kod → ładna etykieta z CASE_STATUS_LABELS
-      const rawCode =
-        c.status_code ??
-        c.status ??
-        c.stage ??
-        c.caseStage ??
-        null;
-
-      const statusStr = rawCode
-        ? (CASE_STATUS_LABELS[String(rawCode).toUpperCase()] || String(rawCode))
-        : "—";
-      // prosty escape cudzysłowów, żeby nie rozwalić HTML-a
-      const esc = (s) => String(s).replace(/"/g, '&quot;');
-
-      // lokalna normalizacja – to samo co w szukajce (małe litery + bez „dziwnych” znaków)
+      const esc = (s) => String(s).replace(/"/g, "&quot;");
       const norm = (s) =>
         (s || "")
           .toString()
@@ -850,63 +1023,62 @@ async function loadCases(filterStatus = '') {
           .normalize("NFKD")
           .replace(/[^\w\s.-]+/g, "");
 
-      // 🔍 pełny „blob” do wyszukiwania:
-      // klient, bank, kwoty, status, KONTAKT (tel/mail), nr sprawy
-      const searchBlob = norm([
-        clientStr,
-        bankStr,
-        amountStr,
-        wpsStr,
-        statusStr,
-        contactBlob,
-        caseNoStr
-      ].join(" "));
+      const searchBlob = norm(
+        [
+          clientStr,
+          bankStr,
+          amountStr,
+          wpsStr,
+          statusStr,
+          contactBlob,
+          caseNoStr,
+        ].join(" ")
+      );
 
       return `
-<tr data-id="${c.id ?? ''}" data-search="${esc(searchBlob)}">
+<tr data-id="${c.id ?? ""}" data-search="${esc(searchBlob)}">
   <td>${clientStr}</td>
   <td>${bankStr}</td>
   <td>${amountStr}</td>
   <td>${wpsStr}</td>
   <td>${statusStr}</td>
 </tr>`;
-    }).join('');
+    })
+    .join("");
 
-    tBody.innerHTML = rowsHtml;
-  } catch (e) {
-    console.error('Row render fail:', e);
-    tBody.innerHTML = `<tr><td colspan="5">Błąd renderowania tabeli: ${e.message}</td></tr>`;
-  }
+  tBody.innerHTML = rowsHtml;
 
+  try {
+    window.dispatchEvent(new Event("cases_rendered"));
+  } catch (_) { }
 
-
-  console.log('loadCases() done');
+  console.log("loadCases() END, visible rows =", items.length);
 }
 
 // === Klikalne KPI → filtr statusu ===
 function applyStatusFilter(statusCode) {
-  const sel = document.getElementById('flt_status');
-  if (sel) sel.value = statusCode || '';
+  // statusCode przychodzi z data-status na kaflu KPI (new/success/in_progress/lost)
+  const sel = document.getElementById("flt_status");
+  if (sel) sel.value = statusCode || "";
 
-  setActiveKpi(statusCode);
-  return loadCases(statusCode || '');
+  setActiveKpi(statusCode || "");
+  return loadCases(statusCode || "");
 }
 
-document.querySelectorAll('#kpiBar .kpi-card').forEach(card => {
-  card.addEventListener('click', () => {
-    const code = card.dataset.status || '';
+document.querySelectorAll("#kpiBar .kpi-card").forEach((card) => {
+  card.addEventListener("click", () => {
+    const code = card.dataset.status || "";
     applyStatusFilter(code);
   });
 });
 
-
-// „drugie uderzenie” w KPI — gdyby DOM jeszcze się układał
+/*// „drugie uderzenie” w KPI — gdyby DOM jeszcze się układał
 try {
   const all = window.__PK_ITEMS_ALL__ || [];
   renderKpis(computeKpis(all));
-  log('📊 KPI re-render after load:', computeKpis(all));
+  log("📊 KPI re-render after load:", computeKpis(all));
 } catch (e) {
-  console.error('KPI re-render error:', e);
+  console.error("KPI re-render error:", e);
 }
 
 // ➕ dodatkowe „uderzenie” w KPI WPS
@@ -914,13 +1086,12 @@ try {
   const all = window.__PK_ITEMS_ALL__ || [];
   computeAndRenderWpsKpis(all);
 } catch (e) {
-  console.error('WPS KPI re-render error:', e);
-}
+  console.error("WPS KPI re-render error:", e);
+}*/
 
-// === Dodawanie nowej sprawy + upload plików ===
-let pendingFiles = []; // nasza własna lista plików
+// === DODAWANIE NOWEJ SPRAWY + UPLOAD PLIKÓW ===
+let pendingFiles = []; // globalna lista plików (dashboard)
 
-const addBtn = document.getElementById("addCaseBtn");
 const addClientEl = document.getElementById("addClient");
 const addAmountEl = document.getElementById("addAmount");
 const addBankEl = document.getElementById("addBank");
@@ -928,7 +1099,6 @@ const addFilesEl = document.getElementById("addFiles"); // input file
 const fileListPreview = document.getElementById("fileListPreview"); // podgląd
 const dropArea = document.getElementById("fileDropArea");
 
-// --- helper: aktualizuje faktyczne <input type="file"> na podstawie pendingFiles ---
 function syncFilesToInput() {
   if (!addFilesEl) return;
   const dt = new DataTransfer();
@@ -936,7 +1106,6 @@ function syncFilesToInput() {
   addFilesEl.files = dt.files;
 }
 
-// --- helper: rysuje listę plików + X do usunięcia ---
 function renderFilePreview() {
   if (!fileListPreview) return;
   fileListPreview.innerHTML = "";
@@ -944,8 +1113,6 @@ function renderFilePreview() {
   pendingFiles.forEach((file, index) => {
     const row = document.createElement("div");
     row.className = "case-file-item case-row";
-
-
     row.innerHTML = `
       <div class="file-item-name">
         📄 ${file.name} (${Math.round(file.size / 1024)} KB)
@@ -954,37 +1121,28 @@ function renderFilePreview() {
         ✕
       </div>
     `;
-
     fileListPreview.appendChild(row);
   });
 
-  // Obsługa przycisku X (usuń pojedynczy plik)
   fileListPreview.querySelectorAll(".file-item-remove").forEach((btn) => {
     btn.addEventListener("click", () => {
       const idx = Number(btn.getAttribute("data-index"));
       if (Number.isFinite(idx)) {
-        pendingFiles.splice(idx, 1); // usuń z tablicy
-        syncFilesToInput();          // zaktualizuj input
-        renderFilePreview();         // odśwież listę
+        pendingFiles.splice(idx, 1);
+        syncFilesToInput();
+        renderFilePreview();
       }
     });
   });
 }
 
-// --- Drag & Drop + klik ---
+// Drag & drop + klik na box
 if (dropArea && addFilesEl) {
-  // Klik = otwieranie okna wyboru plików
   dropArea.addEventListener("click", (e) => {
-    // Jeśli kliknięto link (np. iLovePDF) – nie otwieramy file pickera
-    if (e.target.closest("a")) {
-      return;
-    }
-
-    // Normalny klik w box → otwórz okno wyboru pliku
+    if (e.target.closest("a")) return;
     addFilesEl.click();
   });
 
-  // Drag & Drop
   dropArea.addEventListener("dragover", (e) => {
     e.preventDefault();
     dropArea.classList.add("dragover");
@@ -1006,7 +1164,6 @@ if (dropArea && addFilesEl) {
     renderFilePreview();
   });
 
-  // Wybranie plików przez okno wyboru
   addFilesEl.addEventListener("change", () => {
     const selected = Array.from(addFilesEl.files || []);
     if (!selected.length) return;
@@ -1017,84 +1174,109 @@ if (dropArea && addFilesEl) {
   });
 }
 
+function initAddCaseForm() {
+  const saveBtn = document.getElementById("btnSaveCase");
+  if (!saveBtn) {
+    console.warn("[ADD CASE] btnSaveCase not found – pomijam init");
+    return;
+  }
 
-// --- handler przycisku dodania sprawy (dopisz/zmień u siebie tylko środek) ---
-addBtn?.addEventListener("click", async (e) => {
-  e.preventDefault();
+  saveBtn.addEventListener("click", async () => {
+    try {
+      console.log("[ADD CASE] klik Zapisz");
 
-  const client = addClientEl?.value?.trim() || "";
-  const amountRaw = (addAmountEl?.value || "").replace(",", ".");
-  const loanAmount = parseFloat(amountRaw);
-  const bank = addBankEl?.value || null;
+      const client = addClientEl?.value.trim() || "";
+      const amountRaw = (addAmountEl?.value || "").replace(/\s/g, "").replace(",", ".");
+      const bank = addBankEl?.value.trim() || "";
 
-  if (!client) return alert("Podaj klienta");
-  if (Number.isNaN(loanAmount)) return alert("Podaj poprawną kwotę");
+      if (!client) {
+        alert("Podaj imię i nazwisko klienta");
+        addClientEl?.focus();
+        return;
+      }
 
-  try {
-    // 1️⃣ — UTWORZENIE SPRAWY
-    const createRes = await apiFetch("/cases", {
-      method: "POST",
-      body: JSON.stringify({
+      const loan_amount = amountRaw ? Number(amountRaw) : 0;
+      if (!loan_amount || Number.isNaN(loan_amount) || loan_amount <= 0) {
+        alert("Podaj poprawną kwotę kredytu");
+        addAmountEl?.focus();
+        return;
+      }
+
+      const payload = {
         client,
-        loan_amount: loanAmount,
-        bank,
-      }),
-    });
+        loan_amount,
+        bank: bank || null,
+      };
 
+      console.log("[ADD CASE] payload:", payload);
 
-    if (!createRes.ok) {
-      const text = await createRes.text().catch(() => "");
-      throw new Error("Błąd tworzenia sprawy: " + text);
-    }
-
-    const createdCase = await createRes.json();
-    const caseId = createdCase.id;
-    console.log("🔹 Utworzono sprawę:", createdCase);
-
-    // 2️⃣ — UPLOAD PLIKÓW (jeśli są)
-    if (pendingFiles.length > 0) {
-      const formData = new FormData();
-      pendingFiles.forEach((file) => formData.append("files", file));
-
-      const uploadRes = await apiFetch(`/cases/${caseId}/files`, {
+      // 1️⃣ UTWORZENIE SPRAWY
+      const createRes = await apiFetch("/api/cases", {
         method: "POST",
-        body: formData, // FormData → bez Content-Type
+        body: JSON.stringify(payload),
       });
 
+      console.log("[ADD CASE] response z apiFetch:", createRes);
 
-      if (!uploadRes.ok) {
-        console.error(
-          "Błąd uploadu plików:",
-          await uploadRes.text().catch(() => "")
-        );
-        alert("Sprawa została utworzona, ale pliki nie zostały zapisane ❌");
-      } else {
-        console.log("📁 Pliki dodane do sprawy", caseId);
+      // createRes to już JSON z backendu, np. {id: 60, ...}
+      const caseId = createRes.id;
+      if (!caseId) {
+        alert("Sprawa została utworzona, ale brak ID w odpowiedzi.");
+        return;
       }
+
+      console.log("🔹 Utworzono sprawę:", createRes);
+
+      // 2️⃣ UPLOAD PLIKÓW (jeśli są)
+      if (pendingFiles.length > 0) {
+        const formData = new FormData();
+        pendingFiles.forEach((file) => formData.append("files", file));
+
+        try {
+          const uploadRes = await fetch(`/api/cases/${caseId}/files`, {
+            method: "POST",
+            credentials: "include",
+            body: formData,
+          });
+
+          console.log("[ADD CASE] uploadRes status:", uploadRes.status);
+          const txt = await uploadRes.text();
+          console.log("[ADD CASE] uploadRes body:", txt);
+
+          if (!uploadRes.ok) {
+            console.error("Błąd uploadu plików:", txt);
+            alert("Sprawa została utworzona, ale pliki nie zostały zapisane ❌");
+          } else {
+            console.log("📁 Pliki dodane do sprawy", caseId);
+          }
+        } catch (err) {
+          console.error("Błąd połączenia przy uploadzie plików:", err);
+          alert("Sprawa została utworzona, ale wystąpił błąd przy zapisie plików.");
+        }
+      }
+
+      // 3️⃣ RESET FORMULARZA + plików
+      if (addClientEl) addClientEl.value = "";
+      if (addAmountEl) addAmountEl.value = "";
+      if (addBankEl) addBankEl.value = "";
+      if (addFilesEl) addFilesEl.value = "";
+
+      pendingFiles = [];
+      syncFilesToInput();
+      renderFilePreview();
+
+      const flt = document.getElementById("flt_status");
+      if (flt) flt.value = "";
+
+      // 4️⃣ ODSWIEŻ LISTĘ SPRAW
+      await loadCases("");
+
+    } catch (err) {
+      console.error("[ADD CASE] Błąd przy zapisie sprawy:", err);
+      alert("Wystąpił błąd przy zapisie sprawy (console).");
     }
-
-    // 3️⃣ — RESET FORMULARZA + plików
-    if (addClientEl) addClientEl.value = "";
-    if (addAmountEl) addAmountEl.value = "";
-    if (addBankEl) addBankEl.value = "";
-    if (addFilesEl) addFilesEl.value = "";
-
-    pendingFiles = [];
-    syncFilesToInput();
-    renderFilePreview();
-
-    const flt = document.getElementById("flt_status");
-    if (flt) flt.value = "";
-
-    // 4️⃣ — ODSWIEŻ LISTĘ SPRAW
-    await loadCases("");
-
-  } catch (err) {
-    console.error("Add case error:", err);
-    alert("Nie udało się dodać sprawy: " + (err?.message || ""));
-  }
-});
-
+  });
+}
 
 // Modal — referencje
 const cmModal = document.getElementById("caseModal");
@@ -2783,7 +2965,41 @@ try {
 }
 
 // ← domknięcie brakującego bloku, np. funkcji lub DOMContentLoaded
+// Prosty silnik WPS Basic — używany przez modal „WPS Basic (silnik SKD)”
+function calculateWpsBasic({
+  loan_amount_net,
+  loan_amount_total,
+  loan_term_months,
+  installments_paid,
+  installment_amount_real,
+}) {
+  const net = Number(loan_amount_net) || 0;     // kwota „na rękę”
+  const term = Number(loan_term_months) || 0;   // okres (miesiące)
+  const paid = Number(installments_paid) || 0;  // ile rat zapłacono
+  let inst = Number(installment_amount_real) || 0; // realna rata
 
+  // Musimy mieć przynajmniej te trzy rzeczy
+  if (!net || !term || !paid) return null;
+
+  // Jeśli nie podano raty – policz ją z kwoty całkowitej
+  if (!inst) {
+    const total = Number(loan_amount_total) || 0;
+    if (!total) return null;
+    inst = total / term;
+  }
+
+  const totalPaid = paid * inst;                     // ile już wpłacono
+  const usedRatio = Math.min(1, Math.max(0, paid / term));
+  const theoreticalUsed = net * usedRatio;                 // „uczciwy” koszt wykorzystanej części
+
+  const wpsRaw = totalPaid - theoreticalUsed;
+
+  if (!Number.isFinite(wpsRaw)) return null;
+
+  // Jeżeli wychodzi <= 0 → traktujemy jako 0 zł, a nie „brak danych”
+  const wps = Math.round(wpsRaw);
+  return wps > 0 ? wps : 0;
+}
 // ===============================
 //   WPS BASIC — obsługa UI + zapis + oferta SKD
 // ===============================
