@@ -1,0 +1,606 @@
+<!DOCTYPE html>
+<html lang="pl">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Regulamin – Portal PK</title>
+    <style>
+      :root {
+        --bg: #f5f5f7;
+        --card: #fff;
+        --text: #111;
+        --muted: #6b7280;
+        --line: #e5e7eb;
+        --brand: #8b2a1c; /* Portal PK */
+        --brand2: #b02e1f;
+        --shadow: 0 10px 30px rgba(0, 0, 0, 0.08);
+        --radius: 16px;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter,
+          Roboto, Arial, sans-serif;
+        background: var(--bg);
+        color: var(--text);
+      }
+      .wrap {
+        max-width: 980px;
+        margin: 40px auto;
+        padding: 0 16px;
+      }
+      .card {
+        background: var(--card);
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        box-shadow: var(--shadow);
+        overflow: hidden;
+      }
+      .topbar {
+        background: linear-gradient(90deg, var(--brand), #6f2318);
+        color: #fff;
+        padding: 18px 22px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+      }
+      .brand {
+        display: flex;
+        flex-direction: column;
+        line-height: 1.15;
+      }
+      .brand .name {
+        font-weight: 800;
+        font-size: 18px;
+        letter-spacing: 0.2px;
+      }
+      .brand .sub {
+        font-size: 12px;
+        opacity: 0.9;
+      }
+      .version {
+        font-size: 12px;
+        opacity: 0.95;
+        background: rgba(255, 255, 255, 0.12);
+        border: 1px solid rgba(255, 255, 255, 0.18);
+        padding: 8px 10px;
+        border-radius: 10px;
+        white-space: nowrap;
+      }
+      .content {
+        padding: 22px;
+      }
+      h1 {
+        margin: 0 0 6px 0;
+        font-size: 26px;
+        letter-spacing: 0.2px;
+      }
+      .lead {
+        margin: 0 0 18px 0;
+        color: var(--muted);
+        font-size: 14px;
+      }
+
+      /* BOX Z REGULAMINEM */
+      .reg-box {
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        background: #fff;
+        padding: 14px 16px;
+        max-height: 430px;
+        overflow: auto;
+        line-height: 1.65;
+      }
+      .sec {
+        padding: 12px 10px;
+        border-bottom: 1px dashed #eee;
+      }
+      .sec:last-child {
+        border-bottom: none;
+      }
+      .sec-title {
+        display: flex;
+        align-items: flex-start;
+        gap: 10px;
+        margin: 2px 0 8px;
+        font-weight: 800;
+      }
+      .sec-icon {
+        width: 28px;
+        height: 28px;
+        border-radius: 10px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: rgba(176, 46, 31, 0.1);
+        color: var(--brand2);
+        font-weight: 900;
+        flex: 0 0 28px;
+        transform: translateY(1px);
+      }
+      .sec-title .t {
+        font-size: 15px;
+      }
+      .sec p {
+        margin: 8px 0;
+        font-size: 14px;
+      }
+      .sec ul,
+      .sec ol {
+        margin: 8px 0 8px 22px;
+        padding: 0;
+      }
+      .sec li {
+        margin: 6px 0;
+        font-size: 14px;
+      }
+
+      /* AKCEPTACJA */
+      .accept {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        margin-top: 14px;
+        padding-top: 14px;
+        border-top: 1px solid var(--line);
+      }
+      .chk {
+        display: flex;
+        gap: 10px;
+        align-items: flex-start;
+        color: #111;
+        font-size: 14px;
+      }
+      .chk input {
+        margin-top: 3px;
+      }
+      .hint {
+        font-size: 12px;
+        color: var(--muted);
+        margin-top: 2px;
+      }
+      .btn {
+        border: 0;
+        border-radius: 999px;
+        padding: 10px 16px;
+        font-weight: 800;
+        cursor: pointer;
+        background: var(--brand2);
+        color: #fff;
+        box-shadow: 0 8px 18px rgba(176, 46, 31, 0.18);
+        transition: transform 0.08s ease, opacity 0.12s ease;
+        white-space: nowrap;
+      }
+      .btn:active {
+        transform: scale(0.98);
+      }
+      .btn:disabled {
+        opacity: 0.45;
+        cursor: not-allowed;
+        box-shadow: none;
+      }
+      .msg {
+        margin-top: 10px;
+        font-size: 13px;
+        color: var(--muted);
+        min-height: 18px;
+      }
+
+      .footer {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 14px 22px;
+        background: #fafafa;
+        border-top: 1px solid var(--line);
+        color: var(--muted);
+        font-size: 12px;
+        flex-wrap: wrap;
+      }
+      .footer a {
+        color: var(--brand2);
+        text-decoration: none;
+      }
+      .footer a:hover {
+        text-decoration: underline;
+      }
+
+      @media (max-width: 640px) {
+        .accept {
+          flex-direction: column;
+          align-items: flex-start;
+        }
+        .btn {
+          width: 100%;
+          text-align: center;
+        }
+        h1 {
+          font-size: 22px;
+        }
+      }
+    </style>
+  </head>
+
+  <body>
+    <div class="wrap">
+      <div class="card">
+        <div class="topbar">
+          <div class="brand">
+            <div class="name">Portal PK</div>
+            <div class="sub">Regulamin współpracy</div>
+          </div>
+          <div class="version">Wersja: <strong id="regVersion">—</strong></div>
+        </div>
+
+        <div class="content">
+          <h1>Regulamin współpracy – Portal PK</h1>
+          <p class="lead">
+            Aby korzystać z portalu, zaakceptuj regulamin. Akceptacja jest
+            zapisywana w systemie.
+          </p>
+
+          <div class="reg-box" id="regBox">
+            <!-- TREŚĆ 2.0 -->
+            <div class="sec">
+              <div class="sec-title">
+                <div class="sec-icon">§</div>
+                <div class="t">§1. Informacje ogólne</div>
+              </div>
+              <ol>
+                <li>
+                  Portal PK jest narzędziem informatycznym służącym do obsługi
+                  spraw klientów dotyczących dochodzenia roszczeń związanych z
+                  kredytami.
+                </li>
+                <li>
+                  Właścicielem i administratorem Portalu PK jest
+                  <strong>[Podmiot prowadzący Portal PK]</strong>.
+                </li>
+                <li>
+                  Agent (Partner) to osoba fizyczna lub podmiot, któremu
+                  przyznano dostęp do Portalu PK w celu obsługi klientów.
+                </li>
+                <li>
+                  Niniejszy regulamin określa zasady korzystania z Portalu PK
+                  przez Agentów.
+                </li>
+              </ol>
+            </div>
+
+            <div class="sec">
+              <div class="sec-title">
+                <div class="sec-icon">§</div>
+                <div class="t">§2. Charakter współpracy</div>
+              </div>
+              <ol>
+                <li>
+                  Agent działa niezależnie, jako partner współpracujący, a nie
+                  jako pracownik Portalu PK.
+                </li>
+                <li>
+                  Korzystanie z Portalu PK nie stanowi umowy o pracę ani
+                  zlecenia.
+                </li>
+                <li>
+                  Agent samodzielnie organizuje swoją pracę i kontakt z
+                  klientem.
+                </li>
+                <li>
+                  Portal PK udostępnia narzędzie oraz wsparcie systemowe, nie
+                  przejmując odpowiedzialności za indywidualne działania Agenta.
+                </li>
+              </ol>
+            </div>
+
+            <div class="sec">
+              <div class="sec-title">
+                <div class="sec-icon">§</div>
+                <div class="t">§3. Zakres uprawnień Agenta</div>
+              </div>
+              <ol>
+                <li>
+                  Agent ma prawo:
+                  <ul>
+                    <li>zakładać sprawy klientów w Portalu PK,</li>
+                    <li>uzupełniać dane spraw,</li>
+                    <li>korzystać z funkcji analitycznych (m.in. SKD, WPS),</li>
+                    <li>
+                      komunikować się z klientem w zakresie prowadzonych spraw.
+                    </li>
+                  </ul>
+                </li>
+                <li>
+                  Agent korzysta wyłącznie z danych, do których uzyskał dostęp w
+                  ramach przydzielonych spraw.
+                </li>
+              </ol>
+            </div>
+
+            <div class="sec">
+              <div class="sec-title">
+                <div class="sec-icon">§</div>
+                <div class="t">§4. Obowiązki Agenta</div>
+              </div>
+              <ol>
+                <li>
+                  Agent zobowiązuje się do:
+                  <ul>
+                    <li>rzetelnego i zgodnego z prawem działania,</li>
+                    <li>ochrony danych osobowych klientów,</li>
+                    <li>
+                      korzystania z Portalu PK wyłącznie w celach związanych z
+                      obsługą spraw.
+                    </li>
+                  </ul>
+                </li>
+                <li>
+                  Agent nie może:
+                  <ul>
+                    <li>gwarantować klientowi wyniku sprawy,</li>
+                    <li>składać obietnic finansowych w imieniu Portalu PK,</li>
+                    <li>podszywać się pod pracownika Portalu PK,</li>
+                    <li>
+                      wykorzystywać Portalu PK do celów prywatnych lub
+                      niezgodnych z jego przeznaczeniem.
+                    </li>
+                  </ul>
+                </li>
+              </ol>
+            </div>
+
+            <div class="sec">
+              <div class="sec-title">
+                <div class="sec-icon">§</div>
+                <div class="t">§5. Kontakt z klientem</div>
+              </div>
+              <ol>
+                <li>
+                  Agent jest odpowiedzialny za treść swojej komunikacji z
+                  klientem.
+                </li>
+                <li>
+                  Portal PK może udostępniać narzędzia komunikacyjne (np.
+                  e-mail), jednak ich użycie nie zwalnia Agenta z
+                  odpowiedzialności za przekaz.
+                </li>
+                <li>
+                  Zabronione jest wprowadzanie klienta w błąd co do charakteru
+                  współpracy, kosztów lub możliwego wyniku sprawy.
+                </li>
+              </ol>
+            </div>
+
+            <div class="sec">
+              <div class="sec-title">
+                <div class="sec-icon">§</div>
+                <div class="t">§6. Poufność i dane</div>
+              </div>
+              <ol>
+                <li>
+                  Agent zobowiązuje się do zachowania poufności danych klientów,
+                  informacji systemowych oraz zasad działania Portalu PK.
+                </li>
+                <li>
+                  Dane uzyskane w Portalu PK nie mogą być przekazywane osobom
+                  trzecim ani wykorzystywane poza współpracą z Portalem PK.
+                </li>
+              </ol>
+            </div>
+
+            <div class="sec">
+              <div class="sec-title">
+                <div class="sec-icon">§</div>
+                <div class="t">§7. Odpowiedzialność</div>
+              </div>
+              <ol>
+                <li>
+                  Portal PK nie ponosi odpowiedzialności za działania Agenta
+                  wobec klientów ani treść komunikacji prowadzonej przez Agenta.
+                </li>
+                <li>
+                  Agent ponosi pełną odpowiedzialność za swoje działania wobec
+                  klientów.
+                </li>
+              </ol>
+            </div>
+
+            <div class="sec">
+              <div class="sec-title">
+                <div class="sec-icon">§</div>
+                <div class="t">§8. Dostęp do Portalu</div>
+              </div>
+              <ol>
+                <li>
+                  Portal PK może czasowo ograniczyć dostęp Agenta, zablokować
+                  konto lub zakończyć współpracę w przypadku naruszenia
+                  regulaminu lub przepisów prawa.
+                </li>
+                <li>
+                  Decyzja ta może zostać podjęta bez wcześniejszego uprzedzenia
+                  w sytuacjach rażących naruszeń.
+                </li>
+              </ol>
+            </div>
+
+            <div class="sec">
+              <div class="sec-title">
+                <div class="sec-icon">§</div>
+                <div class="t">§9. Zmiany regulaminu</div>
+              </div>
+              <ol>
+                <li>
+                  Portal PK zastrzega sobie prawo do zmiany niniejszego
+                  regulaminu.
+                </li>
+                <li>
+                  O zmianach Agent zostanie poinformowany drogą elektroniczną
+                  lub poprzez Portal PK.
+                </li>
+                <li>
+                  Dalsze korzystanie z Portalu PK oznacza akceptację zmian.
+                </li>
+              </ol>
+            </div>
+
+            <div class="sec">
+              <div class="sec-title">
+                <div class="sec-icon">§</div>
+                <div class="t">§10. Akceptacja regulaminu</div>
+              </div>
+              <ol>
+                <li>
+                  Założenie konta lub pierwsze zalogowanie do Portalu PK oznacza
+                  akceptację niniejszego regulaminu.
+                </li>
+                <li>
+                  Brak akceptacji regulaminu uniemożliwia korzystanie z Portalu
+                  PK.
+                </li>
+              </ol>
+            </div>
+          </div>
+
+          <div class="accept">
+            <div>
+              <label class="chk">
+                <input type="checkbox" id="acceptChk" disabled />
+                <div>
+                  <div>
+                    <strong>Akceptuję regulamin współpracy</strong> i
+                    zobowiązuję się do jego przestrzegania.
+                  </div>
+                  <div class="hint">
+                    W razie zmian regulaminu portal poprosi o ponowną
+                    akceptację.
+                  </div>
+                </div>
+              </label>
+              <div class="msg" id="regMsg"></div>
+            </div>
+
+            <button id="acceptBtn" class="btn" disabled>
+              Akceptuję i przechodzę dalej
+            </button>
+          </div>
+        </div>
+
+        <div class="footer">
+          <div>
+            Pokonaj Kredyt •
+            <a
+              href="https://www.pokonajkredyt.pl"
+              target="_blank"
+              rel="noreferrer"
+              >www.pokonajkredyt.pl</a
+            >
+          </div>
+          <div>Masz pytania? tel. <strong>503 895 005</strong></div>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      (function () {
+        const chk = document.getElementById("acceptChk");
+        const btn = document.getElementById("acceptBtn");
+        const msg = document.getElementById("regMsg");
+        const verEl = document.getElementById("regVersion");
+
+        const setMsg = (t) => {
+          if (msg) msg.textContent = t || "";
+        };
+
+        async function fetchStatus() {
+          const res = await fetch("/api/regulations/status", {
+            credentials: "include",
+          });
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok) throw new Error(data?.error || "status failed");
+          return data;
+        }
+
+        async function accept() {
+          const res = await fetch("/api/regulations/accept", {
+            method: "POST",
+            credentials: "include",
+          });
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok || !data.ok)
+            throw new Error(data?.error || "accept failed");
+          return data;
+        }
+
+        const box = document.getElementById("regBox");
+        let scrolledToBottom = false;
+
+        function isAtBottom(el) {
+          // tolerancja 3px na różnice w zaokrągleniach
+          return el.scrollTop + el.clientHeight >= el.scrollHeight - 3;
+        }
+
+        function sync() {
+          // checkbox aktywny dopiero po scrollu do końca
+          chk.disabled = !scrolledToBottom;
+
+          // przycisk aktywny dopiero po scrollu + zaznaczeniu checkboxa
+          btn.disabled = !(scrolledToBottom && chk.checked);
+        }
+
+        if (box) {
+          // start: na pewno zablokowane
+          sync();
+
+          box.addEventListener("scroll", () => {
+            if (!scrolledToBottom && isAtBottom(box)) {
+              scrolledToBottom = true;
+              setMsg("✅ Dziękujemy. Możesz teraz zaznaczyć akceptację.");
+              sync();
+            }
+          });
+        } else {
+          console.warn("[regulamin] Brak #regBox – pomijam wymóg scrollu");
+          scrolledToBottom = true;
+          sync();
+        }
+
+        (async () => {
+          try {
+            const s = await fetchStatus();
+            if (verEl && s?.version) verEl.textContent = s.version;
+
+            if (s?.accepted === true) {
+              window.location.href = "/dashboard.html";
+              return;
+            }
+
+            chk.addEventListener("change", sync);
+            sync();
+
+            btn.addEventListener("click", async () => {
+              try {
+                btn.disabled = true;
+                setMsg("Zapisywanie akceptacji...");
+                await accept();
+                setMsg("✅ Zaakceptowano. Przechodzę do dashboardu...");
+                window.location.href = "/dashboard.html";
+              } catch (e) {
+                console.error("[regulamin] accept error:", e);
+                setMsg("❌ Nie udało się zaakceptować. Sprawdź konsolę.");
+                sync();
+              }
+            });
+          } catch (e) {
+            console.error("[regulamin] init error:", e);
+            setMsg(
+              "❌ Nie udało się pobrać statusu regulaminu. Sprawdź backend."
+            );
+          }
+        })();
+      })();
+    </script>
+  </body>
+</html>
