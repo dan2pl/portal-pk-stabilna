@@ -1123,7 +1123,7 @@ async function loadCaseDetails() {
 
     // jeśli initCaseDocuments robi inne rzeczy UI (np. podglądy / zakładki) – zostaw:
     initCaseDocuments(caseId);
-
+    initCaseEmails(caseId);
     attachSaveHandlers(caseId);
     attachFieldChangeMicroFX();
     attachIbanFormatter();
@@ -1137,6 +1137,130 @@ async function loadCaseDetails() {
 // START
 loadCaseDetails();
 
+
+// =====================================================
+//  E-MAILE (MVP): lista + wysyłka dla sprawy
+//  Wymaga w case.html elementów:
+//  #caseEmailTo, #caseEmailBody, #caseEmailSendBtn,
+//  #caseEmailSendStatus, #caseEmailList
+// =====================================================
+
+async function loadCaseEmails(caseId) {
+  const listEl = document.getElementById("caseEmailList");
+  if (!listEl) return;
+
+  listEl.textContent = "Ładowanie...";
+
+  try {
+    const res = await fetch(`/api/cases/${caseId}/emails`, {
+      credentials: "include",
+    });
+    const data = await res.json().catch(() => ({}));
+
+    if (!res.ok || !data.ok) {
+      listEl.textContent = "Błąd pobierania historii maili.";
+      return;
+    }
+
+    const items = Array.isArray(data.items) ? data.items : [];
+    if (!items.length) {
+      listEl.textContent = "Brak wysłanych maili dla tej sprawy.";
+      return;
+    }
+
+    listEl.innerHTML = items
+      .map((m) => {
+        const dtRaw = m.sent_at || m.created_at;
+        const dt = dtRaw ? new Date(dtRaw).toLocaleString("pl-PL") : "—";
+
+        const s = String(m.status || "").toUpperCase();
+        const statusLabel =
+          s === "SENT" ? "✅ wysłany" :
+            s === "ERROR" ? "❌ błąd" :
+              (m.status || "—");
+
+        const toAddr = Array.isArray(m.to_address)
+          ? m.to_address.join(", ")
+          : (m.to_address || "");
+
+        return `
+          <div class="case-email-item">
+            <div><strong>${dt}</strong> — ${statusLabel}</div>
+            <div>Do: ${toAddr}</div>
+            <div>Temat: ${m.subject || ""}</div>
+          </div>
+        `;
+      })
+      .join("");
+  } catch (err) {
+    console.error("loadCaseEmails error:", err);
+    listEl.textContent = "Błąd pobierania historii maili.";
+  }
+}
+
+function initCaseEmails(caseId) {
+  console.log("🔥 initCaseEmails()", caseId);
+
+  const toInput = document.getElementById("caseEmailTo");
+  const bodyInput = document.getElementById("caseEmailBody");
+  const btn = document.getElementById("caseEmailSendBtn");
+  const statusEl = document.getElementById("caseEmailSendStatus");
+
+  if (!btn || !toInput || !bodyInput) {
+    console.warn("❌ Brakuje elementów UI maili", { btn, toInput, bodyInput });
+    return;
+  }
+
+  // nie podpinaj kilka razy
+  if (btn.dataset.bound === "1") return;
+  btn.dataset.bound = "1";
+
+  btn.addEventListener("click", async () => {
+    const to = (toInput.value || "").trim();
+    const text = (bodyInput.value || "").trim();
+
+    if (!to) return alert("Podaj adres e-mail odbiorcy.");
+    if (!text) return alert("Wpisz treść wiadomości.");
+
+    btn.disabled = true;
+    if (statusEl) statusEl.textContent = "Wysyłanie...";
+
+    try {
+      const res = await fetch(`/api/cases/${caseId}/emails`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          to,
+          subject: "Informacja ze sprawy Portal PK",
+          text,
+        }),
+      });
+
+      const data = await res.json().catch(() => ({}));
+
+      if (!res.ok || !data.ok) {
+        if (statusEl) statusEl.textContent = "Błąd: " + (data.error || res.status);
+        return;
+      }
+
+      if (statusEl) statusEl.textContent = "✅ Wysłano";
+      bodyInput.value = "";
+      await loadCaseEmails(caseId);
+    } catch (err) {
+      console.error("send email error:", err);
+      if (statusEl) statusEl.textContent = "Błąd wysyłania (konsola)";
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
+  loadCaseEmails(caseId);
+}
+
+// debug do konsoli
+window.initCaseEmails = initCaseEmails;
+window.loadCaseEmails = loadCaseEmails;
 // === ANIMACJE / case-anim ===
 (function () {
   var mq =

@@ -15,6 +15,7 @@ import { createNotification } from "../utils/createNotification";
 import { updateCaseStatus } from "../services/caseStatus";
 import { isValidCaseStatus } from "../domain/caseStatus";
 import { addCaseLog, fetchCaseLogs } from "../utils/caseLogs";
+import { sendEmail } from "../utils/email";
 
 function sanitizeBody(req, res, next) {
   try {
@@ -489,6 +490,91 @@ export default function casesRoutes(app: Express) {
     }
   });
 
+  // GET /api/cases/:id/emails
+  app.get("/api/cases/:id/emails", requireAuth, async (req, res) => {
+    try {
+      const caseId = Number(req.params.id);
+      if (!caseId) {
+        return res.status(400).json({ ok: false, error: "Invalid case id" });
+      }
+
+      const result = await pool.query(
+        `SELECT
+         id,
+         direction,
+         from_address,
+         to_address,
+         cc_address,
+         bcc_address,
+         subject,
+         body_text,
+         body_html,
+         status,
+         error_message,
+         sent_at,
+         created_at
+       FROM case_emails
+       WHERE case_id = $1
+       ORDER BY created_at DESC`,
+        [caseId]
+      );
+
+      res.json({ ok: true, emails: result.rows });
+    } catch (err) {
+      console.error("❌ GET /api/cases/:id/emails error:", err);
+      res.status(500).json({ ok: false, error: "Server error" });
+    }
+  });
+
+  // ==================================================
+  // SEND EMAIL IN CASE
+  // POST /api/cases/:id/emails
+  // ==================================================
+  app.post(
+    "/api/cases/:id/emails",
+    requireAuth,
+    async (req, res) => {
+      try {
+        const user = (req as any).user;
+        const caseId = Number(req.params.id);
+
+        if (!Number.isFinite(caseId)) {
+          return res.status(400).json({ ok: false, error: "Invalid case id" });
+        }
+
+        const { to, subject, text, html } = req.body || {};
+
+        if (!to || (!text && !html)) {
+          return res.status(400).json({
+            ok: false,
+            error: "Brak danych maila (to / text / html)",
+          });
+        }
+
+        const result = await sendEmail({
+          to,
+          subject: subject || "Informacja ze sprawy Portal PK",
+          text,
+          html,
+          caseId,
+          actorId: user.id,
+          tag: "CASE_EMAIL",
+        });
+
+        if (!result.ok) {
+          return res.status(500).json({
+            ok: false,
+            error: result.error || "Błąd wysyłki maila",
+          });
+        }
+
+        return res.json({ ok: true });
+      } catch (err) {
+        console.error("❌ POST /api/cases/:id/emails error:", err);
+        return res.status(500).json({ ok: false, error: "Server error" });
+      }
+    }
+  );
   // ============================================
   //  GET /api/cases/:id/logs – historia sprawy
   // ============================================

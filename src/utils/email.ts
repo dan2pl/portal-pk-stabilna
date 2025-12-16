@@ -1,13 +1,13 @@
 // src/utils/email.ts
-import nodemailer from "nodemailer";
+import { Resend } from "resend";
 
 export interface SendEmailInput {
   to: string | string[];
   cc?: string | string[] | null;
   bcc?: string | string[] | null;
   subject: string;
-  text?: string | null;   // zwykły tekst z frontu (np. textarea)
-  html?: string | null;   // jeśli kiedyś będziemy chcieli wstrzyknąć własny HTML
+  text?: string | null; // zwykły tekst z frontu (np. textarea)
+  html?: string | null; // jeśli kiedyś będziemy chcieli wstrzyknąć własny HTML
   caseId?: number | null;
   actorId?: number | null;
   tag?: string | null;
@@ -20,25 +20,13 @@ export interface SendEmailResult {
 }
 
 // ----------------------------------------------
-//  SMTP TRANSPORTER (Portal PK)
+//  RESEND CLIENT
 // ----------------------------------------------
-const smtpHost = process.env.SMTP_HOST || "mail.pokonajkredyt.pl";
-const smtpPort = Number(process.env.SMTP_PORT || 465);
-// przy 465 używamy SSL
-const smtpSecure = smtpPort === 465;
-
-const transporter = nodemailer.createTransport({
-  host: smtpHost,
-  port: smtpPort,
-  secure: smtpSecure,
-  auth: {
-    user: process.env.SMTP_USER,
-    pass: process.env.SMTP_PASS,
-  },
-});
+const resendApiKey = process.env.RESEND_API_KEY || "";
+const resend = new Resend(resendApiKey);
 
 // ----------------------------------------------
-//  HELPERY DO HTML
+//  HELPERY DO HTML (zostają)
 // ----------------------------------------------
 function escapeHtml(str: string): string {
   return (str || "")
@@ -67,7 +55,6 @@ function buildPortalEmailHtml(subject: string, bodyText: string): string {
   const safeSubject = escapeHtml(subject || "Informacja ze sprawy Portal PK");
   const bodyHtml = renderBodyAsHtml(bodyText);
 
-  // Tu możesz później podmienić nagłówek na <img src="...logo..." />
   const brandTitle = "Portal PK";
 
   return `<!doctype html>
@@ -77,7 +64,6 @@ function buildPortalEmailHtml(subject: string, bodyText: string): string {
     <title>${safeSubject}</title>
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <style>
-      /* minimum, większość styli i tak trzymamy inline */
       @media (max-width: 640px) {
         .pk-container {
           width: 100% !important;
@@ -91,7 +77,6 @@ function buildPortalEmailHtml(subject: string, bodyText: string): string {
       <tr>
         <td align="center">
           <table role="presentation" class="pk-container" width="620" cellpadding="0" cellspacing="0" style="width:620px; max-width:100%; background-color:#ffffff; border-radius:12px; overflow:hidden; box-shadow:0 8px 24px rgba(15,23,42,0.12);">
-            <!-- HEADER -->
             <tr>
               <td style="background:linear-gradient(90deg,#b91c1c,#7f1d1d); padding:20px 28px;">
                 <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
@@ -107,7 +92,6 @@ function buildPortalEmailHtml(subject: string, bodyText: string): string {
               </td>
             </tr>
 
-            <!-- CONTENT -->
             <tr>
               <td style="padding:24px 28px 8px 28px;">
                 <div style="font-size:16px; font-weight:600; margin-bottom:12px; color:#111827;">
@@ -119,7 +103,6 @@ function buildPortalEmailHtml(subject: string, bodyText: string): string {
               </td>
             </tr>
 
-            <!-- FOOTER -->
             <tr>
               <td style="padding:16px 28px 24px 28px; border-top:1px solid #e5e7eb;">
                 <div style="font-size:11px; color:#6b7280; line-height:1.5;">
@@ -135,7 +118,6 @@ function buildPortalEmailHtml(subject: string, bodyText: string): string {
             </tr>
           </table>
 
-          <!-- drobny dopisek pod kartą -->
           <div style="margin-top:12px; font-size:10px; color:#9ca3af;">
             Proszę nie odpowiadać bezpośrednio na ten e-mail, jeśli w treści wiadomości wskazano inaczej.
           </div>
@@ -147,17 +129,32 @@ function buildPortalEmailHtml(subject: string, bodyText: string): string {
 }
 
 // ----------------------------------------------
-//  Właściwa funkcja wysyłki
+//  HELPERY: normalizacja adresów
+// ----------------------------------------------
+function toArray(v?: string | string[] | null): string[] | undefined {
+  if (!v) return undefined;
+  const arr = Array.isArray(v) ? v : [v];
+  const cleaned = arr.map((x) => String(x || "").trim()).filter(Boolean);
+  return cleaned.length ? cleaned : undefined;
+}
+
+// ----------------------------------------------
+//  Właściwa funkcja wysyłki (RESEND)
 // ----------------------------------------------
 export async function sendEmail(
   opts: SendEmailInput
 ): Promise<SendEmailResult> {
   const from =
-    process.env.MAIL_FROM ||
-    '"Portal PK" <portal@pokonajkredyt.pl>';
+    process.env.MAIL_FROM || 'Portal PK <portal@pokonajkredyt.pl>';
 
-  // Jeżeli ktoś poda własny HTML – używamy go.
-  // Jeżeli NIE poda – budujemy brandowy szablon na bazie `text`.
+  if (!process.env.RESEND_API_KEY) {
+    return {
+      ok: false,
+      messageId: null,
+      error: "Brak RESEND_API_KEY w .env",
+    };
+  }
+
   const htmlBody =
     opts.html ||
     buildPortalEmailHtml(
@@ -166,31 +163,36 @@ export async function sendEmail(
     );
 
   try {
-    const info = await transporter.sendMail({
+    const result = await resend.emails.send({
       from,
-      to: opts.to,
-      cc: opts.cc || undefined,
-      bcc: opts.bcc || undefined,
+      to: toArray(opts.to)!,              // wymagane
+      cc: toArray(opts.cc),
+      bcc: toArray(opts.bcc),
       subject: opts.subject,
-      text: opts.text || undefined, // fallback dla starych klientów poczty
-      html: htmlBody,               // ✨ nasz ładny HTML
+      text: opts.text || undefined,       // fallback
+      html: htmlBody,                     // ✨ nasz ładny HTML
+      headers: {
+        "X-PortalPK-CaseId": String(opts.caseId ?? ""),
+        "X-PortalPK-ActorId": String(opts.actorId ?? ""),
+        "X-PortalPK-Tag": String(opts.tag ?? ""),
+      },
     });
 
-    console.log("📧 EMAIL SENT:", {
+    console.log("📧 EMAIL SENT (Resend):", {
       to: opts.to,
       subject: opts.subject,
-      messageId: info.messageId,
+      messageId: (result as any)?.id,
       caseId: opts.caseId,
       actorId: opts.actorId,
     });
 
     return {
       ok: true,
-      messageId: info.messageId,
+      messageId: (result as any)?.id || null,
       error: null,
     };
   } catch (err: any) {
-    console.error("❌ Email send error:", err);
+    console.error("❌ Email send error (Resend):", err);
 
     return {
       ok: false,
