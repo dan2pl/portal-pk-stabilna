@@ -124,6 +124,7 @@
             <button class="case-tab" data-tab="skd">SKD</button>
             <button class="case-tab" data-tab="docs">Dokumenty</button>
             <button class="case-tab" data-tab="notes">Notatki</button>
+            <button class="case-tab" data-tab="emails">E-maile</button>
             <button class="case-tab" data-tab="history">Historia zmian</button>
           </div>
 
@@ -533,6 +534,65 @@
                       <button class="btn btn-primary" id="btnCaseNotesSave">
                         Zapisz notatki
                       </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            <!--PANEL E-MAIL-->
+            <section
+              class="tab-panel case-anim case-anim-delay-4"
+              data-tab-panel="emails"
+              id="panelEmails"
+            >
+              <div class="accordion">
+                <!-- FORMULARZ WYSYŁKI -->
+                <div class="accordion-item open">
+                  <div class="accordion-header">
+                    <div class="accordion-title">Wyślij e-mail</div>
+                    <div class="accordion-toggle">▼</div>
+                  </div>
+                  <div class="accordion-body">
+                    <div class="field">
+                      <label for="caseEmailTo"
+                        >Adres e-mail klienta / agenta</label
+                      >
+                      <input
+                        id="caseEmailTo"
+                        type="email"
+                        placeholder="np. jan.kowalski@example.com"
+                      />
+                    </div>
+
+                    <div class="field">
+                      <label for="caseEmailBody">Treść wiadomości</label>
+                      <textarea
+                        id="caseEmailBody"
+                        placeholder="Wpisz treść wiadomości..."
+                      ></textarea>
+                    </div>
+
+                    <div class="section-actions">
+                      <button class="btn btn-primary" id="caseEmailSendBtn">
+                        Wyślij wiadomość
+                      </button>
+                      <span id="caseEmailSendStatus" class="hint"></span>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- HISTORIA MAILI -->
+                <div class="accordion-item open">
+                  <div class="accordion-header">
+                    <div class="accordion-title">
+                      Historia e-maili w sprawie
+                    </div>
+                    <div class="accordion-toggle">▼</div>
+                  </div>
+                  <div class="accordion-body">
+                    <div id="caseEmailList" class="case-email-list">
+                      Ładowanie…
                     </div>
                   </div>
                 </div>
