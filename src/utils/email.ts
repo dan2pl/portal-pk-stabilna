@@ -6,8 +6,8 @@ export interface SendEmailInput {
   cc?: string | string[] | null;
   bcc?: string | string[] | null;
   subject: string;
-  text?: string | null; // zwykły tekst z frontu (np. textarea)
-  html?: string | null; // jeśli kiedyś będziemy chcieli wstrzyknąć własny HTML
+  text?: string | null;
+  html?: string | null;
   caseId?: number | null;
   actorId?: number | null;
   tag?: string | null;
@@ -20,13 +20,16 @@ export interface SendEmailResult {
 }
 
 // ----------------------------------------------
-//  RESEND CLIENT
+//  RESEND CLIENT (lazy init – bez crascha na starcie)
 // ----------------------------------------------
-const resendApiKey = process.env.RESEND_API_KEY || "";
-const resend = new Resend(resendApiKey);
+function getResendClient() {
+  const key = process.env.RESEND_API_KEY;
+  if (!key) return null;
+  return new Resend(key);
+}
 
 // ----------------------------------------------
-//  HELPERY DO HTML (zostają)
+//  HELPERY DO HTML
 // ----------------------------------------------
 function escapeHtml(str: string): string {
   return (str || "")
@@ -37,10 +40,7 @@ function escapeHtml(str: string): string {
 
 function renderBodyAsHtml(bodyText: string): string {
   if (!bodyText) return "";
-
-  // Dzielimy na akapity po pustej linii
   const paragraphs = bodyText.split(/\n{2,}/);
-
   return paragraphs
     .map((p) => {
       const escaped = escapeHtml(p).replace(/\n/g, "<br>");
@@ -54,7 +54,6 @@ function renderBodyAsHtml(bodyText: string): string {
 function buildPortalEmailHtml(subject: string, bodyText: string): string {
   const safeSubject = escapeHtml(subject || "Informacja ze sprawy Portal PK");
   const bodyHtml = renderBodyAsHtml(bodyText);
-
   const brandTitle = "Portal PK";
 
   return `<!doctype html>
@@ -65,18 +64,16 @@ function buildPortalEmailHtml(subject: string, bodyText: string): string {
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <style>
       @media (max-width: 640px) {
-        .pk-container {
-          width: 100% !important;
-          padding: 0 12px !important;
-        }
+        .pk-container { width: 100% !important; padding: 0 12px !important; }
       }
     </style>
   </head>
-  <body style="margin:0; padding:0; background-color:#f3f4f6; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+  <body style="margin:0; padding:0; background-color:#f3f4f6; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#f3f4f6; padding:24px 0;">
       <tr>
         <td align="center">
-          <table role="presentation" class="pk-container" width="620" cellpadding="0" cellspacing="0" style="width:620px; max-width:100%; background-color:#ffffff; border-radius:12px; overflow:hidden; box-shadow:0 8px 24px rgba(15,23,42,0.12);">
+          <table role="presentation" class="pk-container" width="620" cellpadding="0" cellspacing="0"
+            style="width:620px; max-width:100%; background-color:#ffffff; border-radius:12px; overflow:hidden; box-shadow:0 8px 24px rgba(15,23,42,0.12);">
             <tr>
               <td style="background:linear-gradient(90deg,#b91c1c,#7f1d1d); padding:20px 28px;">
                 <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
@@ -129,31 +126,16 @@ function buildPortalEmailHtml(subject: string, bodyText: string): string {
 }
 
 // ----------------------------------------------
-//  HELPERY: normalizacja adresów
+//  SEND (RESEND)
 // ----------------------------------------------
-function toArray(v?: string | string[] | null): string[] | undefined {
-  if (!v) return undefined;
-  const arr = Array.isArray(v) ? v : [v];
-  const cleaned = arr.map((x) => String(x || "").trim()).filter(Boolean);
-  return cleaned.length ? cleaned : undefined;
-}
-
-// ----------------------------------------------
-//  Właściwa funkcja wysyłki (RESEND)
-// ----------------------------------------------
-export async function sendEmail(
-  opts: SendEmailInput
-): Promise<SendEmailResult> {
-  const from =
-    process.env.MAIL_FROM || 'Portal PK <portal@pokonajkredyt.pl>';
-
-  if (!process.env.RESEND_API_KEY) {
-    return {
-      ok: false,
-      messageId: null,
-      error: "Brak RESEND_API_KEY w .env",
-    };
+export async function sendEmail(opts: SendEmailInput): Promise<SendEmailResult> {
+  const resend = getResendClient();
+  if (!resend) {
+    return { ok: false, messageId: null, error: "Brak RESEND_API_KEY w .env" };
   }
+
+  // UWAGA: FROM musi być w domenie zweryfikowanej w Resend.
+  const from = process.env.MAIL_FROM || "Portal PK <portal@mail.pokonajkredyt.pl>";
 
   const htmlBody =
     opts.html ||
@@ -162,42 +144,39 @@ export async function sendEmail(
       opts.text || ""
     );
 
+  // Resend lubi tablice stringów
+  const to = Array.isArray(opts.to) ? opts.to : [opts.to];
+  const cc = opts.cc ? (Array.isArray(opts.cc) ? opts.cc : [opts.cc]) : undefined;
+  const bcc = opts.bcc
+    ? (Array.isArray(opts.bcc) ? opts.bcc : [opts.bcc])
+    : undefined;
+
   try {
-    const result = await resend.emails.send({
+    const r = await resend.emails.send({
       from,
-      to: toArray(opts.to)!,              // wymagane
-      cc: toArray(opts.cc),
-      bcc: toArray(opts.bcc),
+      to,
+      cc,
+      bcc,
       subject: opts.subject,
-      text: opts.text || undefined,       // fallback
-      html: htmlBody,                     // ✨ nasz ładny HTML
-      headers: {
-        "X-PortalPK-CaseId": String(opts.caseId ?? ""),
-        "X-PortalPK-ActorId": String(opts.actorId ?? ""),
-        "X-PortalPK-Tag": String(opts.tag ?? ""),
-      },
+      text: opts.text || undefined,
+      html: htmlBody,
     });
 
+    // Resend zwraca { id: "..." } lub { data: { id } } zależnie od wersji SDK
+    const messageId =
+      (r as any)?.id || (r as any)?.data?.id || null;
+
     console.log("📧 EMAIL SENT (Resend):", {
-      to: opts.to,
+      to,
       subject: opts.subject,
-      messageId: (result as any)?.id,
+      messageId,
       caseId: opts.caseId,
       actorId: opts.actorId,
     });
 
-    return {
-      ok: true,
-      messageId: (result as any)?.id || null,
-      error: null,
-    };
+    return { ok: true, messageId, error: null };
   } catch (err: any) {
     console.error("❌ Email send error (Resend):", err);
-
-    return {
-      ok: false,
-      messageId: null,
-      error: err?.message || String(err),
-    };
+    return { ok: false, messageId: null, error: err?.message || String(err) };
   }
 }

@@ -494,87 +494,120 @@ export default function casesRoutes(app: Express) {
   app.get("/api/cases/:id/emails", requireAuth, async (req, res) => {
     try {
       const caseId = Number(req.params.id);
-      if (!caseId) {
+      if (!Number.isFinite(caseId)) {
         return res.status(400).json({ ok: false, error: "Invalid case id" });
       }
 
-      const result = await pool.query(
+      const r = await pool.query(
         `SELECT
-         id,
-         direction,
-         from_address,
-         to_address,
-         cc_address,
-         bcc_address,
-         subject,
-         body_text,
-         body_html,
-         status,
-         error_message,
-         sent_at,
-         created_at
-       FROM case_emails
-       WHERE case_id = $1
-       ORDER BY created_at DESC`,
+         e.id,
+         e.case_id,
+         e.direction,
+         e.from_address,
+         e.to_address,
+         e.cc_address,
+         e.bcc_address,
+         e.subject,
+         e.body_text,
+         e.body_html,
+         e.status,
+         e.error_message,
+         e.sent_at,
+         e.created_at,
+         e.sent_by,
+         u.name  AS sent_by_name,
+         u.email AS sent_by_email
+       FROM case_emails e
+       LEFT JOIN users u ON u.id = e.sent_by
+       WHERE e.case_id = $1
+       ORDER BY COALESCE(e.sent_at, e.created_at) DESC`,
         [caseId]
       );
 
-      res.json({ ok: true, emails: result.rows });
+      return res.json({ ok: true, emails: r.rows });
     } catch (err) {
       console.error("❌ GET /api/cases/:id/emails error:", err);
-      res.status(500).json({ ok: false, error: "Server error" });
+      return res.status(500).json({ ok: false, error: "Server error" });
     }
   });
 
-  // ==================================================
+  // ============================================
   // SEND EMAIL IN CASE
   // POST /api/cases/:id/emails
-  // ==================================================
-  app.post(
-    "/api/cases/:id/emails",
-    requireAuth,
-    async (req, res) => {
-      try {
-        const user = (req as any).user;
-        const caseId = Number(req.params.id);
+  // ============================================
+  app.post("/api/cases/:id/emails", requireAuth, async (req, res) => {
+    try {
+      const user: any = (req as any).user;
+      const caseId = Number(req.params.id);
 
-        if (!Number.isFinite(caseId)) {
-          return res.status(400).json({ ok: false, error: "Invalid case id" });
-        }
-
-        const { to, subject, text, html } = req.body || {};
-
-        if (!to || (!text && !html)) {
-          return res.status(400).json({
-            ok: false,
-            error: "Brak danych maila (to / text / html)",
-          });
-        }
-
-        const result = await sendEmail({
-          to,
-          subject: subject || "Informacja ze sprawy Portal PK",
-          text,
-          html,
-          caseId,
-          actorId: user.id,
-          tag: "CASE_EMAIL",
-        });
-
-        if (!result.ok) {
-          return res.status(500).json({
-            ok: false,
-            error: result.error || "Błąd wysyłki maila",
-          });
-        }
-
-        return res.json({ ok: true });
-      } catch (err) {
-        console.error("❌ POST /api/cases/:id/emails error:", err);
-        return res.status(500).json({ ok: false, error: "Server error" });
+      if (!Number.isFinite(caseId)) {
+        return res.status(400).json({ ok: false, error: "Invalid case id" });
       }
+
+      const { to, cc, bcc, subject, text, html } = req.body || {};
+
+      if (!to || !subject || (!text && !html)) {
+        return res.status(400).json({
+          ok: false,
+          error: "Brak danych maila (to / subject / text lub html)",
+        });
+      }
+
+      const result = await sendEmail({
+        to,
+        cc: cc ?? null,
+        bcc: bcc ?? null,
+        subject,
+        text: text ?? null,
+        html: html ?? null,
+        caseId,
+        actorId: user?.id ?? null,
+        tag: "CASE_EMAIL",
+      });
+
+      // po: const result = await sendEmail(...)
+
+      if (!result.ok) {
+        return res.status(500).json({ ok: false, error: result.error || "Send failed" });
+      }
+
+      // ZAPIS DO DB (case_emails)
+      const fromAddress =
+        process.env.MAIL_FROM || "Portal PK <portal@mail.pokonajkredyt.pl>";
+
+      // normalizacja do tablic text[]
+      const toArr = Array.isArray(to) ? to : [to];
+      const ccArr =
+        cc ? (Array.isArray(cc) ? cc : [cc]) : null;
+      const bccArr =
+        bcc ? (Array.isArray(bcc) ? bcc : [bcc]) : null;
+
+      await pool.query(
+        `INSERT INTO case_emails
+    (case_id, direction, from_address, to_address, cc_address, bcc_address,
+     subject, body_text, body_html, status, error_message, sent_by, sent_at)
+   VALUES
+    ($1, 'sent', $2, $3, $4, $5,
+     $6, $7, $8, 'sent', NULL, $9, NOW())`,
+        [
+          caseId,
+          fromAddress,
+          toArr,
+          ccArr,
+          bccArr,
+          subject,
+          text ?? null,
+          html ?? null, // albo jeśli wysyłasz zawsze htmlBody: wstaw to co faktycznie poszło
+          user?.id ?? null,
+        ]
+      );
+
+      return res.json({ ok: true, messageId: result.messageId || null });
+    } catch (err: any) {
+      console.error("❌ POST /api/cases/:id/emails error:", err);
+      return res.status(500).json({ ok: false, error: "Server error" });
     }
-  );
+  });
   // ============================================
   //  GET /api/cases/:id/logs – historia sprawy
   // ============================================

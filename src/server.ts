@@ -1,10 +1,13 @@
+import dotenv from "dotenv";
+dotenv.config(); // <- MUSI być przed importami routes/utils/db
+
 import express from "express";
 import cors from "cors";
 import path from "path";
-import dotenv from "dotenv";
 import cookieParser from "cookie-parser";
 import session from "express-session";
 import helmet from "helmet";
+
 import publicLeadsRoutes from "./routes/publicLeads";
 const PgSession = require("connect-pg-simple")(session);
 
@@ -13,8 +16,6 @@ import pool from "./db";
 import authRoutes from "./routes/auth";
 import casesRoutes from "./routes/cases";
 import notificationsRoutes from "./routes/notifications";
-
-dotenv.config();
 
 // ==========================================
 //   GLOBAL MIDDLEWARE — sanitizeBody
