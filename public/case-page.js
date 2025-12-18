@@ -1137,7 +1137,12 @@ async function loadCaseDetails() {
 // START
 loadCaseDetails();
 
-
+function getEmailsListEl() {
+  return (
+    document.getElementById("caseEmailList") ||
+    document.getElementById("caseEmailsList")
+  );
+}
 // =====================================================
 //  E-MAILE (MVP): lista + wysyłka dla sprawy
 //  Wymaga w case.html elementów:
@@ -1146,55 +1151,73 @@ loadCaseDetails();
 // =====================================================
 
 async function loadCaseEmails(caseId) {
-  const listEl = document.getElementById("caseEmailList");
-  if (!listEl) return;
+  const listEl = getEmailsListEl();
+  if (!listEl) {
+    console.warn("[emails] brak #caseEmailList/#caseEmailsList");
+    return;
+  }
 
-  listEl.textContent = "Ładowanie...";
+  listEl.textContent = "Ładowanie…";
 
   try {
     const res = await fetch(`/api/cases/${caseId}/emails`, {
       credentials: "include",
     });
+
     const data = await res.json().catch(() => ({}));
-
-    if (!res.ok || !data.ok) {
-      listEl.textContent = "Błąd pobierania historii maili.";
+    if (!res.ok || data?.ok !== true) {
+      listEl.textContent = "Nie udało się pobrać e-maili.";
+      console.error("[emails] GET failed:", res.status, data);
       return;
     }
 
-    const items = Array.isArray(data.items) ? data.items : [];
-    if (!items.length) {
-      listEl.textContent = "Brak wysłanych maili dla tej sprawy.";
+    const emails = Array.isArray(data.emails) ? data.emails : [];
+
+    if (!emails.length) {
+      listEl.textContent = "Brak e-maili w tej sprawie.";
       return;
     }
 
-    listEl.innerHTML = items
-      .map((m) => {
-        const dtRaw = m.sent_at || m.created_at;
-        const dt = dtRaw ? new Date(dtRaw).toLocaleString("pl-PL") : "—";
+    const esc = (s) =>
+      String(s ?? "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;");
 
-        const s = String(m.status || "").toUpperCase();
-        const statusLabel =
-          s === "SENT" ? "✅ wysłany" :
-            s === "ERROR" ? "❌ błąd" :
-              (m.status || "—");
+    listEl.innerHTML = emails
+      .map((e) => {
+        const to = Array.isArray(e.to_address)
+          ? e.to_address.join(", ")
+          : (e.to_address || "");
 
-        const toAddr = Array.isArray(m.to_address)
-          ? m.to_address.join(", ")
-          : (m.to_address || "");
+        const from = e.from_address || "";
+        const whenRaw = e.sent_at || e.created_at || "";
+        const when = whenRaw ? new Date(whenRaw).toLocaleString("pl-PL") : "—";
+        const subj = e.subject || "(bez tematu)";
+        const status = (e.status || "").toLowerCase();
+
+        const body =
+          e.body_text ||
+          (e.body_html ? "[HTML]" : "");
 
         return `
-          <div class="case-email-item">
-            <div><strong>${dt}</strong> — ${statusLabel}</div>
-            <div>Do: ${toAddr}</div>
-            <div>Temat: ${m.subject || ""}</div>
+          <div class="case-email-item" style="padding:12px 0;border-bottom:1px solid #eee;">
+            <div style="display:flex;gap:10px;align-items:center;justify-content:space-between;">
+              <div style="font-weight:700;">${esc(subj)}</div>
+              <div style="font-size:12px;opacity:.7;">${esc(status)} · ${esc(when)}</div>
+            </div>
+            <div style="font-size:12px;opacity:.85;margin-top:4px;">
+              <div><strong>Od:</strong> ${esc(from)}</div>
+              <div><strong>Do:</strong> ${esc(to)}</div>
+            </div>
+            <div style="margin-top:8px;white-space:pre-wrap;">${esc(body)}</div>
           </div>
         `;
       })
       .join("");
   } catch (err) {
-    console.error("loadCaseEmails error:", err);
-    listEl.textContent = "Błąd pobierania historii maili.";
+    console.error("[emails] loadCaseEmails error:", err);
+    listEl.textContent = "Błąd ładowania e-maili (sprawdź konsolę).";
   }
 }
 

@@ -51,7 +51,7 @@ function renderBodyAsHtml(bodyText: string): string {
     .join("");
 }
 
-function buildPortalEmailHtml(subject: string, bodyText: string): string {
+export function buildPortalEmailHtml(subject: string, bodyText: string): string {
   const safeSubject = escapeHtml(subject || "Informacja ze sprawy Portal PK");
   const bodyHtml = renderBodyAsHtml(bodyText);
   const brandTitle = "Portal PK";

@@ -15,7 +15,7 @@ import { createNotification } from "../utils/createNotification";
 import { updateCaseStatus } from "../services/caseStatus";
 import { isValidCaseStatus } from "../domain/caseStatus";
 import { addCaseLog, fetchCaseLogs } from "../utils/caseLogs";
-import { sendEmail } from "../utils/email";
+import { sendEmail, buildPortalEmailHtml } from "../utils/email";
 
 function sanitizeBody(req, res, next) {
   try {
@@ -553,56 +553,82 @@ export default function casesRoutes(app: Express) {
         });
       }
 
-      const result = await sendEmail({
-        to,
-        cc: cc ?? null,
-        bcc: bcc ?? null,
-        subject,
-        text: text ?? null,
-        html: html ?? null,
-        caseId,
-        actorId: user?.id ?? null,
-        tag: "CASE_EMAIL",
-      });
+      // przygotuj HTML raz (jeśli ktoś podał html z frontu – użyj go, jeśli nie – zbuduj z text)
+const htmlToSendAndStore =
+  html ??
+  buildPortalEmailHtml(
+    subject || "Informacja ze sprawy Portal PK",
+    text || ""
+  );
 
-      // po: const result = await sendEmail(...)
+const result = await sendEmail({
+  to,
+  cc: cc ?? null,
+  bcc: bcc ?? null,
+  subject,
+  text: text ?? null,
+  html: htmlToSendAndStore, // <-- to jest klucz
+  caseId,
+  actorId: user?.id ?? null,
+  tag: "CASE_EMAIL",
+});
 
-      if (!result.ok) {
-        return res.status(500).json({ ok: false, error: result.error || "Send failed" });
-      }
+if (!result.ok) {
+  return res
+    .status(500)
+    .json({ ok: false, error: result.error || "Send failed" });
+}
 
-      // ZAPIS DO DB (case_emails)
-      const fromAddress =
-        process.env.MAIL_FROM || "Portal PK <portal@mail.pokonajkredyt.pl>";
+// ZAPIS DO DB (case_emails)
+const fromAddress =
+  process.env.MAIL_FROM || "Portal PK <portal@mail.pokonajkredyt.pl>";
 
-      // normalizacja do tablic text[]
-      const toArr = Array.isArray(to) ? to : [to];
-      const ccArr =
-        cc ? (Array.isArray(cc) ? cc : [cc]) : null;
-      const bccArr =
-        bcc ? (Array.isArray(bcc) ? bcc : [bcc]) : null;
+// normalizacja do tablic text[]
+const normalizeEmails = (v: any): string[] => {
+  if (!v) return [];
+  if (Array.isArray(v)) return v.map((s) => String(s || "").trim()).filter(Boolean);
+  return String(v || "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+};
 
-      await pool.query(
-        `INSERT INTO case_emails
-    (case_id, direction, from_address, to_address, cc_address, bcc_address,
-     subject, body_text, body_html, status, error_message, sent_by, sent_at)
+const toArr = normalizeEmails(to);
+if (!toArr.length) {
+  return res.status(400).json({ ok: false, error: "Brak adresu odbiorcy" });
+}
+const ccArr = normalizeEmails(cc);
+const bccArr = normalizeEmails(bcc);
+
+if (!toArr.length) {
+  return res.status(400).json({ ok: false, error: "Brak adresu odbiorcy" });
+}
+
+const ins = await pool.query(
+  `INSERT INTO case_emails
+   (case_id, direction, from_address, to_address, cc_address, bcc_address,
+    subject, body_text, body_html, status, error_message, sent_by, sent_at)
    VALUES
-    ($1, 'sent', $2, $3, $4, $5,
-     $6, $7, $8, 'sent', NULL, $9, NOW())`,
-        [
-          caseId,
-          fromAddress,
-          toArr,
-          ccArr,
-          bccArr,
-          subject,
-          text ?? null,
-          html ?? null, // albo jeśli wysyłasz zawsze htmlBody: wstaw to co faktycznie poszło
-          user?.id ?? null,
-        ]
-      );
+   ($1, 'sent', $2, $3, $4, $5,
+    $6, $7, $8, 'sent', NULL, $9, NOW())
+   RETURNING id, created_at`,
+  [
+    caseId,
+    fromAddress,
+    toArr,
+    ccArr.length ? ccArr : null,
+    bccArr.length ? bccArr : null,
+    subject,
+    text ?? null,
+    htmlToSendAndStore,
+    user?.id ?? null,
+  ]
+);
 
-      return res.json({ ok: true, messageId: result.messageId || null });
+console.log("✅ case_emails INSERT ok:", ins.rows[0]);
+return res.json({ ok: true, messageId: result.messageId || null, row: ins.rows[0] });
+
+return res.json({ ok: true, messageId: result.messageId || null });
     } catch (err: any) {
       console.error("❌ POST /api/cases/:id/emails error:", err);
       return res.status(500).json({ ok: false, error: "Server error" });
