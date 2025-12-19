@@ -16,6 +16,7 @@ import { updateCaseStatus } from "../services/caseStatus";
 import { isValidCaseStatus } from "../domain/caseStatus";
 import { addCaseLog, fetchCaseLogs } from "../utils/caseLogs";
 import { sendEmail, buildPortalEmailHtml } from "../utils/email";
+import { computeSkdV2 } from "../skd/skdEngineV2";
 
 function sanitizeBody(req, res, next) {
   try {
@@ -1403,59 +1404,94 @@ return res.json({ ok: true, messageId: result.messageId || null });
       }
 
       try {
-        const { wps_forecast } = req.body || {};
-        const wpsNumber = Number(wps_forecast);
+        // 1) Pobierz dane kredytu z DB (źródło prawdy)
+const base = await pool.query(
+  `
+  SELECT
+    id,
+    client,
+    loan_amount,
+    bank,
+    contract_date,
+    loan_term_months,
+    interest_rate_annual,
+    loan_amount_total,
+    loan_amount_net,
+    installment_amount_real
+  FROM cases
+  WHERE id = $1
+  `,
+  [caseId]
+);
 
-        if (!Number.isFinite(wpsNumber)) {
-          return res
-            .status(400)
-            .json({ error: "Nieprawidłowa wartość WPS (prognoza)." });
-        }
+if (!base.rows.length) {
+  return res.status(404).json({ error: "Nie znaleziono sprawy." });
+}
 
-        console.log(
-          `[WPS-BASIC] user=${user.id}, role=${user.role}, case=${caseId}, wps_forecast=${wpsNumber}`
-        );
+const c = base.rows[0];
 
-        const result = await pool.query(
-          `
-        UPDATE cases
-        SET wps_forecast = $1
-        WHERE id = $2
-        RETURNING id, client, loan_amount, bank, wps_forecast
-        `,
-          [wpsNumber, caseId]
-        );
+// 2) Policz WPS v2 (KONTRAKT) – nie ufamy frontendowi
+if (!c.contract_date || !c.loan_term_months || !c.interest_rate_annual || !c.loan_amount_total || !c.loan_amount_net) {
+  return res.status(400).json({ error: "Brak kompletu danych kredytu do wyliczenia WPS v2." });
+}
+const out = computeSkdV2({
+  contractDate: c.contract_date,
+  termMonths: Number(c.loan_term_months),
+  aprStartPct: Number(c.interest_rate_annual),
+  loanGross: Number(c.loan_amount_total),
+  loanNet: Number(c.loan_amount_net),
+  installment: c.installment_amount_real != null ? Number(c.installment_amount_real) : null,
+  wiborType: "3M",
+});
 
-        if (result.rowCount === 0) {
-          return res.status(404).json({ error: "Nie znaleziono sprawy." });
-        }
+const wpsNumber = Math.max(0, Math.round(Number(out.wpsToday)));
 
-        const row = result.rows[0];
+// 3) Zapisz wynik do cases
+const result = await pool.query(
+  `
+  UPDATE cases
+  SET wps_forecast = $1
+  WHERE id = $2
+  RETURNING id, client, loan_amount, bank, wps_forecast
+  `,
+  [wpsNumber, caseId]
+);
 
-        // 🔔 POWIADOMIENIE: zapisano WPS (prognoza)
-        try {
-          await createNotification({
-            userId: user.id,          // na razie powiadamiamy tego, kto zapisał
-            caseId,
-            type: "wps_forecast_saved",
-            title: `Zapisano WPS (prognoza) dla sprawy #${row.id}`,
-            body: `Nowa prognoza WPS: ${wpsNumber.toLocaleString("pl-PL")} PLN` +
-              (row.client ? ` (klient: ${row.client})` : ""),
-            meta: {
-              wps_forecast: wpsNumber,
-              loan_amount: row.loan_amount,
-              bank: row.bank,
-            },
-          });
-        } catch (notifErr) {
-          console.warn("[NOTIF] wps_forecast_saved error:", notifErr);
-          // nie blokujemy odpowiedzi dla klienta
-        }
+const row = result.rows[0];
 
-        return res.json({
-          ok: true,
-          case: row,
-        });
+console.log(
+  `[WPS-BASIC:v2] user=${user.id}, role=${user.role}, case=${caseId}, wps_forecast=${wpsNumber}`
+);
+
+// 🔔 POWIADOMIENIE: zapisano WPS (prognoza) — BEZ ZMIAN w Twojej logice
+try {
+  await createNotification({
+    userId: user.id,
+    caseId,
+    type: "wps_forecast_saved",
+    title: `Zapisano WPS (prognoza) dla sprawy #${row.id}`,
+    body:
+      `Nowa prognoza WPS: ${wpsNumber.toLocaleString("pl-PL")} PLN` +
+      (row.client ? ` (klient: ${row.client})` : ""),
+    meta: {
+      wps_forecast: wpsNumber,
+      loan_amount: row.loan_amount,
+      bank: row.bank,
+    },
+  });
+} catch (notifErr) {
+  console.warn("[NOTIF] wps_forecast_saved error:", notifErr);
+}
+
+return res.json({
+  ok: true,
+  case: row,
+  skd_v2: { // opcjonalnie, mega przydatne na chwilę do debug
+    monthsPaid: out.monthsPaid,
+    marginStartPct: out.marginStartPct,
+    wiborStartPct: out.wiborStartPct,
+  },
+});
       } catch (err) {
         console.error("Błąd PATCH /api/cases/:id/wps-basic:", err);
         return res
@@ -1464,6 +1500,42 @@ return res.json({ ok: true, messageId: result.messageId || null });
       }
     }
   );
+// PREVIEW — liczy WPS v2 na backendzie (bez zapisu)
+app.post(
+  "/api/cases/:id/wps-basic/preview",
+  softApiLimit,
+  requireAuth,
+  async (req, res) => {
+    const user = (req as any).user;
+    const caseId = Number(req.params.id);
+
+    if (!Number.isFinite(caseId)) {
+      return res.status(400).json({ ok: false, error: "Nieprawidłowe ID sprawy." });
+    }
+
+    const allowed = await verifyCaseOwnership(caseId, user);
+    if (allowed === null) return res.status(404).json({ ok: false, error: "Nie znaleziono sprawy." });
+    if (!allowed) return res.status(403).json({ ok: false, error: "Brak dostępu do tej sprawy" });
+
+    try {
+      const body = req.body || {};
+
+      const out = computeSkdV2({
+        contractDate: body.contractDate,
+        termMonths: Number(body.termMonths),
+        aprStartPct: Number(body.aprStartPct),
+        loanGross: Number(body.loanGross),
+        loanNet: Number(body.loanNet),
+        installment: body.installment != null ? Number(body.installment) : null,
+        wiborType: "3M",
+      });
+
+      return res.json({ ok: true, result: out });
+    } catch (e: any) {
+      return res.status(400).json({ ok: false, error: e?.message || "SKD v2 error" });
+    }
+  }
+);
 
   // === ZAPIS OFERTY SKD (PUT — twarda walidacja) ===
   app.put(

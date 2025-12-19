@@ -2964,42 +2964,70 @@ try {
   console.warn("Nie udało się nadpisać initSkdOffer:", e);
 }
 
-// ← domknięcie brakującego bloku, np. funkcji lub DOMContentLoaded
-// Prosty silnik WPS Basic — używany przez modal „WPS Basic (silnik SKD)”
-function calculateWpsBasic({
+// ==========================================
+// WPS Basic v2 — LICZONY W BACKENDZIE (SKD v2)
+// ŹRÓDŁA PRAWDY:
+// - caseId: #wpsCaseId
+// - contract_date: #wpsContractDate
+// ==========================================
+async function calculateWpsBasic({
   loan_amount_net,
   loan_amount_total,
   loan_term_months,
-  installments_paid,
   installment_amount_real,
+  interest_nominal,
+  contract_date,
 }) {
-  const net = Number(loan_amount_net) || 0;     // kwota „na rękę”
-  const term = Number(loan_term_months) || 0;   // okres (miesiące)
-  const paid = Number(installments_paid) || 0;  // ile rat zapłacono
-  let inst = Number(installment_amount_real) || 0; // realna rata
+  const net = Number(loan_amount_net) || 0;
+  const gross = Number(loan_amount_total) || 0;
+  const termMonths = Number(loan_term_months) || 0;
+  const aprStartPct = Number(interest_nominal) || 0;
 
-  // Musimy mieć przynajmniej te trzy rzeczy
-  if (!net || !term || !paid) return null;
+  const installment = (installment_amount_real != null && Number(installment_amount_real) > 0)
+    ? Number(installment_amount_real)
+    : null;
 
-  // Jeśli nie podano raty – policz ją z kwoty całkowitej
-  if (!inst) {
-    const total = Number(loan_amount_total) || 0;
-    if (!total) return null;
-    inst = total / term;
+  // caseId zawsze z DOM (żadnych resolveCaseId / window.caseData)
+  const caseIdEl = document.getElementById("wpsCaseId");
+  const caseId = caseIdEl ? Number(caseIdEl.value) : NaN;
+
+  if (!Number.isFinite(caseId) || caseId <= 0) return null;
+  if (!net || !gross || !termMonths || !aprStartPct) return null;
+  if (!contract_date) return null;
+
+  const res = await fetch(`/api/cases/${caseId}/wps-basic/preview`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      contractDate: contract_date,
+      termMonths,
+      aprStartPct,
+      loanGross: gross,
+      loanNet: net,
+      installment,
+    }),
+  });
+
+  if (!res.ok) {
+    // debug minimalny — żebyś widział czemu nie liczy
+    const txt = await res.text().catch(() => "");
+    console.warn("[WPS] preview HTTP", res.status, txt);
+    return null;
   }
 
-  const totalPaid = paid * inst;                     // ile już wpłacono
-  const usedRatio = Math.min(1, Math.max(0, paid / term));
-  const theoreticalUsed = net * usedRatio;                 // „uczciwy” koszt wykorzystanej części
+  const data = await res.json().catch(() => null);
+  if (!data?.ok) {
+    console.warn("[WPS] preview ok=false", data);
+    return null;
+  }
+console.log("[WPS v2 debug]", data.result);
 
-  const wpsRaw = totalPaid - theoreticalUsed;
-
-  if (!Number.isFinite(wpsRaw)) return null;
-
-  // Jeżeli wychodzi <= 0 → traktujemy jako 0 zł, a nie „brak danych”
-  const wps = Math.round(wpsRaw);
-  return wps > 0 ? wps : 0;
+  const wps = Math.max(0, Math.round(Number(data.result?.wpsToday)));
+  return Number.isFinite(wps) ? wps : null;
 }
+
+
+
 // ===============================
 //   WPS BASIC — obsługa UI + zapis + oferta SKD
 // ===============================
@@ -3018,6 +3046,9 @@ let lastWpsBasic = null;
   const installmentRealInput = document.getElementById("wpsInstallmentReal");
   const resultEl = document.getElementById("wpsResultValue");
   const interestInput = document.getElementById("wpsInterestInput");
+  const contractDateInput = document.getElementById("wpsContractDate");
+  const contract_date = contractDateInput?.value || null;
+
 
   // 🔹 ID sprawy – z pola, window.caseData albo URL
   function resolveCaseId() {
@@ -3070,6 +3101,8 @@ let lastWpsBasic = null;
       if (paidInput && data.installments_paid != null) paidInput.value = data.installments_paid;
       if (installmentRealInput && data.installment_amount_real != null) installmentRealInput.value = data.installment_amount_real;
       if (interestInput && data.interest_nominal != null) interestInput.value = data.interest_nominal;
+      if (contractDateInput && data.contract_date != null) contractDateInput.value = data.contract_date;
+
     } catch (e) {
       console.warn("WPS: nie udało się odczytać localStorage:", e);
     }
@@ -3087,6 +3120,8 @@ let lastWpsBasic = null;
       installments_paid: paidInput?.value || "",
       installment_amount_real: installmentRealInput?.value || "",
       interest_nominal: interestInput?.value || "",
+      contract_date: contractDateInput?.value || "",
+
     };
 
     try {
@@ -3121,30 +3156,33 @@ let lastWpsBasic = null;
   }
 
   // 2) PRZELICZ WPS
-  btnCalc.addEventListener("click", () => {
-    const loan_amount_net = parseNumber(loanNetInput);
-    const loan_amount_total = parseNumber(loanTotalInput);
-    const loan_term_months = parseNumber(termInput);
-    const installments_paid = parseNumber(paidInput);
-    const installment_amount_real = parseNumber(installmentRealInput);
+  btnCalc.addEventListener("click", async () => {
 
-    if (!loan_amount_net || !loan_term_months || !installments_paid) {
-      alert("Uzupełnij kwotę netto, okres kredytu i liczbę zapłaconych rat.");
-      return;
-    }
+  const loan_amount_net = parseNumber(loanNetInput);
+  const loan_amount_total = parseNumber(loanTotalInput);
+  const loan_term_months = parseNumber(termInput);
+  const installments_paid = parseNumber(paidInput);
+  const installment_amount_real = parseNumber(installmentRealInput);
+  const interest_nominal = parseNumber(interestInput);
 
-    if (!installment_amount_real && !loan_amount_total) {
-      alert("Podaj ratę faktyczną ALBO kwotę całkowitą umowy (żeby ją wyliczyć).");
-      return;
-    }
+  const contract_date = contractDateInput?.value || null;
 
-    const wps = calculateWpsBasic({
-      loan_amount_net,
-      loan_amount_total,
-      loan_term_months,
-      installments_paid,
-      installment_amount_real,
-    });
+  console.log("[WPS UI] contract_date =", contract_date);
+
+  if (!contract_date) {
+    alert("Podaj datę zawarcia umowy.");
+    return;
+  }
+
+  const wps = await calculateWpsBasic({
+    loan_amount_net,
+    loan_amount_total,
+    loan_term_months,
+    installment_amount_real,
+    interest_nominal: parseNumber(interestInput),
+    contract_date,
+  });
+
 
     if (wps === null) {
       resultEl.textContent = "brak danych";
@@ -3256,6 +3294,7 @@ window.addEventListener("beforeunload", (e) => {
     // w razie czego nie blokujemy wyjścia
   }
 });
+
 
 // ==========================================
 //    DELETE CASE + POWIADOMIENIA
