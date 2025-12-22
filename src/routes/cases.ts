@@ -1385,7 +1385,7 @@ return res.json({ ok: true, messageId: result.messageId || null });
     "/api/cases/:id/wps-basic",
     mediumApiLimit,
     requireAuth,
-    denyUnknownFields(["wps_forecast"]),
+    
     async (req, res) => {
       const user = (req as any).user;
       const idRaw = req.params.id;
@@ -1404,67 +1404,98 @@ return res.json({ ok: true, messageId: result.messageId || null });
       }
 
       try {
-        // 1) Pobierz dane kredytu z DB (źródło prawdy)
-const base = await pool.query(
-  `
-  SELECT
-    id,
-    client,
-    loan_amount,
-    bank,
-    contract_date,
-    loan_term_months,
-    interest_rate_annual,
-    loan_amount_total,
-    loan_amount_net,
-    installment_amount_real
-  FROM cases
-  WHERE id = $1
-  `,
-  [caseId]
-);
+  // 0) UZUPEŁNIJ DANE KREDYTU Z BODY (jeśli przyszły z frontu)
+  await pool.query(
+    `
+    UPDATE cases
+    SET
+      contract_date           = COALESCE($1::date, contract_date),
+      loan_term_months        = COALESCE($2::int, loan_term_months),
+      interest_rate_annual    = COALESCE($3::numeric, interest_rate_annual),
+      loan_amount_total       = COALESCE($4::numeric, loan_amount_total),
+      loan_amount_net         = COALESCE($5::numeric, loan_amount_net),
+      installment_amount_real = COALESCE($6::numeric, installment_amount_real)
+    WHERE id = $7
+    `,
+    [
+      req.body?.contract_date ?? null,
+      req.body?.loan_term_months ?? null,
+      req.body?.interest_rate_annual ?? null,
+      req.body?.loan_amount_total ?? null,
+      req.body?.loan_amount_net ?? null,
+      req.body?.installment_amount_real ?? null,
+      caseId,
+    ]
+  );
 
-if (!base.rows.length) {
-  return res.status(404).json({ error: "Nie znaleziono sprawy." });
-}
+const c = await loadCaseForUser(caseId, user);
 
-const c = base.rows[0];
-
-// 2) Policz WPS v2 (KONTRAKT) – nie ufamy frontendowi
-if (!c.contract_date || !c.loan_term_months || !c.interest_rate_annual || !c.loan_amount_total || !c.loan_amount_net) {
+if (
+  c.contract_date == null ||
+  c.loan_term_months == null ||
+  c.interest_rate_annual == null ||
+  c.loan_amount_total == null ||
+  c.loan_amount_net == null
+) {
   return res.status(400).json({ error: "Brak kompletu danych kredytu do wyliczenia WPS v2." });
 }
-const out = computeSkdV2({
-  contractDate: c.contract_date,
-  termMonths: Number(c.loan_term_months),
-  aprStartPct: Number(c.interest_rate_annual),
-  loanGross: Number(c.loan_amount_total),
-  loanNet: Number(c.loan_amount_net),
-  installment: c.installment_amount_real != null ? Number(c.installment_amount_real) : null,
-  wiborType: "3M",
-});
 
-const wpsNumber = Math.max(0, Math.round(Number(out.wpsToday)));
 
-// 3) Zapisz wynik do cases
-const result = await pool.query(
-  `
-  UPDATE cases
-  SET wps_forecast = $1
-  WHERE id = $2
-  RETURNING id, client, loan_amount, bank, wps_forecast
-  `,
-  [wpsNumber, caseId]
-);
+  // 2) LICZENIE WPS v2
+  const out = computeSkdV2({
+    contractDate: c.contract_date,
+    termMonths: Number(c.loan_term_months),
+    aprStartPct: Number(c.interest_rate_annual),
+    loanGross: Number(c.loan_amount_total),
+    loanNet: Number(c.loan_amount_net),
+    installment:
+      c.installment_amount_real != null
+        ? Number(c.installment_amount_real)
+        : null,
+    wiborType: "3M",
+  });
 
-const row = result.rows[0];
+  const wpsNumber = Math.max(0, Math.round(Number(out.wpsToday)));
 
-console.log(
-  `[WPS-BASIC:v2] user=${user.id}, role=${user.role}, case=${caseId}, wps_forecast=${wpsNumber}`
-);
+  // 3) ZAPIS WPS
+  const result = await pool.query(
+    `
+    UPDATE cases
+    SET wps_forecast = $1
+    WHERE id = $2
+    RETURNING id, client, loan_amount, bank, wps_forecast
+    `,
+    [wpsNumber, caseId]
+  );
 
-// 🔔 POWIADOMIENIE: zapisano WPS (prognoza) — BEZ ZMIAN w Twojej logice
-try {
+  try {
+  await pool.query(
+    `
+    INSERT INTO cases_wps_history (case_id, user_id, wps_forecast, wps_input, note)
+    VALUES ($1, $2, $3, $4, $5)
+    `,
+    [
+      caseId,
+      user.id,
+      wpsNumber,
+      {
+        contract_date: c.contract_date,
+        loan_term_months: c.loan_term_months,
+        interest_rate_annual: c.interest_rate_annual,
+        loan_amount_total: c.loan_amount_total,
+        loan_amount_net: c.loan_amount_net,
+        installment_amount_real: c.installment_amount_real ?? null,
+        // jeśli masz override rat – dopisz tu też
+      },
+      null,
+    ]
+  );
+} catch (e) {
+  console.warn("[WPS-HISTORY] insert error:", e);
+}
+
+  const row = result.rows[0];
+
   await createNotification({
     userId: user.id,
     caseId,
@@ -1479,25 +1510,23 @@ try {
       bank: row.bank,
     },
   });
-} catch (notifErr) {
-  console.warn("[NOTIF] wps_forecast_saved error:", notifErr);
+
+  return res.json({
+    ok: true,
+    case: row,
+    skd_v2: {
+      monthsPaid: out.monthsPaid,
+      marginStartPct: out.marginStartPct,
+      wiborStartPct: out.wiborStartPct,
+    },
+  });
+} catch (err) {
+  console.error("Błąd PATCH /api/cases/:id/wps-basic:", err);
+  return res
+    .status(500)
+    .json({ error: "Błąd serwera przy zapisie WPS (prognoza)." });
 }
 
-return res.json({
-  ok: true,
-  case: row,
-  skd_v2: { // opcjonalnie, mega przydatne na chwilę do debug
-    monthsPaid: out.monthsPaid,
-    marginStartPct: out.marginStartPct,
-    wiborStartPct: out.wiborStartPct,
-  },
-});
-      } catch (err) {
-        console.error("Błąd PATCH /api/cases/:id/wps-basic:", err);
-        return res
-          .status(500)
-          .json({ error: "Błąd serwera przy zapisie WPS (prognoza)." });
-      }
     }
   );
 // PREVIEW — liczy WPS v2 na backendzie (bez zapisu)
@@ -1518,11 +1547,12 @@ app.post(
     if (!allowed) return res.status(403).json({ ok: false, error: "Brak dostępu do tej sprawy" });
 
     try {
-      const body = req.body || {};
+      const body: any = req.body || {};
+      console.log("[WPS PREVIEW HIT]", caseId, body);
 
       const out = computeSkdV2({
         contractDate: body.contractDate,
-        termMonths: Number(body.termMonths),
+        termMonths: Number(body.termMonths),      // ✅ TO JEST KLUCZ
         aprStartPct: Number(body.aprStartPct),
         loanGross: Number(body.loanGross),
         loanNet: Number(body.loanNet),
@@ -1542,7 +1572,17 @@ app.post(
     "/api/cases/:id/skd-offer",
     mediumApiLimit,
     requireAuth,
-    denyUnknownFields(["wps_forecast", "offer_skd"]),
+    denyUnknownFields([
+  "wps_forecast",
+  "offer_skd",
+  "contract_date",
+  "loan_term_months",
+  "interest_rate_annual",
+  "loan_amount_total",
+  "loan_amount_net",
+  "installment_amount_real",
+]),
+
     async (req, res) => {
       try {
         const user = (req as any).user;
@@ -1593,29 +1633,39 @@ app.post(
         let buyout_pct: number | null = null;
 
         if (variant === "sell") {
-          // może przyjść 12, "12", 0.12, "0,12" itd.
-          const raw = sanitizeNumberLike(offer_skd.buyout_pct);
+  let raw = sanitizeNumberLike(offer_skd.buyout_pct);
 
-          if (raw === null) {
-            return res
-              .status(400)
-              .json({ error: "buyout_pct musi być liczbą w zakresie 10–15%." });
-          }
+  if (raw === null) {
+    const prev = await pool.query(
+      `SELECT offer_skd FROM cases WHERE id = $1`,
+      [caseId]
+    );
 
-          // jeśli ktoś poda 12 → zamieniamy na 0.12
-          // jeśli 0.12 → zostawiamy
-          let normalized = raw > 1 ? raw / 100 : raw;
+    const prevOffer = prev.rows?.[0]?.offer_skd || {};
+    const prevBuyout = sanitizeNumberLike(prevOffer.buyout_pct);
 
-          if (normalized < 0.10 || normalized > 0.15) {
-            return res.status(400).json({
-              error: "buyout_pct musi zawierać się między 10 a 15 procent.",
-            });
-          }
+    if (prevBuyout === null) {
+      return res.status(400).json({
+        error: "buyout_pct musi być liczbą w zakresie 10–15%."
+      });
+    }
 
-          buyout_pct = normalized; // w bazie zawsze 0.10–0.15
-        } else {
-          buyout_pct = null;
-        }
+    raw = prevBuyout;
+  }
+
+  let normalized = raw > 1 ? raw / 100 : raw;
+
+  if (normalized < 0.10 || normalized > 0.15) {
+    return res.status(400).json({
+      error: "buyout_pct musi zawierać się między 10 a 15 procent."
+    });
+  }
+
+  buyout_pct = normalized;
+} else {
+  buyout_pct = null;
+}
+
 
         // ============================
         // 6) future_interest — opcjonalne, czyszczone
@@ -1649,14 +1699,32 @@ app.post(
         const result = await pool.query(
           `
         UPDATE cases
-        SET
-          wps_forecast = $1,
-          offer_skd    = $2,
-          updated_at   = NOW()
-        WHERE id = $3
+SET
+  contract_date           = $1,
+  loan_term_months        = $2,
+  interest_rate_annual    = $3,
+  loan_amount_total       = $4,
+  loan_amount_net         = $5,
+  installment_amount_real = $6,
+  wps_forecast            = $7,
+  offer_skd               = $8,
+  updated_at              = NOW()
+WHERE id = $9
+
         RETURNING id, wps_forecast, offer_skd
         `,
-          [wf, finalOffer, caseId]
+          [
+  body.contract_date ?? null,
+  body.loan_term_months ?? null,
+  body.interest_rate_annual ?? null,
+  body.loan_amount_total ?? null,
+  body.loan_amount_net ?? null,
+  body.installment_amount_real ?? null,
+  wf,
+  finalOffer,
+  caseId
+]
+
         );
 
         if (!result.rowCount) {

@@ -2971,6 +2971,7 @@ try {
 // - contract_date: #wpsContractDate
 // ==========================================
 async function calculateWpsBasic({
+  caseId,
   loan_amount_net,
   loan_amount_total,
   loan_term_months,
@@ -2978,6 +2979,7 @@ async function calculateWpsBasic({
   interest_nominal,
   contract_date,
 }) {
+
   const net = Number(loan_amount_net) || 0;
   const gross = Number(loan_amount_total) || 0;
   const termMonths = Number(loan_term_months) || 0;
@@ -2987,26 +2989,27 @@ async function calculateWpsBasic({
     ? Number(installment_amount_real)
     : null;
 
-  // caseId zawsze z DOM (żadnych resolveCaseId / window.caseData)
-  const caseIdEl = document.getElementById("wpsCaseId");
-  const caseId = caseIdEl ? Number(caseIdEl.value) : NaN;
-
   if (!Number.isFinite(caseId) || caseId <= 0) return null;
   if (!net || !gross || !termMonths || !aprStartPct) return null;
   if (!contract_date) return null;
 
-  const res = await fetch(`/api/cases/${caseId}/wps-basic/preview`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      contractDate: contract_date,
-      termMonths,
-      aprStartPct,
-      loanGross: gross,
-      loanNet: net,
-      installment,
-    }),
-  });
+  const payload = {
+  __sig: "WPS_PREVIEW_V2_2025-12-22",
+  contractDate: contract_date,
+  termMonths,
+  aprStartPct,
+  loanGross: gross,
+  loanNet: net,
+  installment,
+};
+
+console.log("[WPS preview payload]", payload);
+
+const res = await fetch(`/api/cases/${caseId}/wps-basic/preview`, {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify(payload),
+});
 
   if (!res.ok) {
     // debug minimalny — żebyś widział czemu nie liczy
@@ -3021,6 +3024,7 @@ async function calculateWpsBasic({
     return null;
   }
 console.log("[WPS v2 debug]", data.result);
+window.__LAST_WPS_PREVIEW = data.result;
 
   const wps = Math.max(0, Math.round(Number(data.result?.wpsToday)));
   return Number.isFinite(wps) ? wps : null;
@@ -3047,35 +3051,34 @@ let lastWpsBasic = null;
   const resultEl = document.getElementById("wpsResultValue");
   const interestInput = document.getElementById("wpsInterestInput");
   const contractDateInput = document.getElementById("wpsContractDate");
-  const contract_date = contractDateInput?.value || null;
-
+  const metaEl = document.getElementById("wpsResultMeta");
 
   // 🔹 ID sprawy – z pola, window.caseData albo URL
   function resolveCaseId() {
-    let caseId = null;
-
-    const caseIdInput = document.getElementById("wpsCaseId");
-    if (caseIdInput && caseIdInput.value) {
-      const parsed = Number(caseIdInput.value);
-      if (Number.isFinite(parsed)) caseId = parsed;
-    }
-
-    if (!caseId && window.caseData && window.caseData.id) {
-      const parsed = Number(window.caseData.id);
-      if (Number.isFinite(parsed)) caseId = parsed;
-    }
-
-    if (!caseId) {
-      const path = window.location.pathname;
-      const matches = path.match(/\d+/g);
-      if (matches && matches.length > 0) {
-        const last = Number(matches[matches.length - 1]);
-        if (Number.isFinite(last)) caseId = last;
-      }
-    }
-
-    return caseId;
+  // 1) window.caseData — NAJPEWNIEJSZE na dashboardzie
+  if (window.caseData && window.caseData.id) {
+    const parsed = Number(window.caseData.id);
+    if (Number.isFinite(parsed)) return parsed;
   }
+
+  // 2) hidden input — tylko fallback
+  const caseIdInput = document.getElementById("wpsCaseId");
+  if (caseIdInput && caseIdInput.value) {
+    const parsed = Number(caseIdInput.value);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+
+  // 3) URL — ostateczny fallback
+  const path = window.location.pathname;
+  const matches = path.match(/\d+/g);
+  if (matches && matches.length > 0) {
+    const last = Number(matches[matches.length - 1]);
+    if (Number.isFinite(last)) return last;
+  }
+
+  return null;
+}
+
 
   function parseNumber(el) {
     if (!el) return null;
@@ -3137,23 +3140,27 @@ let lastWpsBasic = null;
   // 🔥 Na starcie spróbuj odtworzyć wpisane wcześniej dane
   loadWpsInputsFromStorage();
 
-  // 1) wylicz ratę z oprocentowania, jeśli trzeba
-  if (interestInput && installmentRealInput) {
-    interestInput.addEventListener("input", () => {
-      const interest = parseNumber(interestInput);
-      const total = parseNumber(loanTotalInput);
-      const term = parseNumber(termInput);
+  function recalcInstallmentFromApr() {
+  const interest = parseNumber(interestInput);
+  const total = parseNumber(loanTotalInput);
+  const term = parseNumber(termInput);
 
-      if (!interest || !total || !term) return;
+  if (!interest || !total || !term) return;
 
-      const r = (interest / 100) / 12; // miesięczna stopa
-      const monthly = total * (r / (1 - Math.pow(1 + r, -term)));
+  const r = (interest / 100) / 12;
+  const monthly = total * (r / (1 - Math.pow(1 + r, -term)));
 
-      if (Number.isFinite(monthly)) {
-        installmentRealInput.value = monthly.toFixed(2);
-      }
-    });
+  if (Number.isFinite(monthly) && installmentRealInput) {
+    installmentRealInput.value = monthly.toFixed(2);
   }
+}
+
+interestInput?.addEventListener("input", recalcInstallmentFromApr);
+loanTotalInput?.addEventListener("input", recalcInstallmentFromApr);
+termInput?.addEventListener("input", recalcInstallmentFromApr);
+
+// (opcjonalnie) policz od razu po wczytaniu danych z localStorage
+recalcInstallmentFromApr();
 
   // 2) PRZELICZ WPS
   btnCalc.addEventListener("click", async () => {
@@ -3167,6 +3174,8 @@ let lastWpsBasic = null;
 
   const contract_date = contractDateInput?.value || null;
 
+  const caseId = resolveCaseId();
+
   console.log("[WPS UI] contract_date =", contract_date);
 
   if (!contract_date) {
@@ -3174,14 +3183,25 @@ let lastWpsBasic = null;
     return;
   }
 
+  if (!caseId) {
+  alert("Brak ID sprawy — odśwież widok sprawy.");
+  return;
+}
+if (!loan_term_months || loan_term_months <= 0) {
+  alert("Uzupełnij okres kredytu (miesiące).");
+  return;
+}
+
   const wps = await calculateWpsBasic({
-    loan_amount_net,
-    loan_amount_total,
-    loan_term_months,
-    installment_amount_real,
-    interest_nominal: parseNumber(interestInput),
-    contract_date,
-  });
+  caseId,
+  loan_amount_net,
+  loan_amount_total,
+  loan_term_months,
+  installment_amount_real,
+  interest_nominal,
+  contract_date,
+});
+
 
 
     if (wps === null) {
@@ -3199,6 +3219,27 @@ let lastWpsBasic = null;
       maximumFractionDigits: 0,
     });
     resultEl.textContent = `${formatted} zł`;
+    try {
+  // jeśli w calculateWpsBasic logujesz/masz data.result, to najlepiej trzymać go w lastWpsDebug
+  // prościej: zróbmy global na ostatni result z preview
+  if (window.__LAST_WPS_PREVIEW && metaEl) {
+    const r = window.__LAST_WPS_PREVIEW;
+    const cap = Math.round(Number(r.capDueToDate || 0));
+    const paid = Math.round(Number(r.paidToDate || 0));
+
+    const capFmt = cap.toLocaleString("pl-PL", { maximumFractionDigits: 0 });
+    const paidFmt = paid.toLocaleString("pl-PL", { maximumFractionDigits: 0 });
+
+    metaEl.innerHTML =
+  `Kapitał należny do dziś: <strong>${capFmt} zł</strong> · ` +
+  `Suma wpłat: <strong>${paidFmt} zł</strong>`;
+
+  } else if (metaEl) {
+    metaEl.textContent = "";
+  }
+} catch {
+  if (metaEl) metaEl.textContent = "";
+}
 
     if (btnSave) btnSave.disabled = false;
     if (btnApply) btnApply.disabled = false;
@@ -3210,7 +3251,7 @@ let lastWpsBasic = null;
   // 3) ZAPISZ WPS DO SPRAWY (PATCH)
   if (btnSave) {
     btnSave.addEventListener("click", async () => {
-      if (!lastWpsBasic) {
+      if (lastWpsBasic == null) {
         alert("Najpierw przelicz WPS.");
         return;
       }
@@ -3228,7 +3269,16 @@ let lastWpsBasic = null;
         const res = await fetch(`/api/cases/${caseId}/wps-basic`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ wps_forecast: lastWpsBasic }),
+          body: JSON.stringify({
+  contract_date: contractDateInput?.value || null,
+  loan_term_months: parseNumber(termInput),
+  interest_rate_annual: parseNumber(interestInput),
+  loan_amount_total: parseNumber(loanTotalInput),
+  loan_amount_net: parseNumber(loanNetInput),
+  installment_amount_real: parseNumber(installmentRealInput),
+  wps_forecast: lastWpsBasic,
+}),
+
         });
 
         if (!res.ok) {
@@ -3237,6 +3287,30 @@ let lastWpsBasic = null;
           return;
         }
 
+        const json = await res.json().catch(() => null);
+
+if (json?.case?.wps_forecast != null) {
+  // aktualizuj local/global
+  lastWpsBasic = Number(json.case.wps_forecast);
+  if (window.caseData) window.caseData.wps_forecast = lastWpsBasic;
+
+  // odśwież widok w modalu
+  const formatted = lastWpsBasic.toLocaleString("pl-PL", {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  });
+  if (resultEl) resultEl.textContent = `${formatted} zł`;
+
+  // odśwież pole w ofercie SKD
+  const wpsInput =
+    document.querySelector('[data-skd-field="wps_forecast"]') ||
+    document.getElementById("skdWpsForecast");
+  if (wpsInput) wpsInput.value = lastWpsBasic;
+
+  // jeśli masz listę spraw na dashboardzie – spróbuj odświeżyć
+  if (typeof window.loadCases === "function") window.loadCases();
+  if (typeof window.refreshCases === "function") window.refreshCases();
+}
         alert("WPS został zapisany do sprawy.");
       } catch (err) {
         console.error("Błąd zapisu WPS:", err);
@@ -3251,7 +3325,7 @@ let lastWpsBasic = null;
   // 4) UŻYJ WPS W OFERCIE SKD
   if (btnApply) {
     btnApply.addEventListener("click", () => {
-      if (!lastWpsBasic) {
+      if (lastWpsBasic == null) {
         alert("Najpierw przelicz WPS.");
         return;
       }

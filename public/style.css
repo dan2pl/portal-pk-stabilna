@@ -2542,3 +2542,88 @@ body {
   background: rgba(75, 85, 99, 0.8);
   border-radius: 999px;
 }
+/* ==========================================
+   WPS Basic — delikatne "production" UI
+   (tylko w obrębie karty #wpsBasicCard)
+========================================== */
+
+#wpsBasicCard .form-grid{
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px 18px;
+  align-items: end;
+}
+
+@media (max-width: 900px){
+  #wpsBasicCard .form-grid{ grid-template-columns: 1fr; }
+}
+
+#wpsBasicCard .form-field,
+#wpsBasicCard .fld{
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+#wpsBasicCard .form-field > span,
+#wpsBasicCard .fld > span{
+  font-size: 12px;
+  font-weight: 600;
+  opacity: .85;
+}
+
+#wpsBasicCard input[type="number"],
+#wpsBasicCard input[type="date"]{
+  height: 38px;
+  padding: 8px 10px;
+  border: 1px solid rgba(0,0,0,.14);
+  border-radius: 10px;
+  background: #fff;
+  font-size: 14px;
+  outline: none;
+  transition: border-color .15s ease, box-shadow .15s ease, transform .05s ease;
+}
+
+#wpsBasicCard input[type="number"]::placeholder{
+  opacity: .6;
+}
+
+#wpsBasicCard input[type="number"]:focus,
+#wpsBasicCard input[type="date"]:focus{
+  border-color: rgba(111, 33, 22, .45); /* pod PK-owy bordo */
+  box-shadow: 0 0 0 4px rgba(111, 33, 22, .10);
+}
+
+#wpsBasicCard .small-note{
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(0,0,0,.08);
+}
+
+#wpsBasicCard .form-actions{
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(0,0,0,.08);
+}
+
+#wpsBasicCard #wpsResultBox{
+  padding: 8px 12px;
+  border: 1px solid rgba(0,0,0,.10);
+  border-radius: 12px;
+  background: rgba(0,0,0,.02);
+}
+
+#wpsBasicCard #wpsResultValue{
+  font-size: 16px;
+  font-weight: 800;
+}
+
+#wpsBasicCard #wpsResultMeta{
+  margin-top: 6px;
+  font-size: 13px;
+  opacity: .85;
+}
+
+#wpsBasicCard #wpsResultMeta strong{
+  font-weight: 800;
+}

@@ -411,7 +411,7 @@
       </label>
 
       <label class="form-field">
-        <span>Liczba zapłaconych rat</span>
+        <span>Liczba zapłaconych rat (opcjonalnie - system wyliczy automatycznie)</span>
         <input id="wpsInstallmentsPaid" type="number" step="1" placeholder="np. 24" />
       </label>
 
@@ -443,9 +443,13 @@
         Użyj WPS w ofercie SKD
       </button>
 
-      <div id="wpsResultBox" style="margin-left: auto; font-weight: 600;">
-        WPS: <span id="wpsResultValue">—</span>
-      </div>
+      <div id="wpsResultBox" style="margin-left: auto; font-weight: 600; text-align: right;">
+  WPS: <span id="wpsResultValue">—</span>
+  <div id="wpsResultMeta"
+     style="margin-top: 6px; font-weight: 400; font-size: 14px; opacity: .9;">
+</div>
+</div>
+
     </div>
   </div>
 </section>
