@@ -657,79 +657,67 @@ return res.json({ ok: true, messageId: result.messageId || null });
     }
   });
 
-  // === ULTRA-SAFE LISTA SPRAW (GET /api/cases) ===
-  app.get("/api/cases",
-    softApiLimit,       // lekkie ograniczenie dla list
-    requireAuth,        // musi być zalogowany
-    async (req, res) => {
-      try {
-        const user = (req as any).user;
+  app.get("/api/cases", softApiLimit, requireAuth, async (req, res) => {
+  try {
+    const user = (req as any).user;
+    if (!user) return res.status(401).json({ error: "Brak dostępu – zaloguj się" });
 
-        if (!user) {
-          return res.status(401).json({ error: "Brak dostępu – zaloguj się" });
-        }
+    const pageRaw = parseInt(String(req.query.page ?? "1"), 10);
+    const limitRaw = parseInt(String(req.query.limit ?? "100"), 10);
 
-        // 🔐 Log audytowy
-        console.log(`[CASES] user=${user.id}, role=${user.role}, ip=${req.ip}`);
+    const page = Number.isFinite(pageRaw) && pageRaw > 0 ? pageRaw : 1;
+    const limitU = Number.isFinite(limitRaw) && limitRaw > 0 ? limitRaw : 100;
 
-        // -------------------------
-        // 1) PAGE / LIMIT (zabezpieczone)
-        // -------------------------
-        const pageRaw = parseInt(String(req.query.page ?? "1"), 10);
-        const limitRaw = parseInt(String(req.query.limit ?? "100"), 10);
+    const limit = Math.min(limitU, 200);
+    const offset = (page - 1) * limit;
 
-        const page = Number.isFinite(pageRaw) && pageRaw > 0 ? pageRaw : 1;
-        const limitU = Number.isFinite(limitRaw) && limitRaw > 0 ? limitRaw : 100;
+    let whereSql = "";
+    const params: any[] = [];
 
-        // 🔒 limit twardo ograniczony do 200
-        const limit = Math.min(limitU, 200);
-        const offset = (page - 1) * limit;
+    if (user.role !== "admin") {
+      whereSql = "WHERE owner_id = $1";
+      params.push(user.id);
+    }
 
-        // -------------------------
-        // 2) FILTR DOSTĘPU (admin vs agent)
-        // -------------------------
-        let whereSql = "";
-        const params: any[] = [];
+    const countSql = `
+      SELECT COUNT(*)::int AS count
+      FROM cases
+      ${whereSql}
+    `;
+    const countRes = await pool.query(countSql, params);
+    const totalCount = countRes.rows[0]?.count ?? 0;
+    const totalPages = totalCount === 0 ? 1 : Math.max(Math.ceil(totalCount / limit), 1);
 
-        if (user.role === "admin") {
-          whereSql = "";     // admin widzi wszystko
-        } else {
-          whereSql = "WHERE owner_id = $1";
-          params.push(user.id);
-        }
-
-        // -------------------------
-        // 3) POLICZ ILE SPRAW
-        // -------------------------
-        const countSql = `
-        SELECT COUNT(*)::int AS count
-        FROM cases
-        ${whereSql}
-      `;
-        const countRes = await pool.query(countSql, params);
-        const totalCount = countRes.rows[0]?.count ?? 0;
-        const totalPages =
-          totalCount === 0 ? 1 : Math.max(Math.ceil(totalCount / limit), 1);
-
-        // -------------------------
-        // 4) POBIERZ STRONĘ
-        // -------------------------
-        const rowsSql = `
+    const rowsSql = `
   SELECT
     id,
     client,
     bank,
     loan_amount,
-    COALESCE(wps_forecast, wps) AS wps,
-    status,          -- legacy (opisowy), zostawiamy
-    status_code,     -- 🔥 NOWE – źródło prawdy dla dashboardu
+
+    -- ✅ WPS do dashboardu: FINAL > FORECAST > legacy wps
+    COALESCE(wps_final, wps_forecast, wps) AS wps,
+    wps_forecast,
+    wps_final,
+
+    status,
+    status_code,
     contract_date,
     owner_id,
     phone,
     email,
     address,
     created_at,
-    updated_at
+    updated_at,
+
+    -- ✅ blokada wyboru wariantu
+    variant_picked,
+    variant_picked_at,
+
+    -- ✅ wariant bierzemy z JSON (bo nie ma kolumny "variant")
+    offer_skd,
+    (offer_skd->>'variant') AS variant
+
   FROM cases
   ${whereSql}
   ORDER BY id DESC
@@ -737,25 +725,21 @@ return res.json({ ok: true, messageId: result.messageId || null });
   OFFSET $${params.length + 2}
 `;
 
-        const rows = await pool.query(rowsSql, [...params, limit, offset]);
+    const rows = await pool.query(rowsSql, [...params, limit, offset]);
 
-        // -------------------------
-        // 5) ODP.
-        // -------------------------
-        return res.json({
-          items: rows.rows || [],
-          page,
-          limit,
-          totalCount,
-          totalPages,
-        });
-
-      } catch (err) {
-        console.error("❌ GET /api/cases ERROR:", err);
-        return res.status(500).json({ error: "Błąd serwera przy pobieraniu spraw" });
-      }
-    }
-  );
+    return res.json({
+      items: rows.rows || [],
+      page,
+      limit,
+      totalCount,
+      totalPages,
+    });
+  } catch (err) {
+    console.error("❌ GET /api/cases ERROR:", err);
+    console.error("❌ GET /api/cases ERROR:", (err as any)?.message || err);
+    return res.status(500).json({ error: "Błąd serwera przy pobieraniu spraw" });
+  }
+});
 
   // === KPI (per user / admin) ===
   app.get(
@@ -1007,29 +991,34 @@ return res.json({ ok: true, messageId: result.messageId || null });
       }
 
       // selekcja tylko potrzebnych pól do frontu (bez wrażliwych)
-      const safe = {
-        id: row.id,
-        client: row.client,
-        bank: row.bank,
-        loan_amount: row.loan_amount,
-        status: row.status,          // legacy – jak coś jeszcze z tego korzysta
-        status_code: statusCode,     // ⬅⬅⬅ KLUCZOWE DLA NOWEGO SYSTEMU
-        contract_date: row.contract_date,
-        phone: row.phone,
-        email: row.email,
-        address: row.address,
-        pesel: row.pesel,            // jak chcesz – można też wypiąć z API
-        wps_forecast: row.wps_forecast,
-        wps_final: row.wps_final,
-        client_benefit: row.client_benefit,
-        notes: row.notes,
-        owner_id: row.owner_id,
-        updated_at: row.updated_at,
-        offer_skd: row.offer_skd,    // jeśli trzymasz JSON z ofertą
-        iban: row.iban ?? null,
-      };
+const safe = {
+  id: row.id,
+  client: row.client,
+  bank: row.bank,
+  loan_amount: row.loan_amount,
+  status: row.status,          // legacy – jak coś jeszcze z tego korzysta
+  status_code: statusCode,     // ⬅⬅⬅ KLUCZOWE DLA NOWEGO SYSTEMU
+  contract_date: row.contract_date,
+  phone: row.phone,
+  email: row.email,
+  address: row.address,
+  pesel: row.pesel,            // jak chcesz – można też wypiąć z API
+  wps_forecast: row.wps_forecast,
+  wps_final: row.wps_final,
+  client_benefit: row.client_benefit,
+  notes: row.notes,
+  owner_id: row.owner_id,
+  updated_at: row.updated_at,
+  offer_skd: row.offer_skd,    // jeśli trzymasz JSON z ofertą
+  iban: row.iban ?? null,
 
-      res.json(safe);
+  // ✅ NOWE: twarde kolumny do blokady UI po zatwierdzeniu
+  variant: row.variant ?? null,
+  variant_picked: !!row.variant_picked,
+  variant_picked_at: row.variant_picked_at ?? null,
+};
+
+res.json(safe);
     } catch (err) {
       sendCaseError(res, err);
     }
@@ -1678,54 +1667,62 @@ app.post(
         // ============================
         const elig = offer_skd.eligibility || {};
         const eligibility = {
-          sf50: Boolean(elig.sf50),
-          sf49: Boolean(elig.sf49),
-          sell: Boolean(elig.sell),
-        };
+  sf50: elig.sf50 === false ? false : true,
+  sf49: elig.sf49 === false ? false : true,
+  sell: elig.sell === false ? false : true,
+};
 
         // ============================
         // 8) Finalny obiekt zapisowy
         // ============================
         const finalOffer = {
-          variant,
-          buyout_pct,
-          future_interest,
-          eligibility,
-        };
+  variant,
+  buyout_pct,
+  future_interest,
+  eligibility,
+
+  // ✅ NOWE: “zatwierdzony wybór wariantu”
+  variant_picked: offer_skd?.variant_picked === true,
+  variant_picked_at: offer_skd?.variant_picked_at ?? null,
+};
 
         // ============================
         // 9) Zapis do bazy
         // ============================
         const result = await pool.query(
-          `
-        UPDATE cases
+  `
+  UPDATE cases
 SET
-  contract_date           = $1,
-  loan_term_months        = $2,
-  interest_rate_annual    = $3,
-  loan_amount_total       = $4,
-  loan_amount_net         = $5,
-  installment_amount_real = $6,
-  wps_forecast            = $7,
-  offer_skd               = $8,
-  updated_at              = NOW()
-WHERE id = $9
+  contract_date            = $1,
+  loan_term_months         = $2,
+  interest_rate_annual     = $3,
+  loan_amount_total        = $4,
+  loan_amount_net          = $5,
+  installment_amount_real  = $6,
+  wps_forecast             = $7,
+  offer_skd                = $8,
 
-        RETURNING id, wps_forecast, offer_skd
-        `,
-          [
-  body.contract_date ?? null,
-  body.loan_term_months ?? null,
-  body.interest_rate_annual ?? null,
-  body.loan_amount_total ?? null,
-  body.loan_amount_net ?? null,
-  body.installment_amount_real ?? null,
-  wf,
-  finalOffer,
-  caseId
+  variant_picked           = $9,
+  variant_picked_at        = $10,
+
+  updated_at               = NOW()
+WHERE id = $11
+RETURNING id, wps_forecast, offer_skd, variant_picked, variant_picked_at;
+  `,
+  [
+  body.contract_date ?? null,            // $1
+  body.loan_term_months ?? null,         // $2
+  body.interest_rate_annual ?? null,     // $3
+  body.loan_amount_total ?? null,        // $4
+  body.loan_amount_net ?? null,          // $5
+  body.installment_amount_real ?? null,  // $6
+  wf,                                    // $7
+  finalOffer,                            // $8
+  finalOffer.variant_picked ?? false,    // $9
+  finalOffer.variant_picked_at ?? null,  // $10
+  caseId                                 // $11
 ]
-
-        );
+);
 
         if (!result.rowCount) {
           return res.status(404).json({ error: "Nie znaleziono sprawy." });

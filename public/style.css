@@ -2627,3 +2627,9 @@ body {
 #wpsBasicCard #wpsResultMeta strong{
   font-weight: 800;
 }
+.checklist { display:flex; flex-direction:column; gap:6px; }
+.check-item { display:flex; align-items:center; gap:8px; font-size:14px; }
+.check-dot { width:10px; height:10px; border-radius:999px; background:#bbb; display:inline-block; }
+.check-dot.ok { background:#2ecc71; }
+.check-dot.no { background:#e67e22; }
+.pill { display:inline-block; padding:4px 10px; border-radius:999px; background:rgba(0,0,0,.06); font-weight:600; }

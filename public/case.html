@@ -122,6 +122,7 @@
             </button>
             <button class="case-tab" data-tab="credit">Dane kredytu</button>
             <button class="case-tab" data-tab="skd">SKD</button>
+            <button class="case-tab" data-tab="decision">Decyzja</button>
             <button class="case-tab" data-tab="docs">Dokumenty</button>
             <button class="case-tab" data-tab="notes">Notatki</button>
             <button class="case-tab" data-tab="emails">E-maile</button>
@@ -450,6 +451,71 @@
                         Zapisz ofertę
                       </button>
                     </div>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            <!--DECYZJA-->
+            <section
+              class="tab-panel case-anim case-anim-delay-4"
+              data-tab-panel="decision"
+              id="paneDecision"
+            >
+              <div class="accordion">
+                <div class="accordion-item open">
+                  <div class="accordion-header">
+                    <div class="accordion-title">Deklaracja / dokumenty</div>
+                  </div>
+
+                  <div class="accordion-body">
+                    <div class="field-grid">
+                      <div class="field">
+                        <label>Wybrany wariant</label>
+                        <div id="decisionVariant" class="pill">—</div>
+                      </div>
+
+                      <div class="field">
+                        <label>Status dokumentów</label>
+                        <div id="decisionDocs" class="checklist">
+                          <!-- wypełni JS -->
+                        </div>
+                      </div>
+                    </div>
+
+                    <div
+                      class="section-actions"
+                      style="
+                        display: flex;
+                        gap: 0.5rem;
+                        flex-wrap: wrap;
+                        margin-top: 12px;
+                      "
+                    >
+                      <button
+                        class="btn btn-primary"
+                        id="btnDecisionPrimary"
+                        disabled
+                      >
+                        —
+                      </button>
+                      <button class="btn btn-outline" id="btnDecisionRefresh">
+                        Odśwież
+                      </button>
+
+                      <button
+                        id="btnDecisionChangeOffer"
+                        class="btn btn-secondary"
+                      >
+                        Zmień ofertę (SKD)
+                      </button>
+                    </div>
+
+                    <div
+                      class="small-note"
+                      id="decisionHint"
+                      style="margin-top: 8px; opacity: 0.8"
+                    ></div>
                   </div>
                 </div>
               </div>

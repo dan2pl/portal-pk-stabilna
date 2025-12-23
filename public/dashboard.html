@@ -146,7 +146,7 @@
             <input
               id="caseSearch"
               type="text"
-              placeholder="Szukaj: nazwisko"
+              placeholder="Szukaj: nazwisko, telefon, mail"
               autocomplete="off"
               style="
                 height: 34px;
@@ -351,45 +351,39 @@
 
         <div class="modal-card modal-sheet">
           <div class="modal-header">
-            <div class="title">
-              <span id="cmTitle">Sprawa:</span>
-              <span id="cmClient">—</span>
-              <span id="cmStatusBadge" class="badge">—</span>
-            </div>
-            <div style="display: flex; gap: 8px; align-items: center">
-              <button id="cmClose" aria-label="Zamknij" class="btn">×</button>
-            </div>
-          </div>
+  <div class="title">
+    <span id="cmTitle">Sprawa:</span>
+    <span id="cmClient">—</span>
+    <span id="cmStatusBadge" class="badge">—</span>
+  </div>
 
-          <!-- ===== OFERTA SKD (sekcja) ===== -->
-          <section id="skdOffer" class="card">
-            <header class="card-h">
-              <div>
-                <div class="card-title">Oferta SKD</div>
-                <div id="skdOfferSub" class="card-sub">—</div>
-              </div>
-              <a
-  id="openFullCase"
-  href="#"
-  target="_blank"
-  class="open-full-btn"
->
-  Otwórz pełny widok
-</a>
+  <div style="display:flex; gap:8px; align-items:center">
+    <a
+      id="openFullCase"
+      href="#"
+      target="_blank"
+      class="open-full-btn"
+    >
+      Otwórz pełny widok
+    </a>
 
-              <button
-                id="skdOfferSaveBtn"
-                class="btn btn-primary"
-                style="display: none"
-              >
-                Zapisz
-              </button>
-            </header>
+    <button
+      id="skdOfferSaveBtn"
+      class="btn btn-primary"
+      style="display:none"
+    >
+      Zapisz
+    </button>
+
+    <button id="cmClose" aria-label="Zamknij" class="btn">×</button>
+  </div>
+</div>
+
 <section class="card" id="wpsBasicCard">
   <header class="card-h">
     <div class="card-b">
       <div class="card-title">WPS Basic (silnik SKD)</div>
-      <div class="card-sub">Szybkie wyliczenie na podstawie podstawowych danych</div>
+      <div class="card-sub">Szybkie wyliczenie z podstawowych danych</div>
     </div>
   </header>
   <div class="card-b">
@@ -454,7 +448,7 @@
   </div>
 </section>
 
-
+<section id="skdOffer" class="card" style="margin-top: 12px;">
             <div class="card-b">
               <!-- TABS wewnątrz oferty SKD -->
               <div class="modal-tabs">
@@ -666,77 +660,76 @@
                   </small>
                 </div>
 
-                <!-- Notatka -->
-                <div class="group">
-                  <div class="group-title">Notatka (wewnętrzna)</div>
-                  <textarea
-                    id="skdOfferNotes"
-                    rows="3"
-                    placeholder="np. klient preferuje sprzedaż roszczenia; możliwa korekta % przy wykupie."
-                  ></textarea>
-                </div>
-              </div>
+               <!-- ===== WYBÓR OFERTY (NOWE) ===== -->
+<div class="card" id="skdChoiceCard" style="margin-top: 12px;">
+  <div class="card-h">
+    <div>
+      <div class="card-title">Wybór oferty</div>
+      <div class="card-sub">Wybierz wariant do przedstawienia Klientowi (tylko dostępne są aktywne)</div>
+    </div>
+  </div>
 
-              <!-- PANEL: DANE DO UMOWY -->
-              <div
-                id="tab-contract"
-                class="tab-panel"
-                style="display: none; margin-top: 12px"
-              >
-                <div class="card">
-                  <div class="card-h">Dane do umowy</div>
-                  <div class="card-b">
-                    <div
-                      style="
-                        display: grid;
-                        grid-template-columns: repeat(
-                          auto-fit,
-                          minmax(260px, 1fr)
-                        );
-                        gap: 16px;
-                      "
-                    >
-                      <div>
-                        <div class="group-title">Dane osobowe</div>
+  <div class="card-b">
+    <div class="form-grid">
+      <label class="form-field">
+        <span>Wariant</span>
+        <div style="display:flex; gap:14px; flex-wrap:wrap; padding:8px 0;">
+          <label style="display:flex; gap:8px; align-items:center;">
+            <input type="radio" name="skdVariantPick" value="sf50" id="skdPickSf50">
+            <strong>SF50</strong>
+          </label>
 
-                        <label class="fld">
-                          <span>Imię i nazwisko</span>
-                          <input id="contractName" type="text" />
-                        </label>
+          <label style="display:flex; gap:8px; align-items:center;">
+            <input type="radio" name="skdVariantPick" value="sf49" id="skdPickSf49">
+            <strong>SF49</strong>
+          </label>
 
-                        <label class="fld" style="margin-top: 8px">
-                          <span>PESEL</span>
-                          <input id="contractPesel" type="text" />
-                        </label>
+          <label style="display:flex; gap:8px; align-items:center;">
+            <input type="radio" name="skdVariantPick" value="sell" id="skdPickSell">
+            <strong>SELL</strong>
+          </label>
+        </div>
+      </label>
 
-                        <label class="fld" style="margin-top: 8px">
-                          <span>Adres</span>
-                          <input id="contractAddress" type="text" />
-                        </label>
-                      </div>
+      <label class="form-field" id="skdBuyoutWrap" style="display:none;">
+  <span>Odkup — Ustalony % dla Klienta</span>
 
-                      <div>
-                        <div class="group-title">Kontakt i rozliczenia</div>
+  <div style="display:flex; gap:8px; align-items:center;">
+    <input
+      id="skdBuyoutPct"
+      type="number"
+      step="0.1"
+      min="10"
+      max="15"
+      placeholder="np. 12.0"
+      style="max-width:140px;"
+    />
+    <span style="font-weight:600; opacity:.8;">%</span>
 
-                        <label class="fld">
-                          <span>Telefon</span>
-                          <input id="contractPhone" type="tel" />
-                        </label>
+    <span style="font-size:12px; opacity:.7;">
+      (10–15)
+    </span>
+  </div>
 
-                        <label class="fld" style="margin-top: 8px">
-                          <span>E-mail</span>
-                          <input id="contractEmail" type="email" />
-                        </label>
+  <div id="skdBuyoutPctWarn" style="display:none; color:#b00020; font-size:12px; margin-top:6px;">
+    Wpisz wartość 10–15%.
+  </div>
+</label>
+    </div>
 
-                        <label class="fld" style="margin-top: 8px">
-                          <span>Numer konta</span>
-                          <input id="contractIban" type="text" />
-                        </label>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
+    <div style="margin-top:10px; font-size:12px; opacity:.8;" id="skdChoiceHint">
+      —
+    </div>
+  </div>
+  <div style="margin-top:12px; display:flex; gap:10px; align-items:center;">
+  <button id="skdChoiceSaveBtn" class="btn btn-primary" style="display:none;">
+    Zapisz wybór oferty
+  </button>
+  <span id="skdChoiceSaveHint" style="font-size:12px; opacity:.75; display:none;">
+    Zapisz, aby utrwalić wybór w sprawie.
+  </span>
+</div>
+</div>
 
               <!-- PANEL: PLIKI -->
               <div
@@ -768,64 +761,6 @@
               </div>
             </div>
           </section>
-          <!-- ===== /OFERTA SKD ===== -->
-
-          <div class="modal-body">
-            <!-- INFO -->
-            <div class="tabpanel active" data-panel="info">
-              <div class="grid">
-                <div class="section">
-                  <div class="kv">
-                    <div class="item">
-                      <div class="lbl">Klient</div>
-                      <div class="val" id="cmInfoClient">—</div>
-                    </div>
-                    <div class="item">
-                      <div class="lbl">Bank</div>
-                      <div class="val" id="cmInfoBank">—</div>
-                    </div>
-                    <div class="item">
-                      <div class="lbl">Kwota kredytu</div>
-                      <div class="val" id="cmInfoAmount">—</div>
-                    </div>
-                    <div class="item">
-                      <div class="lbl">WPS</div>
-                      <div class="val" id="cmInfoWps">—</div>
-                    </div>
-                    <div class="item">
-                      <div class="lbl">Status</div>
-                      <div class="val" id="cmInfoStatus">—</div>
-                    </div>
-                    <div class="item">
-                      <div class="lbl">Data zawarcia</div>
-                      <div class="val" id="cmInfoDate">—</div>
-                    </div>
-                  </div>
-                </div>
-
-                <div class="section">
-                  <div style="font-weight: 700; margin-bottom: 8px">
-                    Dane kontaktowe
-                  </div>
-                  <div class="kv">
-                    <div class="item">
-                      <div class="lbl">Telefon</div>
-                      <div class="val" id="cmInfoPhone">—</div>
-                    </div>
-                    <div class="item">
-                      <div class="lbl">E-mail</div>
-                      <div class="val" id="cmInfoEmail">—</div>
-                    </div>
-                    <div class="item" style="grid-column: 1/-1">
-                      <div class="lbl">Adres</div>
-                      <div class="val" id="cmInfoAddress">—</div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <div style="margin-top: 10px; display: flex; gap: 8px">     
-          </div>
 
 <script>
   // Podczas kliknięcia w wiersz w tabeli zapisujemy ID sprawy jako "aktywne"

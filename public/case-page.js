@@ -518,6 +518,113 @@ function fillClientSection(data) {
   }
 }
 
+// ===============================
+//  TAB: DECYZJA (UI only — v1)
+// ===============================
+function renderDecisionTab() {
+  const variantEl = document.getElementById("decisionVariant");
+  const docsEl = document.getElementById("decisionDocs");
+  const btnPrimary = document.getElementById("btnDecisionPrimary");
+  const btnRefresh = document.getElementById("btnDecisionRefresh");
+  const btnChangeOffer = document.getElementById("btnDecisionChangeOffer");
+  const hintEl = document.getElementById("decisionHint");
+
+  if (!variantEl || !docsEl || !btnPrimary || !btnRefresh) return;
+
+  const offer = window.caseData?.offer_skd || {};
+  const variant = offer?.variant || "—";
+
+  // pokaż wariant
+  variantEl.textContent = (variant || "—").toString().toUpperCase();
+
+  // wymagane dokumenty per wariant
+  const required =
+    variant === "sell"
+      ? [
+          { key: "contract", label: "Umowa kredytowa" },
+          { key: "schedule", label: "Harmonogram" },
+          { key: "certificate", label: "Zaświadczenie z banku" },
+        ]
+      : [
+          { key: "contract", label: "Kompletna Umowa kredytowa" },
+          { key: "schedule", label: "Harmonogram" },
+          { key: "certificate", label: "Zaświadczenie" },
+        ];
+
+  const has = (key) => {
+    const files = Array.isArray(window.caseFiles) ? window.caseFiles : [];
+    const names = files
+      .map((f) => (f.original_name || f.filename || f.name || "").toLowerCase())
+      .filter(Boolean);
+
+    const hit = (phrases) => names.some((n) => phrases.some((p) => n.includes(p)));
+
+    if (key === "contract") return hit(["umowa", "kredyt"]);
+    if (key === "schedule") return hit(["harmon", "grafik spłat", "plan spłat"]);
+    if (key === "certificate") return hit(["zaświadc", "zaswiadc", "bank"]);
+    return false;
+  };
+
+  docsEl.innerHTML = required
+    .map((d) => {
+      const ok = has(d.key);
+      return `
+        <div class="check-item">
+          <span class="check-dot ${ok ? "ok" : "no"}"></span>
+          <span>${d.label}</span>
+        </div>
+      `;
+    })
+    .join("");
+
+  // CTA zależny od wariantu
+  if (variant === "sell") {
+    btnPrimary.textContent = "Przygotuj wniosek o dokumenty";
+  } else {
+    btnPrimary.textContent = "Klient deklaruje współpracę";
+  }
+
+  // gating
+  const isSell = variant === "sell";
+  const isReady = isSell ? required.every((d) => has(d.key)) : has("contract");
+  btnPrimary.disabled = !isReady;
+
+  if (hintEl) {
+    if (isReady) {
+      hintEl.textContent =
+        variant === "sell"
+          ? "SELL: komplet dokumentów jest. Możesz wysłać sygnał do przygotowania wniosku."
+          : "SF49/SF50: umowa jest. Możesz wysłać deklarację współpracy.";
+    } else {
+      hintEl.textContent = isSell
+        ? "SELL: brakuje części dokumentów — uzupełnij je w zakładce Dokumenty."
+        : "SF49/SF50: dodaj umowę kredytową, aby odblokować deklarację.";
+    }
+  }
+
+  btnRefresh.onclick = () => renderDecisionTab();
+
+  // ZMIANA OFERTY: otwórz modal SKD
+  if (btnChangeOffer) {
+    btnChangeOffer.onclick = () => {
+      // 1) jeśli masz globalną funkcję otwierającą modal — użyj jej
+      if (typeof window.openSkdOfferModal === "function") {
+        window.openSkdOfferModal();
+        return;
+      }
+
+      // 2) fallback: kliknij istniejący przycisk otwierający modal (ustaw mu ID)
+      const opener = document.getElementById("openSkdOfferModalBtn");
+      if (opener) {
+        opener.click();
+        return;
+      }
+
+      alert("Nie znaleziono akcji otwarcia modala SKD. Nadaj przyciskowi otwierającemu modal id='openSkdOfferModalBtn'.");
+    };
+  }
+}
+
 function fillCreditSection(data) {
   $("creditBank").value =
     data.bank ?? data.creditBank ?? data.bankName ?? data.bank_name ?? "";
@@ -800,6 +907,8 @@ async function loadCaseFiles(caseId) {
 
     const data = await res.json();
     console.log("LOAD_CASE_FILES RESULT =", data);
+
+    window.caseFiles = Array.isArray(data?.files) ? data.files : (Array.isArray(data) ? data : []);
 
     const files = Array.isArray(data) ? data : data.files || [];
     renderCaseFiles(files);
@@ -1106,6 +1215,8 @@ async function loadCaseDetails() {
   try {
     console.log("Pobieram dane sprawy", caseId);
     const data = await fetchCaseDetails(caseId);
+    window.caseData = data;
+    renderDecisionTab();
     console.log("Dane sprawy z API:", data);
 
     fillCaseHeader(data);
@@ -1117,7 +1228,7 @@ async function loadCaseDetails() {
 
     // 🔹 dokumenty z API → lista
     await loadCaseFiles(caseId);
-
+    renderDecisionTab();
     // 🔹 upload plików dla tej sprawy
     initCaseFilesUpload(caseId);   // 👈 DODAJ TĘ LINIJKĘ
 

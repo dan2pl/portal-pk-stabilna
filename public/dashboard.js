@@ -2424,534 +2424,523 @@ if (tbodyEl) {
 })();
 
 function initSkdOffer_v2(caseData) {
-  console.log(
-    "%cinitSkdOffer_v2 uruchomione",
-    "color:#fff;background:#900;padding:2px 6px;border-radius:4px;"
-  );
-  console.log("initSkdOffer_v2 → caseData.id =", caseData && caseData.id);
+  console.log("[SKD] initSkdOffer_v2, caseId =", caseData?.id);
 
-  if (!caseData || !caseData.id) {
-    console.warn("initSkdOffer_v2: brak caseData lub id");
-    return;
-  }
+  if (!caseData || !caseData.id) return;
 
   const root = document.getElementById("skdOffer");
   if (!root) {
-    console.warn("initSkdOffer_v2: brak #skdOffer w DOM");
+    console.warn("[SKD] brak #skdOffer w DOM");
     return;
   }
 
-  // zapamiętujemy ID sprawy
+  // ID sprawy globalnie (jak używasz w innych miejscach)
   window.currentCaseId = caseData.id;
 
-  const $ = (sel) => root.querySelector(sel);
+  const qs = (sel) => root.querySelector(sel);
+  const qsa = (sel) => Array.from(root.querySelectorAll(sel));
 
-  // POLA
-  const eligSf50 = $("#eligSf50");
-  const eligSf49 = $("#eligSf49");
-  const eligSell = $("#eligSell");
+  // --- POLA / UI ---
+  const eligSf50 = qs("#eligSf50");
+  const eligSf49 = qs("#eligSf49");
+  const eligSell = qs("#eligSell");
 
-  const wpsForecastInput = $("#wpsForecastInput");
-  const wpsFinalInput = $("#wpsFinalInput");
-  const futureInterestInput = $("#futureInterestInput");
-  const buyoutPctInput = $("#buyoutPctInput");
-  const notesInput = $("#skdOfferNotes");
+  const wpsForecastInput = qs("#wpsForecastInput"); // data-skd-field="wps_forecast"
+  const wpsFinalInput = qs("#wpsFinalInput");
+  const futureInterestInput = qs("#futureInterestInput");
+  const buyoutPctInput = qs("#buyoutPctInput"); // stary input w kaflu SELL (góra)
+  const notesInput = qs("#skdOfferNotes");
 
-  // SYMULACJA WYPŁAT – elementy UI (to Twoje <strong id="...">)
+  const adminVariantRadios = qsa('input[name="skdVariant"]');       // górne kafle
+  const pickVariantRadios  = Array.from(document.querySelectorAll('input[name="skdVariantPick"]')); // dolny picker (poza #skdOffer)
+  const pickBuyoutWrap     = document.getElementById("skdBuyoutWrap");
+  const pickBuyoutInput    = document.getElementById("skdBuyoutPct");
+  const pickHintEl         = document.getElementById("skdChoiceHint");
+
+  const saveBtnHeader = document.getElementById("skdOfferSaveBtn");     // góra modala
+  const saveBtnChoice = document.getElementById("skdChoiceSaveBtn");    // dół (jeśli dodałeś)
+  const saveHintChoice = document.getElementById("skdChoiceSaveHint");  // (jeśli dodałeś)
+
+  // --- SYMULACJA (jeśli masz te pola) ---
   const simNowEl = document.getElementById("estNow");
   const simLaterEl = document.getElementById("estLater");
   const simTotalEl = document.getElementById("estTotal");
 
-  const variantRadios = root.querySelectorAll('input[name="skdVariant"]');
+  // --------------------------
+  //  STATE (jedno źródło prawdy)
+  // --------------------------
+  const offer = {
+  variant: "sf50",
+  buyout_pct: null,
+  eligibility: { sf50: true, sf49: true, sell: true },
+  future_interest: 0,
+  wps_final: null,
+  notes: "",
 
-  // KARTY WARIANTÓW
-  const variantCards = {
-    sf50: root.querySelector('[data-variant="sf50"]'),
-    sf49: root.querySelector('[data-variant="sf49"]'),
-    sell: root.querySelector('[data-variant="sell"]'),
-  };
+  // najpierw JSON z bazy (offer_skd)
+  ...(caseData.offer_skd || {}),
 
-  // 🔥 Sterowanie dostępnością wariantów na podstawie checkboxów eligibility
-  function refreshVariantAvailabilityFromEligibility() {
-    const elig = {
+  // potem twarde kolumny – MAJĄ NADPISAĆ JSON
+  variant: caseData.variant ?? (caseData.offer_skd?.variant ?? "sf50"),
+  variant_picked: Boolean(caseData.variant_picked),
+  variant_picked_at: caseData.variant_picked_at ?? null,
+};
+/*applyVariantPickedLock(offer);*/
+
+  function parseNumber(v) {
+    if (v === undefined || v === null || v === "") return null;
+    const cleaned = String(v).replace(/\s/g, "").replace(",", ".").trim();
+    const n = Number(cleaned);
+    return Number.isFinite(n) ? n : null;
+  }
+
+  function formatPln(n) {
+    if (n == null || !Number.isFinite(Number(n))) return "—";
+    return Number(n).toLocaleString("pl-PL", { maximumFractionDigits: 0 }) + " zł";
+  }
+
+  function currentWpsBase() {
+    const wpsFinal = parseNumber(wpsFinalInput?.value);
+    const wpsForecast = parseNumber(wpsForecastInput?.value);
+    return wpsFinal ?? wpsForecast ?? null;
+  }
+
+  // --------------------------
+  //  Dirty / Save buttons
+  // --------------------------
+  let dirty = false;
+
+  function showSaveButtons() {
+    if (offer.variant_picked) return; // po zatwierdzeniu nie pokazujemy “zapisz”
+    if (saveBtnHeader) { saveBtnHeader.style.display = "inline-flex"; saveBtnHeader.disabled = false; }
+    if (saveBtnChoice) { saveBtnChoice.style.display = "inline-flex"; saveBtnChoice.disabled = false; }
+    if (saveHintChoice) saveHintChoice.style.display = "inline";
+  }
+
+  function hideSaveButtons() {
+    if (saveBtnHeader) saveBtnHeader.style.display = "none";
+    if (saveBtnChoice) saveBtnChoice.style.display = "none";
+    if (saveHintChoice) saveHintChoice.style.display = "none";
+  }
+
+  function markDirty() {
+    if (offer.variant_picked) return; // po zatwierdzeniu ignoruj zmiany
+    dirty = true;
+    showSaveButtons();
+  }
+
+  // --------------------------
+  //  Lock UI po zatwierdzeniu
+  // --------------------------
+  function setLocked(locked) {
+    // eligibility
+    [eligSf50, eligSf49, eligSell].forEach((el) => { if (el) el.disabled = !!locked; });
+
+    // górne warianty (kafle)
+    adminVariantRadios.forEach((r) => {
+      r.disabled = !!locked;
+      const wrap = r.closest(".radio");
+      if (wrap) {
+        wrap.style.opacity = locked ? "0.55" : "";
+        wrap.style.pointerEvents = locked ? "none" : "";
+      }
+    });
+
+    // buyout w górnym SELL
+    if (buyoutPctInput) buyoutPctInput.disabled = !!locked;
+
+    // dolny picker
+    pickVariantRadios.forEach((r) => {
+      r.disabled = !!locked;
+      const wrap = r.closest("label");
+      if (wrap) {
+        wrap.style.opacity = locked ? "0.55" : "";
+        wrap.style.pointerEvents = locked ? "none" : "";
+      }
+    });
+    if (pickBuyoutInput) pickBuyoutInput.disabled = !!locked;
+
+    // hint
+    if (pickHintEl) {
+      pickHintEl.textContent = locked
+        ? `✅ Wybrano wariant: ${(offer.variant || "—").toUpperCase()} (zapisane).`
+        : "Wybierz wariant i zapisz, aby zatwierdzić decyzję.";
+    }
+
+    if (locked) hideSaveButtons();
+  }
+function applyVariantPickedLock(o) {
+  // wrapper dla kompatybilności — źródło prawdy: o.variant_picked
+  setLocked(Boolean(o?.variant_picked));
+}
+  // --------------------------
+  //  Eligibility → dostępność
+  // --------------------------
+  function getEligibilityFromUi() {
+    return {
       sf50: !!eligSf50?.checked,
       sf49: !!eligSf49?.checked,
       sell: !!eligSell?.checked,
     };
+  }
 
-    if (!variantRadios || !variantRadios.length) return;
+  function applyEligibilityToUi(elig) {
+    if (eligSf50) eligSf50.checked = !!elig?.sf50;
+    if (eligSf49) eligSf49.checked = !!elig?.sf49;
+    if (eligSell) eligSell.checked = !!elig?.sell;
+  }
 
-    let firstAllowedRadio = null;
+  function syncVariantAvailability() {
+    const elig = offer.eligibility || { sf50: true, sf49: true, sell: true };
 
-    Array.from(variantRadios).forEach((r) => {
-      const key = r.value; // spodziewamy się: "sf50", "sf49", "sell"
-      const allowed = elig[key] !== false;
-
-      // włącz / wyłącz sam radio
-      r.disabled = !allowed;
-
-      // karta wariantu (po prawej) – przyciemniamy gdy niedostępna
-      const card = variantCards[key];
-      if (card) {
-        card.style.opacity = allowed ? "1" : "0.4";
-        card.style.pointerEvents = allowed ? "auto" : "none";
-      }
-
-      if (allowed && !firstAllowedRadio) {
-        firstAllowedRadio = r;
+    // górne
+    adminVariantRadios.forEach((r) => {
+      const ok = !!elig[r.value];
+      r.disabled = !ok || offer.variant_picked;
+      const wrap = r.closest(".radio");
+      if (wrap) {
+        wrap.style.opacity = ok ? "1" : "0.4";
+        wrap.style.pointerEvents = ok ? (offer.variant_picked ? "none" : "") : "none";
       }
     });
 
-    // jeśli zaznaczony jest wariant niedostępny → przeskocz na pierwszy dostępny
-    const currentSelected = Array.from(variantRadios).find((r) => r.checked);
-    if (currentSelected && currentSelected.disabled && firstAllowedRadio) {
-      currentSelected.checked = false;
-      firstAllowedRadio.checked = true;
+    // dolne
+    pickVariantRadios.forEach((r) => {
+      const ok = !!elig[r.value];
+      r.disabled = !ok || offer.variant_picked;
+      const wrap = r.closest("label");
+      if (wrap) {
+        wrap.style.opacity = ok ? "1" : "0.45";
+        wrap.style.pointerEvents = ok ? (offer.variant_picked ? "none" : "") : "none";
+      }
+    });
+
+    // jeśli bieżący wariant stał się niedozwolony → przeskocz
+    if (!elig[offer.variant]) {
+      const first = ["sf50", "sf49", "sell"].find((k) => elig[k]);
+      if (first) offer.variant = first;
     }
+
+    syncVariantToUi();
   }
 
-  // Reakcja na zmianę checkboxów kwalifikacji
-  [eligSf50, eligSf49, eligSell].forEach((chk) => {
-    if (!chk) return;
-    chk.addEventListener("change", () => {
-      refreshVariantAvailabilityFromEligibility();
-    });
-  });
-  // POMOCNICZE FUNKCJE
-  const toBool = (v, def = true) => {
-    if (v === undefined || v === null) return def;
-    if (v === true || v === false) return v;
-    if (typeof v === "string") {
-      if (v.toLowerCase() === "true") return true;
-      if (v.toLowerCase() === "false") return false;
-    }
-    if (v === 1) return true;
-    if (v === 0) return false;
-    return !!v;
-  };
+  // --------------------------
+  //  Variant ↔ UI (góra + dół)
+  // --------------------------
+  function syncVariantToUi() {
+    // górne radios
+    adminVariantRadios.forEach((r) => { r.checked = (r.value === offer.variant); });
 
-  const parseNumber = (value) => {
-    if (value === undefined || value === null || value === "") return null;
-    const cleaned = String(value).replace(/\s/g, "").replace(",", ".");
-    const n = Number(cleaned);
-    return Number.isFinite(n) ? n : null;
-  };
-  // Formatowanie liczb jako "15 691"
-  function formatPln(n) {
-    if (n == null || isNaN(n)) return "—";
-    return Number(n).toLocaleString("pl-PL", {
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0,
-    });
+    // dolne radios
+    pickVariantRadios.forEach((r) => { r.checked = (r.value === offer.variant); });
+
+    // buyout widoczność
+    const isSell = offer.variant === "sell";
+    if (pickBuyoutWrap) pickBuyoutWrap.style.display = isSell ? "" : "none";
+
+    // buyout wartość
+    const pct = offer.buyout_pct;
+    const pctUi = (pct != null && Number.isFinite(Number(pct))) ? String(Math.round(Number(pct) * 100)) : "";
+    if (pickBuyoutInput && isSell && !pickBuyoutInput.value) pickBuyoutInput.value = pctUi || "10";
+    if (buyoutPctInput && isSell && !buyoutPctInput.value) buyoutPctInput.value = pctUi || "10";
+
+    recomputePayoutSimulation();
   }
 
-  // 🔥 GŁÓWNA FUNKCJA SYMULACJI WYPŁAT
+  // --------------------------
+  //  Symulacja wypłat
+  // --------------------------
   function recomputePayoutSimulation() {
-    // jeśli nie mamy elementów symulacji w DOM → nic nie rób
     if (!simNowEl && !simLaterEl && !simTotalEl) return;
 
-    // 1) WPS bazowy: najpierw ostateczny, potem prognoza
-    const wpsFinal = parseNumber(wpsFinalInput?.value);
-    const wpsForecast = parseNumber(wpsForecastInput?.value);
-    const baseWps = wpsFinal ?? wpsForecast ?? null;
+    const baseWps = currentWpsBase();
+    const futureInterest = Math.max(0, parseNumber(futureInterestInput?.value) || 0);
 
-    // 2) Umorzone przyszłe odsetki – zawsze 100% dla klienta
-    const futureInterestRaw = parseNumber(futureInterestInput?.value);
-    const futureInterest =
-      futureInterestRaw && futureInterestRaw > 0 ? futureInterestRaw : 0;
-
-    if (!baseWps || !isFinite(baseWps) || baseWps <= 0) {
+    if (!baseWps || baseWps <= 0) {
       if (simNowEl) simNowEl.textContent = "—";
       if (simLaterEl) simLaterEl.textContent = "—";
       if (simTotalEl) simTotalEl.textContent = "—";
       return;
     }
 
-    // 3) Aktualnie wybrany wariant
-    let currentVariant = "sf50";
-    if (variantRadios && variantRadios.length) {
-      const selected = Array.from(variantRadios).find((r) => r.checked);
-      if (selected) currentVariant = selected.value;
-    }
+    let now = 0, later = 0;
 
-    // 4) Gotówka dla klienta: teraz / później
-    let now = 0;
-    let later = 0;
-
-    if (currentVariant === "sf50") {
-      // Success Fee 50/50
-      now = 0;
+    if (offer.variant === "sf50") {
       later = baseWps * 0.5;
-    } else if (currentVariant === "sf49") {
-      // Success Fee 51% dla klienta
-      now = 0;
+    } else if (offer.variant === "sf49") {
       later = baseWps * 0.51;
-    } else if (currentVariant === "sell") {
-      // Sprzedaż roszczenia – klient dostaje kwotę z góry
-      const rawPct = parseNumber(buyoutPctInput?.value); // np. 8, 12, 20
+    } else if (offer.variant === "sell") {
+      // UI trzyma % w skali 10–15, model w skali 0.10–0.15
+      let pct = null;
 
-      // efektywny procent do obliczeń (twardy zakres 10–15)
-      let effectivePct;
-      if (rawPct != null && isFinite(rawPct)) {
-        effectivePct = Math.min(15, Math.max(10, rawPct));
+      // preferuj dolny input, potem górny
+      const rawPct = parseNumber(pickBuyoutInput?.value) ?? parseNumber(buyoutPctInput?.value);
+
+      if (rawPct != null && Number.isFinite(rawPct)) {
+        const clamped = Math.min(15, Math.max(10, rawPct));
+        pct = clamped / 100;
       } else {
-        effectivePct = 10; // domyślnie 10%
+        pct = 0.10;
       }
 
-      // 🔔 obsługa komunikatu o zakresie
-      const warningEl = document.getElementById("buyoutWarning");
-      if (warningEl) {
-        if (rawPct != null && isFinite(rawPct) && (rawPct < 10 || rawPct > 15)) {
-          warningEl.style.display = "block";
-        } else {
-          warningEl.style.display = "none";
-        }
-      }
-
-      const clientShare = effectivePct / 100; // 0.10–0.15
-
-      now = baseWps * clientShare;
+      now = baseWps * pct;
       later = 0;
     } else {
-      // fallback: traktuj jak 50/50
-      now = 0;
       later = baseWps * 0.5;
     }
 
-    // 5) Łączna gotówka z WPS:
     const cashTotal = now + later;
-
-    // 6) SUMA DLA KLIENTA = GOTÓWKA + UMORZONE ODSETKI
     const totalWithInterest = cashTotal + futureInterest;
 
-    // 7) Wrzucamy do UI
-    if (simNowEl) simNowEl.textContent = formatPln(now) + " zł";
-    if (simLaterEl) simLaterEl.textContent = formatPln(later) + " zł";
-    if (simTotalEl) simTotalEl.textContent = formatPln(totalWithInterest) + " zł";
+    if (simNowEl) simNowEl.textContent = formatPln(now);
+    if (simLaterEl) simLaterEl.textContent = formatPln(later);
+    if (simTotalEl) simTotalEl.textContent = formatPln(totalWithInterest);
   }
-  // 🔁 Przeliczanie przy zmianach WPS / odsetek / prowizji / wariantu
-  [wpsForecastInput, wpsFinalInput, futureInterestInput, buyoutPctInput].forEach((el) => {
+
+  // --------------------------
+  //  Handlery (góra/dół)
+  // --------------------------
+  // eligibility checkboxy
+  [eligSf50, eligSf49, eligSell].forEach((chk) => {
+    if (!chk) return;
+    chk.addEventListener("change", () => {
+      offer.eligibility = getEligibilityFromUi();
+      syncVariantAvailability();
+      markDirty();
+    });
+  });
+
+  // górne kafle
+  adminVariantRadios.forEach((r) => {
+    r.addEventListener("change", () => {
+      if (!r.checked) return;
+      if (offer.variant_picked) return;
+
+      const elig = offer.eligibility || {};
+      if (!elig[r.value]) return;
+
+      offer.variant = r.value;
+      syncVariantToUi();
+      markDirty();
+    });
+  });
+
+  // dolny picker
+  pickVariantRadios.forEach((r) => {
+    r.addEventListener("change", () => {
+      if (!r.checked) return;
+      if (offer.variant_picked) return;
+
+      const elig = offer.eligibility || {};
+      if (!elig[r.value]) return;
+
+      offer.variant = r.value;
+      syncVariantToUi();
+      markDirty();
+    });
+  });
+
+  // buyout dolny
+  if (pickBuyoutInput) {
+    pickBuyoutInput.addEventListener("input", () => {
+      if (offer.variant_picked) return;
+
+      const raw = parseNumber(pickBuyoutInput.value);
+      if (raw == null) {
+        offer.buyout_pct = null;
+      } else {
+        const normalized = raw > 1 ? raw / 100 : raw; // 12 -> 0.12
+        offer.buyout_pct = normalized;
+      }
+      recomputePayoutSimulation();
+      markDirty();
+    });
+  }
+
+  // buyout górny
+  if (buyoutPctInput) {
+    buyoutPctInput.addEventListener("input", () => {
+      if (offer.variant_picked) return;
+
+      const raw = parseNumber(buyoutPctInput.value);
+      if (raw == null) {
+        offer.buyout_pct = null;
+      } else {
+        const normalized = raw > 1 ? raw / 100 : raw;
+        offer.buyout_pct = normalized;
+      }
+      recomputePayoutSimulation();
+      markDirty();
+    });
+  }
+
+  // WPS / futureInterest zmiany → symulacja + dirty
+  [wpsForecastInput, wpsFinalInput, futureInterestInput, notesInput].forEach((el) => {
     if (!el) return;
     el.addEventListener("input", () => {
       recomputePayoutSimulation();
+      markDirty();
     });
-  });
-
-  if (variantRadios && variantRadios.length) {
-    Array.from(variantRadios).forEach((r) => {
-      r.addEventListener("change", () => {
-        recomputePayoutSimulation();
-      });
-    });
-  }
-
-  // Pierwsze przeliczenie zaraz po inicjalizacji
-  recomputePayoutSimulation();
-
-  // 🔥 CHOWANIE / POKAZYWANIE KAFELKÓW
-  const syncVariantVisibility = (eligObj) => {
-    if (!eligObj) return;
-
-    const allowed = {
-      sf50: toBool(eligObj.sf50, true),
-      sf49: toBool(eligObj.sf49, true),
-      sell: toBool(eligObj.sell, true),
-    };
-
-    if (variantCards.sf50) variantCards.sf50.style.display = allowed.sf50 ? "" : "none";
-    if (variantCards.sf49) variantCards.sf49.style.display = allowed.sf49 ? "" : "none";
-    if (variantCards.sell) variantCards.sell.style.display = allowed.sell ? "" : "none";
-
-    // jeśli aktualnie wybrany wariant stał się niedozwolony → wybierz pierwszy dostępny
-    if (variantRadios && variantRadios.length) {
-      const radiosArr = Array.from(variantRadios);
-      let current = radiosArr.find((r) => r.checked);
-
-      if (!current || !allowed[current.value]) {
-        const firstAllowed = radiosArr.find((r) => allowed[r.value]);
-        if (firstAllowed) firstAllowed.checked = true;
-      }
-    }
-  };
-
-  // 🔥 WYPEŁNIENIE FORMULARZA DANYMI
-  const applyStateToForm = (state) => {
-    if (!state) return;
-
-    const offer = state.offer_skd || {};
-    const elig = offer.eligibility || {};
-
-    console.log("SKD_v2 → applyStateToForm, eligibility:", elig);
-
-    // najważniejsze: chowamy / pokazujemy warianty
-    syncVariantVisibility(elig);
-
-    // checkboxy
-    if (eligSf50) eligSf50.checked = toBool(elig.sf50, true);
-    if (eligSf49) eligSf49.checked = toBool(elig.sf49, true);
-    if (eligSell) eligSell.checked = toBool(elig.sell, true);
-
-    // kwoty
-    if (wpsForecastInput && typeof state.wps_forecast === "number")
-      wpsForecastInput.value = String(state.wps_forecast).replace(".", ",");
-
-    if (wpsFinalInput && typeof offer.wps_final === "number")
-      wpsFinalInput.value = String(offer.wps_final).replace(".", ",");
-
-    if (futureInterestInput && typeof offer.future_interest === "number")
-      futureInterestInput.value = String(offer.future_interest).replace(".", ",");
-
-    if (buyoutPctInput && typeof offer.buyout_pct === "number")
-      buyoutPctInput.value = String(offer.buyout_pct * 100);
-
-    if (notesInput) notesInput.value = offer.notes || "";
-
-    // wariant (radio)
-    if (variantRadios && offer.variant) {
-      variantRadios.forEach((r) => {
-        r.checked = r.value === offer.variant;
-      });
-    }
-  };
-
-  // 🔥 DYNAMICZNE REAGOWANIE NA ZMIANĘ CHECKBOXÓW
-  [eligSf50, eligSf49, eligSell].forEach((el) => {
-    if (!el) return;
     el.addEventListener("change", () => {
-      syncVariantVisibility({
-        sf50: !!eligSf50.checked,
-        sf49: !!eligSf49.checked,
-        sell: !!eligSell.checked,
-      });
+      recomputePayoutSimulation();
+      markDirty();
     });
   });
 
-  // 🔥 PRZYCISK "ZAPISZ" – bindowany tylko raz
-  const saveBtn = document.getElementById("skdOfferSaveBtn");
-  if (saveBtn && !saveBtn.dataset.bound) {
-    saveBtn.dataset.bound = "1";
+  // --------------------------
+  //  SAVE (góra + dół)
+  // --------------------------
+  function bindSaveOnce(btn) {
+    if (!btn || btn.dataset.bound) return;
+    btn.dataset.bound = "1";
 
-    const markDirty = () => {
-      saveBtn.style.display = "inline-block";
-    };
+    btn.addEventListener("click", async (e) => {
+      e.preventDefault();
 
-    root.querySelectorAll("input, textarea, select").forEach((el) => {
-      el.addEventListener("input", markDirty);
-      el.addEventListener("change", markDirty);
-    });
+      if (offer.variant_picked) {
+        alert("Ta oferta jest już zatwierdzona. Jeśli chcesz zmienić wybór — daj znać adminowi.");
+        return;
+      }
 
-    saveBtn.addEventListener("click", async () => {
       if (!window.currentCaseId) {
         alert("Brak ID sprawy – nie mogę zapisać oferty SKD.");
         return;
       }
 
-      const forecastVal = parseNumber(wpsForecastInput?.value);
-      const finalVal = parseNumber(wpsFinalInput?.value);
-      const futureInterestVal = parseNumber(futureInterestInput?.value);
+      // zaciągnij UI → offer (final sync)
+      offer.eligibility = getEligibilityFromUi();
+      offer.notes = notesInput?.value || "";
+      offer.future_interest = parseNumber(futureInterestInput?.value) ?? 0;
 
-      // jeśli jest WPS ostateczny → on rządzi, inaczej prognoza
-      const wpsForecast = finalVal ?? forecastVal ?? null;
+      const wpsForecast = parseNumber(wpsFinalInput?.value) ?? parseNumber(wpsForecastInput?.value) ?? null;
 
-      // wariant
-      let selectedVariant = "sf50";
-      const selectedRadio = Array.from(variantRadios || []).find((r) => r.checked);
-      if (selectedRadio) selectedVariant = selectedRadio.value;
+      // SELL: buyout_pct musi być 0.10–0.15
+      if (offer.variant === "sell") {
+        let pct = offer.buyout_pct;
 
-      const buyoutPctRaw = parseNumber(buyoutPctInput?.value);
-
-      const offerData = {
-        variant: selectedVariant,
-        upfront_fee: null,
-        buyout_pct: buyoutPctRaw != null ? buyoutPctRaw / 100 : null,
-        notes: notesInput?.value || "",
-        eligibility: {
-          sf50: !!eligSf50?.checked,
-          sf49: !!eligSf49?.checked,
-          sell: !!eligSell?.checked,
-        },
-        wps_final: finalVal,
-        future_interest: futureInterestVal,
-        estimates: {},
-      };
-
-      // 🔥 PODPIĘCIE WPS POD OFERTĘ (jak miałeś wcześniej)
-      if (wpsForecast != null) {
-        offerData.estimates.wps_forecast = wpsForecast;
-
-        if (offerData.buyout_pct != null) {
-          const w = Number(wpsForecast);
-          const p = offerData.buyout_pct;
-
-          offerData.estimates.sell_client_amount = Math.round(w * (1 - p));
-          offerData.estimates.sell_gross = Math.round(w * p);
+        // gdy user podał 12 bez eventu (np. autofill)
+        if (pct == null) {
+          const rawPct = parseNumber(pickBuyoutInput?.value) ?? parseNumber(buyoutPctInput?.value);
+          if (rawPct != null) pct = (rawPct > 1 ? rawPct / 100 : rawPct);
         }
+
+        if (pct != null) {
+          // clamp
+          pct = Math.min(0.15, Math.max(0.10, Number(pct)));
+        } else {
+          pct = 0.10;
+        }
+        offer.buyout_pct = pct;
+      } else {
+        offer.buyout_pct = null;
       }
 
-      console.log("▶ Zapis SKD dla sprawy", window.currentCaseId, {
+      // ✅ zatwierdzenie wyboru
+      offer.variant_picked = true;
+      offer.variant_picked_at = new Date().toISOString();
+
+      const payload = {
         wps_forecast: wpsForecast,
-        offer_skd: offerData,
-      });
+        offer_skd: { ...offer },
+      };
+
+      // sanity: jeśli nie SELL, nie wysyłamy buyout_pct
+      if (payload.offer_skd.variant !== "sell") {
+        delete payload.offer_skd.buyout_pct;
+      }
 
       try {
-        await saveSkdOffer(window.currentCaseId, {
-          wps_forecast: wpsForecast,
-          offer_skd: offerData,
-        });
+        await window.saveSkdOffer(window.currentCaseId, payload);
 
-        console.log("✅ Oferta SKD zapisana poprawnie");
-        saveBtn.style.display = "none";
+        // ✅ sync lokalny
+        if (!window.caseData) window.caseData = {};
+        window.caseData.offer_skd = { ...offer };
+        caseData.offer_skd = { ...offer };
+
+        // UI
+        dirty = false;
+        hideSaveButtons();
+        setLocked(true);
+
+        if (saveHintChoice) {
+          saveHintChoice.textContent = "✅ Wybór oferty zapisany";
+          saveHintChoice.style.display = "inline";
+        }
+
+        alert("✅ Wybór oferty zapisany.");
       } catch (err) {
+        // jeżeli save się nie udał — cofnij “picked”
+        offer.variant_picked = false;
+        offer.variant_picked_at = null;
+
         console.error("❌ Błąd zapisu oferty SKD:", err);
         alert("Nie udało się zapisać oferty SKD. Sprawdź konsolę.");
       }
     });
-
   }
 
-  // 🔥 1) ZAŁADUJ DANE Z caseData — BEZ normalizeSkdOffer
-  const initialState = {
-    // WPS prognoza z caseData (kolumna w bazie)
-    wps_forecast:
-      caseData.wps_forecast !== undefined && caseData.wps_forecast !== null
-        ? caseData.wps_forecast
-        : null,
-    // Reszta oferty z caseData (offer_skd z bazy)
-    ...(caseData.offer_skd || {}),
-  };
+  bindSaveOnce(saveBtnHeader);
+  bindSaveOnce(saveBtnChoice);
 
-  console.log("SKD_v2 initialState z caseData:", initialState);
-  applyStateToForm(initialState);
+  // --------------------------
+  //  INIT: wypełnij UI z caseData / API
+  // --------------------------
+  // 1) z caseData
+  applyEligibilityToUi(offer.eligibility);
+  if (wpsForecastInput && caseData.wps_forecast != null) wpsForecastInput.value = caseData.wps_forecast;
+  if (wpsFinalInput && offer.wps_final != null) wpsFinalInput.value = offer.wps_final;
+  if (futureInterestInput && offer.future_interest != null) futureInterestInput.value = offer.future_interest;
+  if (notesInput) notesInput.value = offer.notes || "";
 
-  // 🔥 2) NADPISZ DANYMI Z BACKENDU
+  // 2) spróbuj dociągnąć z API (jeśli masz endpoint GET /api/cases/:id/skd-offer)
   (async () => {
     try {
       const res = await fetch(`/api/cases/${caseData.id}/skd-offer`);
       if (!res.ok) return;
-
       const data = await res.json();
-      console.log("SKD_v2: wczytuję ofertę z backendu:", data);
+      // ✅ ODTWÓRZ BLOKADĘ po ponownym otwarciu modala
+// źródło prawdy: twarde kolumny w cases (endpoint /api/cases/:id/skd-offer powinien je zwracać)
+offer.variant = (data.variant ?? offer.variant ?? "sf50");
 
-      const apiState = {
-        wps_forecast:
-          data.wps_forecast !== undefined && data.wps_forecast !== null
-            ? data.wps_forecast
-            : null,
-        ...(data.offer_skd || {}),
-      };
+offer.variant_picked = Boolean(
+  data.variant_picked ?? offer.variant_picked
+);
 
-      console.log("SKD_v2 (API) →", apiState);
-      applyStateToForm(apiState);
+offer.variant_picked_at =
+  data.variant_picked_at ?? offer.variant_picked_at ?? null;
 
-      // 🔥 RĘCZNE ODTWORZENIE OFERTY SKD W FORMULARZU
-      const offer = data.offer_skd || {};
+// 🔒 Zastosuj lock UI (kafle + picker + hint)
+setLocked(Boolean(offer.variant_picked));
 
-      try {
-        // 1) WPS (prognoza)
-        if (typeof wpsForecastInput !== "undefined" && wpsForecastInput) {
-          const wpsValue =
-            apiState.wps_forecast ??
-            (offer.estimates && offer.estimates.wps_forecast) ??
-            data.wps_forecast ??
-            null;
-
-          if (wpsValue != null) {
-            wpsForecastInput.value = wpsValue;
-          } else {
-            wpsForecastInput.value = "";
-          }
-        }
-
-        // 2) Wariant (sf50 / sf49 / sell)
-        if (
-          typeof variantRadios !== "undefined" &&
-          variantRadios &&
-          variantRadios.length
-        ) {
-          const v = offer.variant || apiState.variant || "sf50";
-          Array.from(variantRadios).forEach((r) => {
-            r.checked = r.value === v;
-          });
-        }
-
-        // 3) Procent wykupu (formularz ma %, w bazie 0.1 itp.)
-        if (typeof buyoutPctInput !== "undefined" && buyoutPctInput) {
-          const buyoutPct =
-            typeof offer.buyout_pct === "number"
-              ? offer.buyout_pct
-              : typeof apiState.buyout_pct === "number"
-                ? apiState.buyout_pct
-                : null;
-
-          if (buyoutPct != null) {
-            buyoutPctInput.value = String(Math.round(buyoutPct * 100));
-          } else {
-            buyoutPctInput.value = "";
-          }
-        }
-        // 3b) Przyszłe odsetki (future_interest)
-        if (typeof futureInterestInput !== "undefined" && futureInterestInput) {
-          let fi = null;
-
-          // Najpierw bierz z offer.future_interest (czyli z offer_skd)
-          if (offer.future_interest !== undefined && offer.future_interest !== null) {
-            fi = offer.future_interest;
-          }
-          // ewentualny fallback, gdybyś kiedyś miał to spłaszczone w apiState
-          else if (apiState.future_interest !== undefined && apiState.future_interest !== null) {
-            fi = apiState.future_interest;
-          }
-
-          if (fi !== null) {
-            futureInterestInput.value = String(fi).replace(".", ",");
-          } else {
-            futureInterestInput.value = "";
-          }
-        }
-        // 4) Eligibility (checkboxy)
-        if (offer.eligibility) {
-          if (
-            typeof eligSf50 !== "undefined" &&
-            eligSf50 &&
-            typeof offer.eligibility.sf50 !== "undefined"
-          ) {
-            eligSf50.checked = !!offer.eligibility.sf50;
-          }
-          if (
-            typeof eligSf49 !== "undefined" &&
-            eligSf49 &&
-            typeof offer.eligibility.sf49 !== "undefined"
-          ) {
-            eligSf49.checked = !!offer.eligibility.sf49;
-          }
-          if (
-            typeof eligSell !== "undefined" &&
-            eligSell &&
-            typeof offer.eligibility.sell !== "undefined"
-          ) {
-            eligSell.checked = !!offer.eligibility.sell;
-          }
-        }
-
-        // 5) Notatki
-        if (typeof notesInput !== "undefined" && notesInput) {
-          notesInput.value = offer.notes || apiState.notes || "";
-        }
-        refreshVariantAvailabilityFromEligibility();
-        // 🔥 po odtworzeniu oferty – przelicz symulację wypłat
-        recomputePayoutSimulation();
-        console.log("SKD_v2: UI po odtworzeniu oferty:", {
-          wpsForecast: wpsForecastInput?.value,
-          variant: offer.variant,
-          buyout_pct: offer.buyout_pct,
-          eligibility: offer.eligibility,
-          notes: offer.notes,
-        });
-      } catch (e) {
-        console.warn("SKD_v2: błąd przy ręcznym odtwarzaniu oferty:", e);
+      if (data?.offer_skd) {
+        Object.assign(offer, data.offer_skd);
       }
-    } catch (err) {
-      console.error("SKD_v2: błąd pobierania oferty:", err);
+      if (data?.wps_forecast != null && wpsForecastInput) {
+        wpsForecastInput.value = data.wps_forecast;
+      }
+
+      // odśwież UI po API
+      applyEligibilityToUi(offer.eligibility);
+      syncVariantAvailability();
+      syncVariantToUi();
+
+      // 🔒 lock jeśli już zatwierdzone
+      setLocked(!!offer.variant_picked);
+
+      // start symulacji
+      recomputePayoutSimulation();
+
+      // na start nie pokazuj zapisu
+      hideSaveButtons();
+    } catch (e) {
+      console.warn("[SKD] GET skd-offer failed:", e);
+
+      // fallback bez API
+      syncVariantAvailability();
+      syncVariantToUi();
+      setLocked(!!offer.variant_picked);
+      recomputePayoutSimulation();
+      hideSaveButtons();
     }
   })();
 }
@@ -3029,8 +3018,6 @@ window.__LAST_WPS_PREVIEW = data.result;
   const wps = Math.max(0, Math.round(Number(data.result?.wpsToday)));
   return Number.isFinite(wps) ? wps : null;
 }
-
-
 
 // ===============================
 //   WPS BASIC — obsługa UI + zapis + oferta SKD
