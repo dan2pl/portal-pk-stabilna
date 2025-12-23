@@ -2692,6 +2692,10 @@ function applyVariantPickedLock(o) {
     const isSell = offer.variant === "sell";
     if (pickBuyoutWrap) pickBuyoutWrap.style.display = isSell ? "" : "none";
 
+    // info tylko dla SELL (delikatna notka)
+const sellNote = document.getElementById("skdSellNote");
+if (sellNote) sellNote.style.display = isSell ? "block" : "none";
+
     // buyout wartość
     const pct = offer.buyout_pct;
     const pctUi = (pct != null && Number.isFinite(Number(pct))) ? String(Math.round(Number(pct) * 100)) : "";

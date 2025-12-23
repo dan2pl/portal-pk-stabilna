@@ -2820,3 +2820,9 @@ body {
   border-color:rgba(107,114,128,.25);
   opacity:.9;
 }
+
+.skd-info--soft {
+  margin-top: 8px;
+  font-size: 12px;
+  opacity: .75;
+}
