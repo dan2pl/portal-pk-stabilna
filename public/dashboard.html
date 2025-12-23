@@ -277,6 +277,7 @@
                 <th>Kwota kredytu</th>
                 <th>WPS</th>
                 <th>Status</th>
+                <th>SKD</th>
               </tr>
             </thead>
             <tbody id="caseTableBody"></tbody>
@@ -665,7 +666,7 @@
   <div class="card-h">
     <div>
       <div class="card-title">Wybór oferty</div>
-      <div class="card-sub">Wybierz wariant do przedstawienia Klientowi (tylko dostępne są aktywne)</div>
+      <div class="card-sub">Wybierz wariant, na który zdecydował się Klient (dostępne są tylko aktywne)</div>
     </div>
   </div>
 
@@ -674,42 +675,72 @@
       <label class="form-field">
         <span>Wariant</span>
         <div style="display:flex; gap:14px; flex-wrap:wrap; padding:8px 0;">
-          <label style="display:flex; gap:8px; align-items:center;">
-            <input type="radio" name="skdVariantPick" value="sf50" id="skdPickSf50">
-            <strong>SF50</strong>
-          </label>
+          <label class="skd-choice">
+  <input type="radio" name="skdVariantPick" value="sf50" />
+  <div class="skd-choice__content">
+    <div class="skd-choice__title">
+  Opłata za sukces 50/50 (bez ryzyka)
+  <span class="skd-badge-mini">SF50</span>
+</div>
+    <div class="skd-choice__sub">Rozliczenie po odzyskaniu środków.</div>
 
-          <label style="display:flex; gap:8px; align-items:center;">
-            <input type="radio" name="skdVariantPick" value="sf49" id="skdPickSf49">
-            <strong>SF49</strong>
-          </label>
+    <div class="skd-choice__details" data-variant-details="sf50">
+      <div>• Klient otrzyma <strong>50% WPS</strong> po wygraniu sprawy.</div>
+      <div>• Anulowanie przyszłych odsetek (jeśli kredyt w trakcie spłaty).</div>
+    </div>
+  </div>
+</label>
 
-          <label style="display:flex; gap:8px; align-items:center;">
-            <input type="radio" name="skdVariantPick" value="sell" id="skdPickSell">
-            <strong>SELL</strong>
-          </label>
+          <label class="skd-choice">
+  <input type="radio" name="skdVariantPick" value="sf49" />
+  <div class="skd-choice__content">
+    <div class="skd-choice__title">
+  Opłata za sukces 49% (ryzyko KZP na rzecz <strong>Banku</strong> po stronie Klienta)
+  <span class="skd-badge-mini">SF49</span>
+</div>
+    <div class="skd-choice__sub">Rozliczenie po odzyskaniu środków. Brak opłaty na start.</div>
+
+    <div class="skd-choice__details" data-variant-details="sf49">
+      <div>• Klient otrzyma <strong>51% WPS</strong> po wygraniu sprawy.</div>
+      <div>• Anulowanie przyszłych odsetek (jeśli kredyt w trakcie spłaty).</div>
+      <div>• Wynagrodzenie wstępne dla Agenta za podpisanie umowy.</div>
+    </div>
+  </div>
+</label>
+
+          <label class="skd-choice">
+  <input type="radio" name="skdVariantPick" value="sell" />
+  <div class="skd-choice__content">
+    <div class="skd-choice__title">
+  Sprzedaż roszczenia
+  <span class="skd-badge-mini sell">SELL</span>
+</div>
+    <div class="skd-choice__sub">Wypłata pieniędzy z góry. Bez ryzyka po stronie Klienta.</div>
+
+    <div class="skd-choice__details" data-variant-details="sell">
+      <div>• Budzet do podziału z Klientem <strong>15% WPS</strong> wypłacane po zawarciu umowy.</div>
+      <div>• Anulowanie przyszłych odsetek (jeśli kredyt w trakcie spłaty).</div>
+    </div>
+  </div>
+</label>
         </div>
       </label>
 
       <label class="form-field" id="skdBuyoutWrap" style="display:none;">
   <span>Odkup — Ustalony % dla Klienta</span>
 
-  <div style="display:flex; gap:8px; align-items:center;">
-    <input
-      id="skdBuyoutPct"
-      type="number"
-      step="0.1"
-      min="10"
-      max="15"
-      placeholder="np. 12.0"
-      style="max-width:140px;"
-    />
-    <span style="font-weight:600; opacity:.8;">%</span>
-
-    <span style="font-size:12px; opacity:.7;">
-      (10–15)
-    </span>
-  </div>
+  <div class="buyout-row">
+  <input
+    id="skdBuyoutPct"
+    type="number"
+    step="0.1"
+    min="10"
+    max="15"
+    placeholder="np. 12.0"
+  />
+  <span class="buyout-suffix">%</span>
+  <span class="buyout-range">(10–15)</span>
+</div>
 
   <div id="skdBuyoutPctWarn" style="display:none; color:#b00020; font-size:12px; margin-top:6px;">
     Wpisz wartość 10–15%.
@@ -721,14 +752,13 @@
       —
     </div>
   </div>
-  <div style="margin-top:12px; display:flex; gap:10px; align-items:center;">
+  <div class="skd-save-row">
   <button id="skdChoiceSaveBtn" class="btn btn-primary" style="display:none;">
     Zapisz wybór oferty
   </button>
   <span id="skdChoiceSaveHint" style="font-size:12px; opacity:.75; display:none;">
     Zapisz, aby utrwalić wybór w sprawie.
   </span>
-</div>
 </div>
 
               <!-- PANEL: PLIKI -->

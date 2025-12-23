@@ -2633,3 +2633,190 @@ body {
 .check-dot.ok { background:#2ecc71; }
 .check-dot.no { background:#e67e22; }
 .pill { display:inline-block; padding:4px 10px; border-radius:999px; background:rgba(0,0,0,.06); font-weight:600; }
+
+/* =========================
+   SKD Choice (PRO)
+   ========================= */
+
+#skdChoiceCard .card-sub { opacity: .75; }
+
+.skd-choice {
+  display: block;
+  cursor: pointer;
+  user-select: none;
+  width: 100%;
+  max-width: 520px;
+}
+
+.skd-choice input[type="radio"] {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.skd-choice__content{
+  border: 1px solid rgba(0,0,0,.10);
+  border-radius: 14px;
+  padding: 12px 14px;
+  background: #fff;
+  box-shadow: 0 1px 0 rgba(0,0,0,.04);
+  transition: transform .08s ease, box-shadow .12s ease, border-color .12s ease;
+}
+
+.skd-choice:hover .skd-choice__content{
+  transform: translateY(-1px);
+  box-shadow: 0 6px 18px rgba(0,0,0,.06);
+}
+
+.skd-choice__title{
+  font-weight: 800;
+  font-size: 14px;
+  line-height: 1.25;
+  letter-spacing: .1px;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.skd-choice__sub{
+  margin-top: 4px;
+  font-size: 12px;
+  line-height: 1.35;
+  opacity: .75;
+}
+
+.skd-choice__details{
+  display: none;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px dashed rgba(0,0,0,.10);
+  font-size: 12px;
+  line-height: 1.35;
+  opacity: .92;
+}
+
+.skd-choice__details > div { margin: 4px 0; }
+
+/* CHECKED state */
+.skd-choice input:checked + .skd-choice__content{
+  border-color: rgba(140, 40, 40, .35);
+  box-shadow: 0 0 0 3px rgba(140,40,40,.10), 0 8px 22px rgba(0,0,0,.08);
+}
+
+.skd-choice input:checked + .skd-choice__content .skd-choice__details{
+  display: block;
+}
+
+/* Disabled radios (JS ustawia disabled na inputach) */
+.skd-choice input:disabled + .skd-choice__content{
+  opacity: .45;
+  pointer-events: none;
+  box-shadow: none;
+}
+
+/* Badge */
+.skd-badge-mini{
+  font-weight: 700;
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(0,0,0,.06);
+  opacity: .9;
+}
+
+/* SELL badge can be stronger */
+.skd-badge-mini.sell{
+  background: rgba(140,40,40,.10);
+}
+
+/* Buyout field (PRO) */
+#skdBuyoutWrap .buyout-row{
+  display:flex;
+  gap:10px;
+  align-items:center;
+  margin-top: 6px;
+}
+
+#skdBuyoutPct{
+  width: 140px;
+  padding: 10px 10px;
+  border-radius: 12px;
+  border: 1px solid rgba(0,0,0,.14);
+  background: #fff;
+  outline: none;
+  font-weight: 700;
+}
+
+#skdBuyoutPct:focus{
+  border-color: rgba(140, 40, 40, .35);
+  box-shadow: 0 0 0 3px rgba(140,40,40,.10);
+}
+
+#skdBuyoutWrap .buyout-suffix{
+  font-weight: 800;
+  opacity: .8;
+}
+
+#skdBuyoutWrap .buyout-range{
+  font-size: 12px;
+  opacity: .65;
+}
+
+#skdBuyoutPctWarn{
+  margin-top: 6px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: rgba(176,0,32,.08);
+  color: #b00020;
+  font-size: 12px;
+}
+
+/* Bottom save row */
+#skdChoiceCard .skd-save-row{
+  margin-top: 12px;
+  display:flex;
+  gap:10px;
+  align-items:center;
+  justify-content:flex-start;
+}
+
+#skdChoiceHint{
+  margin-top: 10px;
+  font-size: 12px;
+  opacity: .8;
+}
+
+/* naprawa łamania tytułu */
+.skd-choice__title{
+  flex-wrap: wrap;
+  align-items: flex-start;
+}
+
+.skd-choice__title .skd-badge-mini{
+  flex: 0 0 auto;
+  margin-left: 6px;
+}
+
+.pk-badge{
+  display:inline-flex;
+  align-items:center;
+  padding:3px 8px;
+  border-radius:999px;
+  font-size:11px;
+  font-weight:600;
+  line-height:1;
+  border:1px solid rgba(0,0,0,.12);
+  white-space:nowrap;
+  user-select:none;
+}
+
+.pk-badge--picked{
+  background:rgba(34,197,94,.12);
+  border-color:rgba(34,197,94,.35);
+}
+
+.pk-badge--draft{
+  background:rgba(107,114,128,.10);
+  border-color:rgba(107,114,128,.25);
+  opacity:.9;
+}

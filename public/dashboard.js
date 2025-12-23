@@ -19,6 +19,7 @@ const USER_ROLE = document.body.dataset.role || 'agent';
 const IS_ADMIN = USER_ROLE === 'admin';
 console.log('Zalogowany jako:', USER_ROLE);
 
+
 // === GLOBALNE ETYKIETY STATUSÓW (jedyna prawda) ===
 const CASE_STATUS_LABELS = {
   NEW: "Nowa",
@@ -35,6 +36,20 @@ const CASE_STATUS_LABELS = {
   CLOSED_FAIL: "Zakończona – Przegrana",
   CLIENT_RESIGNED: "Rezygnacja klienta",
 };
+
+// ❌ statusy, dla których SKD NIE MA ZASTOSOWANIA
+const SKD_NEGATIVE_STATUSES = [
+  "ANALYSIS_NEGATIVE",
+  "CLOSED_FAIL",
+  "CLIENT_RESIGNED",
+];
+
+const SKD_VARIANT_LABELS = {
+  sf50: "Opłata za sukces 50/50 – bez ryzyka po stronie Klienta",
+  sf49: "Opłata za sukces 49/51 – ryzyko KZP po stronie Klienta",
+  sell: "Sprzedaż roszczenia – wypłata środków z góry"
+};
+
 function getToken() {
   // spróbuj kilku popularnych miejsc
   return (
@@ -443,6 +458,7 @@ async function initTableAndKpi() {
   <td>${amountStr}</td>
   <td>${wpsStr}</td>
   <td>${statusStr}</td>
+  <td>${skdBadge}</td>
 </tr>`;
       }).join('');
     }
@@ -1009,6 +1025,38 @@ async function loadCases(filterKey = "") {
           ? String(c.status)
           : "—";
 
+const picked = !!c.variant_picked;
+const variantKey = c.variant || null;
+
+const isNegative = SKD_NEGATIVE_STATUSES.includes(c.status_code);
+
+let skdBadge = "";
+
+if (isNegative) {
+  skdBadge = `
+    <span class="pk-badge pk-badge--na"
+          title="Sprawa zakończona negatywnie – brak oferty SKD">
+      SKD: NIE DOTYCZY
+    </span>
+  `;
+} else if (picked && variantKey) {
+  const label = SKD_VARIANT_LABELS[variantKey] || variantKey.toUpperCase();
+
+  skdBadge = `
+    <span class="pk-badge pk-badge--picked"
+          title="${label}">
+      SKD: ${variantKey.toUpperCase()}
+    </span>
+  `;
+} else {
+  skdBadge = `
+    <span class="pk-badge pk-badge--draft"
+          title="Decyzja ofertowa SKD nie została jeszcze podjęta">
+      SKD: DO WYBORU
+    </span>
+  `;
+}
+
       // 🔍 blob do wyszukiwarki (nazwisko, bank, kwoty, status, kontakt, nr sprawy)
       const contactBlob = Object.entries(c || {})
         .filter(([key]) => /phone|tel|email/i.test(key))
@@ -1042,6 +1090,7 @@ async function loadCases(filterKey = "") {
   <td>${amountStr}</td>
   <td>${wpsStr}</td>
   <td>${statusStr}</td>
+  <td>${skdBadge}</td>
 </tr>`;
     })
     .join("");
@@ -2509,11 +2558,15 @@ function initSkdOffer_v2(caseData) {
   //  Dirty / Save buttons
   // --------------------------
   let dirty = false;
+  let choiceTouched = false;
 
   function showSaveButtons() {
     if (offer.variant_picked) return; // po zatwierdzeniu nie pokazujemy “zapisz”
     if (saveBtnHeader) { saveBtnHeader.style.display = "inline-flex"; saveBtnHeader.disabled = false; }
-    if (saveBtnChoice) { saveBtnChoice.style.display = "inline-flex"; saveBtnChoice.disabled = false; }
+    if (saveBtnChoice) {
+  saveBtnChoice.style.display = choiceTouched ? "inline-flex" : "none";
+  saveBtnChoice.disabled = !choiceTouched;
+}
     if (saveHintChoice) saveHintChoice.style.display = "inline";
   }
 
@@ -2591,38 +2644,39 @@ function applyVariantPickedLock(o) {
   }
 
   function syncVariantAvailability() {
-    const elig = offer.eligibility || { sf50: true, sf49: true, sell: true };
+  // ✅ bierz z checkboxów, bo to jest realny stan UI
+  const elig = getEligibilityFromUi();
+  offer.eligibility = { ...elig }; // ✅ i dopiero to zapisuj do state
 
-    // górne
-    adminVariantRadios.forEach((r) => {
-      const ok = !!elig[r.value];
-      r.disabled = !ok || offer.variant_picked;
-      const wrap = r.closest(".radio");
-      if (wrap) {
-        wrap.style.opacity = ok ? "1" : "0.4";
-        wrap.style.pointerEvents = ok ? (offer.variant_picked ? "none" : "") : "none";
-      }
-    });
-
-    // dolne
-    pickVariantRadios.forEach((r) => {
-      const ok = !!elig[r.value];
-      r.disabled = !ok || offer.variant_picked;
-      const wrap = r.closest("label");
-      if (wrap) {
-        wrap.style.opacity = ok ? "1" : "0.45";
-        wrap.style.pointerEvents = ok ? (offer.variant_picked ? "none" : "") : "none";
-      }
-    });
-
-    // jeśli bieżący wariant stał się niedozwolony → przeskocz
-    if (!elig[offer.variant]) {
-      const first = ["sf50", "sf49", "sell"].find((k) => elig[k]);
-      if (first) offer.variant = first;
+  // górne
+  adminVariantRadios.forEach((r) => {
+    const ok = !!elig[r.value];
+    r.disabled = !ok || offer.variant_picked;
+    const wrap = r.closest(".radio");
+    if (wrap) {
+      wrap.style.opacity = ok ? "1" : "0.4";
+      wrap.style.pointerEvents = ok ? (offer.variant_picked ? "none" : "") : "none";
     }
+  });
 
-    syncVariantToUi();
+  // dolne
+  pickVariantRadios.forEach((r) => {
+    const ok = !!elig[r.value];
+    r.disabled = !ok || offer.variant_picked;
+
+    // ✅ to jest klucz: chowamy całe kafle jeśli nieaktywne
+    const wrap = r.closest(".skd-choice") || r.closest("label");
+    if (wrap) wrap.style.display = ok ? "" : "none";
+  });
+
+  // przeskok na pierwszy dozwolony
+  if (!elig[offer.variant]) {
+    const first = ["sf50", "sf49", "sell"].find((k) => elig[k]);
+    if (first) offer.variant = first;
   }
+
+  syncVariantToUi();
+}
 
   // --------------------------
   //  Variant ↔ UI (góra + dół)
@@ -2734,6 +2788,9 @@ function applyVariantPickedLock(o) {
       const elig = offer.eligibility || {};
       if (!elig[r.value]) return;
 
+      choiceTouched = true;
+     showSaveButtons();
+     
       offer.variant = r.value;
       syncVariantToUi();
       markDirty();
@@ -2790,98 +2847,106 @@ function applyVariantPickedLock(o) {
   // --------------------------
   //  SAVE (góra + dół)
   // --------------------------
-  function bindSaveOnce(btn) {
-    if (!btn || btn.dataset.bound) return;
-    btn.dataset.bound = "1";
+  function bindSaveOnce(btn, mode /* "draft" | "confirm" */) {
+  if (!btn || btn.dataset.bound) return;
+  btn.dataset.bound = "1";
 
-    btn.addEventListener("click", async (e) => {
-      e.preventDefault();
+  btn.addEventListener("click", async (e) => {
+    e.preventDefault();
 
-      if (offer.variant_picked) {
-        alert("Ta oferta jest już zatwierdzona. Jeśli chcesz zmienić wybór — daj znać adminowi.");
-        return;
+    // po zatwierdzeniu — nie pozwalamy już nic zapisywać
+    if (offer.variant_picked) {
+      alert("Ta oferta jest już zatwierdzona. Jeśli chcesz zmienić wybór — skontaktuj się z adminem.");
+      return;
+    }
+
+    if (!window.currentCaseId) {
+      alert("Brak ID sprawy – nie mogę zapisać oferty SKD.");
+      return;
+    }
+
+    // sync UI -> offer
+    offer.eligibility = getEligibilityFromUi();
+    offer.notes = notesInput?.value || "";
+    offer.future_interest = parseNumber(futureInterestInput?.value) ?? 0;
+
+    const wpsForecast =
+      parseNumber(wpsFinalInput?.value) ??
+      parseNumber(wpsForecastInput?.value) ??
+      null;
+
+    // SELL clamp
+    if (offer.variant === "sell") {
+      let pct = offer.buyout_pct;
+      if (pct == null) {
+        const rawPct = parseNumber(pickBuyoutInput?.value) ?? parseNumber(buyoutPctInput?.value);
+        if (rawPct != null) pct = (rawPct > 1 ? rawPct / 100 : rawPct);
       }
+      pct = pct != null ? Math.min(0.15, Math.max(0.10, Number(pct))) : 0.10;
+      offer.buyout_pct = pct;
+    } else {
+      offer.buyout_pct = null;
+    }
 
-      if (!window.currentCaseId) {
-        alert("Brak ID sprawy – nie mogę zapisać oferty SKD.");
-        return;
-      }
+    // ✅ kluczowa różnica:
+    // draft NIE ustawia variant_picked
+    // confirm ustawia variant_picked + lock
+    const isConfirm = mode === "confirm";
+    const nextPicked = isConfirm ? true : false;
+    const nextPickedAt = isConfirm ? new Date().toISOString() : null;
 
-      // zaciągnij UI → offer (final sync)
-      offer.eligibility = getEligibilityFromUi();
-      offer.notes = notesInput?.value || "";
-      offer.future_interest = parseNumber(futureInterestInput?.value) ?? 0;
+    const payload = {
+      wps_forecast: wpsForecast,
+      offer_skd: {
+        ...offer,
+        variant_picked: nextPicked,
+        variant_picked_at: nextPickedAt,
+      },
+    };
 
-      const wpsForecast = parseNumber(wpsFinalInput?.value) ?? parseNumber(wpsForecastInput?.value) ?? null;
+    if (payload.offer_skd.variant !== "sell") {
+      delete payload.offer_skd.buyout_pct;
+    }
 
-      // SELL: buyout_pct musi być 0.10–0.15
-      if (offer.variant === "sell") {
-        let pct = offer.buyout_pct;
+    try {
+      await window.saveSkdOffer(window.currentCaseId, payload);
 
-        // gdy user podał 12 bez eventu (np. autofill)
-        if (pct == null) {
-          const rawPct = parseNumber(pickBuyoutInput?.value) ?? parseNumber(buyoutPctInput?.value);
-          if (rawPct != null) pct = (rawPct > 1 ? rawPct / 100 : rawPct);
-        }
+      // sync lokalny (tylko to co zapisaliśmy)
+      offer.variant_picked = nextPicked;
+      offer.variant_picked_at = nextPickedAt;
 
-        if (pct != null) {
-          // clamp
-          pct = Math.min(0.15, Math.max(0.10, Number(pct)));
-        } else {
-          pct = 0.10;
-        }
-        offer.buyout_pct = pct;
-      } else {
-        offer.buyout_pct = null;
-      }
+      if (!window.caseData) window.caseData = {};
+      window.caseData.offer_skd = { ...payload.offer_skd };
+      caseData.offer_skd = { ...payload.offer_skd };
 
-      // ✅ zatwierdzenie wyboru
-      offer.variant_picked = true;
-      offer.variant_picked_at = new Date().toISOString();
+      dirty = false;
 
-      const payload = {
-        wps_forecast: wpsForecast,
-        offer_skd: { ...offer },
-      };
-
-      // sanity: jeśli nie SELL, nie wysyłamy buyout_pct
-      if (payload.offer_skd.variant !== "sell") {
-        delete payload.offer_skd.buyout_pct;
-      }
-
-      try {
-        await window.saveSkdOffer(window.currentCaseId, payload);
-
-        // ✅ sync lokalny
-        if (!window.caseData) window.caseData = {};
-        window.caseData.offer_skd = { ...offer };
-        caseData.offer_skd = { ...offer };
-
-        // UI
-        dirty = false;
-        hideSaveButtons();
+      if (isConfirm) {
         setLocked(true);
-
+        hideSaveButtons();
         if (saveHintChoice) {
           saveHintChoice.textContent = "✅ Wybór oferty zapisany";
           saveHintChoice.style.display = "inline";
         }
-
         alert("✅ Wybór oferty zapisany.");
-      } catch (err) {
-        // jeżeli save się nie udał — cofnij “picked”
-        offer.variant_picked = false;
-        offer.variant_picked_at = null;
-
-        console.error("❌ Błąd zapisu oferty SKD:", err);
-        alert("Nie udało się zapisać oferty SKD. Sprawdź konsolę.");
+      } else {
+        // draft: tylko “zapisano”
+        hideSaveButtons();
+        if (saveHintChoice) {
+          saveHintChoice.textContent = "✅ Zapisano zmiany (roboczo)";
+          saveHintChoice.style.display = "inline";
+        }
       }
-    });
-  }
+    } catch (err) {
+      console.error("❌ Błąd zapisu oferty SKD:", err);
+      alert("Nie udało się zapisać oferty SKD. Sprawdź konsolę.");
+    }
+  });
+}
 
-  bindSaveOnce(saveBtnHeader);
-  bindSaveOnce(saveBtnChoice);
-
+// bindy:
+bindSaveOnce(saveBtnHeader, "draft");   // 👈 górny zapis = roboczy
+bindSaveOnce(saveBtnChoice, "confirm"); // 👈 dolny zapis = zatwierdzenie
   // --------------------------
   //  INIT: wypełnij UI z caseData / API
   // --------------------------
@@ -2909,8 +2974,6 @@ offer.variant_picked = Boolean(
 offer.variant_picked_at =
   data.variant_picked_at ?? offer.variant_picked_at ?? null;
 
-// 🔒 Zastosuj lock UI (kafle + picker + hint)
-setLocked(Boolean(offer.variant_picked));
 
       if (data?.offer_skd) {
         Object.assign(offer, data.offer_skd);
