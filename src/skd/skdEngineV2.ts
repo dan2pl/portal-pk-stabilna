@@ -18,6 +18,9 @@ export type SkdV2Input = {
   loanNet: number;             // kwota kredytu netto (to odejmujemy w WPS)
   installment?: number | null; // rata z umowy; jeśli brak -> wyliczamy
   wiborType?: "3M";            // na razie tylko 3M (wg kontraktu i tabeli)
+   // ✅ override'y z UI
+  monthsPaid?: number | null;
+  paidToDate?: string | Date | null; // YYYY-MM-DD lub Date
 };
 
 export type SkdV2Result = {
@@ -195,6 +198,7 @@ function estimatePaidToDateByHistoricalWibor(opts: {
   marginStartPct: number; // stała marża
   getWiborPct: (d: Date) => number;
   resetEveryMonths: number; // dla 3M -> 3
+  installmentFixed?: number | null; // ✅ NOWE
 }): number {
   let balance = opts.principal;
   let totalPaid = 0;
@@ -205,26 +209,31 @@ function estimatePaidToDateByHistoricalWibor(opts: {
   const limit = Math.max(0, Math.min(opts.termMonths, opts.monthsPaid));
 
   for (let m = 1; m <= limit; m++) {
-    if (m === 1 || (m - 1) % opts.resetEveryMonths === 0) {
-      const resetDate = new Date(opts.contractDate);
-      resetDate.setMonth(resetDate.getMonth() + (m - 1));
+  if (m === 1 || (m - 1) % opts.resetEveryMonths === 0) {
+    const resetDate = new Date(opts.contractDate);
+    resetDate.setMonth(resetDate.getMonth() + (m - 1));
 
-      const wiborPct = opts.getWiborPct(resetDate);
-      const annualRate = (opts.marginStartPct + wiborPct) / 100;
+    const wiborPct = opts.getWiborPct(resetDate);
+    const annualRate = (opts.marginStartPct + wiborPct) / 100;
 
+    monthlyRate = annualRate / 12;
+
+    // ✅ jeśli rata z umowy jest podana -> TRZYMAJ JĄ STAŁĄ
+    if (opts.installmentFixed != null && Number.isFinite(Number(opts.installmentFixed)) && Number(opts.installmentFixed) > 0) {
+      payment = Number(opts.installmentFixed);
+    } else {
       payment = annuityPayment(balance, opts.termMonths - (m - 1), annualRate);
-      monthlyRate = annualRate / 12;
     }
-
-    const interest = balance * monthlyRate;
-    const capital = payment - interest;
-
-    // bezpieczeństwo numeryczne (bez filozofii): nie pozwalamy na ujemny kapitał w tej iteracji
-    const cap = Math.max(0, capital);
-    balance = Math.max(0, balance - cap);
-
-    totalPaid += payment;
   }
+
+  const interest = balance * monthlyRate;
+  const capital = payment - interest;
+
+  const cap = Math.max(0, capital);
+  balance = Math.max(0, balance - cap);
+
+  totalPaid += payment;
+}
 
   return totalPaid;
 }
@@ -237,15 +246,27 @@ export function computeSkdV2(input: SkdV2Input, opts?: { asOfDate?: Date }): Skd
   const notes: string[] = [];
 
   const contractDate = toDateStrict(input.contractDate);
-  const asOfDate = normalizeDayUTC(opts?.asOfDate ?? new Date());
+
+const paidToDateRaw = (input as any).paidToDate;
+
+const asOfDate = normalizeDayUTC(
+  opts?.asOfDate
+    ?? (paidToDateRaw ? new Date(paidToDateRaw) : new Date())
+);
 
   assertPos("termMonths", input.termMonths);
   assertPos("aprStartPct", input.aprStartPct);
   assertPos("loanGross", input.loanGross);
   assertPos("loanNet", input.loanNet);
 
-  // 1) monthsPaid (do dziś)
-  const monthsPaid = calculateMonthsPaid(contractDate, asOfDate);
+// ✅ 2) monthsPaid: jeśli przyszło z input.monthsPaid — użyj tego, inaczej licz automatycznie
+const monthsPaidFromInput = (input as any).monthsPaid;
+const monthsPaidAuto = calculateMonthsPaid(contractDate, asOfDate);
+
+const monthsPaid =
+  monthsPaidFromInput != null && Number.isFinite(Number(monthsPaidFromInput))
+    ? Math.max(0, Math.min(Number(input.termMonths), Number(monthsPaidFromInput)))
+    : monthsPaidAuto;
 
   // 2) WIBOR(start) + marża stała
   const wiborStartPct = getWibor3MPct(contractDate);
@@ -270,6 +291,7 @@ export function computeSkdV2(input: SkdV2Input, opts?: { asOfDate?: Date }): Skd
     marginStartPct,
     getWiborPct: getWibor3MPct,
     resetEveryMonths: 3,
+    installmentFixed: installmentUsed, // ✅ PODAJEMY
   });
 
  // 5) WPS do dziś — nadwyżka ponad kapitał należny do dziś (kapitał liniowo)

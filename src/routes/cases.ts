@@ -1431,20 +1431,58 @@ export default function casesRoutes(app: Express) {
           return res.status(400).json({ error: "Brak kompletu danych kredytu do wyliczenia WPS v2." });
         }
 
+// ✅ override: przedterminowa spłata / licz do wskazanej daty
+const paidToDateRaw = req.body?.paid_to_date ?? req.body?.paidToDate ?? null;
+const monthsPaidRaw = req.body?.months_paid ?? req.body?.monthsPaid ?? null;
+
+// asOfDate — data, "na kiedy liczymy"
+const asOfDate =
+  paidToDateRaw != null && String(paidToDateRaw).trim() !== ""
+    ? new Date(String(paidToDateRaw))
+    : undefined;
+
+if (asOfDate && Number.isNaN(asOfDate.getTime())) {
+  return res.status(400).json({ error: "Nieprawidłowa paid_to_date." });
+}
+
+// monthsPaid — jeśli przyszło, to override
+const monthsPaid =
+  monthsPaidRaw != null && String(monthsPaidRaw).trim() !== ""
+    ? Math.max(
+        0,
+        Math.min(
+          Number(c.loan_term_months),
+          Number(monthsPaidRaw)
+        )
+      )
+    : null;
+
+if (monthsPaid != null && !Number.isFinite(monthsPaid)) {
+  return res.status(400).json({ error: "Nieprawidłowa months_paid." });
+}
 
         // 2) LICZENIE WPS v2
-        const out = computeSkdV2({
-          contractDate: c.contract_date,
-          termMonths: Number(c.loan_term_months),
-          aprStartPct: Number(c.interest_rate_annual),
-          loanGross: Number(c.loan_amount_total),
-          loanNet: Number(c.loan_amount_net),
-          installment:
-            c.installment_amount_real != null
-              ? Number(c.installment_amount_real)
-              : null,
-          wiborType: "3M",
-        });
+        const out = computeSkdV2(
+  {
+    contractDate: c.contract_date,
+    termMonths: Number(c.loan_term_months),
+    aprStartPct: Number(c.interest_rate_annual),
+    loanGross: Number(c.loan_amount_total),
+    loanNet: Number(c.loan_amount_net),
+    installment:
+      c.installment_amount_real != null
+        ? Number(c.installment_amount_real)
+        : null,
+    wiborType: "3M",
+
+    // ✅ override
+    monthsPaid: monthsPaid,
+    paidToDate: paidToDateRaw ?? null,
+  },
+  {
+    asOfDate: asOfDate ?? undefined,
+  }
+);
 
         const wpsNumber = Math.max(0, Math.round(Number(out.wpsToday)));
 
@@ -1476,7 +1514,9 @@ export default function casesRoutes(app: Express) {
                 loan_amount_total: c.loan_amount_total,
                 loan_amount_net: c.loan_amount_net,
                 installment_amount_real: c.installment_amount_real ?? null,
-                // jeśli masz override rat – dopisz tu też
+                // ✅ NOWE — kluczowe dla audytu
+                paid_to_date: paidToDateRaw ?? null,
+                months_paid: monthsPaid ?? null,
               },
               null,
             ]
@@ -1539,19 +1579,54 @@ export default function casesRoutes(app: Express) {
 
       try {
         const body: any = req.body || {};
-        console.log("[WPS PREVIEW HIT]", caseId, body);
+console.log("[WPS PREVIEW HIT]", caseId, body);
 
-        const out = computeSkdV2({
-          contractDate: body.contractDate,
-          termMonths: Number(body.termMonths),      // ✅ TO JEST KLUCZ
-          aprStartPct: Number(body.aprStartPct),
-          loanGross: Number(body.loanGross),
-          loanNet: Number(body.loanNet),
-          installment: body.installment != null ? Number(body.installment) : null,
-          wiborType: "3M",
-        });
+// --- normalizacja wejścia ---
+const termMonths = Number(body.termMonths);
+const contractDate = body.contractDate || null;
 
-        return res.json({ ok: true, result: out });
+// ✅ paidToDate -> asOfDate (jeśli brak: dziś)
+const paidToDate = body.paidToDate ? String(body.paidToDate) : null;
+const asOfDate = paidToDate ? new Date(paidToDate) : new Date();
+asOfDate.setHours(0, 0, 0, 0);
+
+// ✅ monthsPaid: jeśli przyszło z frontu, traktujemy jako źródło prawdy
+let monthsPaid: number | null =
+  Number.isFinite(Number(body.monthsPaid)) ? Number(body.monthsPaid) : null;
+
+// clamp monthsPaid do [0..termMonths]
+if (monthsPaid != null && Number.isFinite(termMonths) && termMonths > 0) {
+  monthsPaid = Math.max(0, Math.min(termMonths, monthsPaid));
+}
+
+console.log("[WPS PREVIEW PARSED]", {
+  contractDate,
+  termMonths,
+  paidToDate,
+  asOfDate: asOfDate.toISOString().slice(0, 10),
+  monthsPaid,
+});
+
+const out = computeSkdV2({
+  contractDate,
+  termMonths: Number.isFinite(termMonths) ? termMonths : 0,
+  aprStartPct: Number(body.aprStartPct),
+  loanGross: Number(body.loanGross),
+  loanNet: Number(body.loanNet),
+  installment: body.installment != null ? Number(body.installment) : null,
+  wiborType: "3M",
+
+  // ✅ PRZEKAZUJ OVERRIDE Z FRONTU:
+    monthsPaid: body.monthsPaid != null ? Number(body.monthsPaid) : null,
+    paidToDate: body.paidToDate ?? null,
+  } as any,
+  {
+    // ✅ asOfDate ma być datą spłaty (jeśli jest) – inaczej silnik weźmie dziś
+    asOfDate: body.paidToDate ? new Date(body.paidToDate) : undefined,
+  }
+);
+
+return res.json({ ok: true, result: out });
       } catch (e: any) {
         return res.status(400).json({ ok: false, error: e?.message || "SKD v2 error" });
       }

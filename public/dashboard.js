@@ -3031,44 +3031,48 @@ async function calculateWpsBasic({
   loan_amount_net,
   loan_amount_total,
   loan_term_months,
-  installment_amount_real,
+  installments_paid,   // ✅ JEDNA nazwa
   interest_nominal,
+  installment_amount_real,
   contract_date,
+  paidToDate,          // ✅ dochodzi z UI (endDate)
 }) {
-
   const net = Number(loan_amount_net) || 0;
   const gross = Number(loan_amount_total) || 0;
   const termMonths = Number(loan_term_months) || 0;
   const aprStartPct = Number(interest_nominal) || 0;
 
-  const installment = (installment_amount_real != null && Number(installment_amount_real) > 0)
-    ? Number(installment_amount_real)
-    : null;
+  const installment =
+    installment_amount_real != null && Number(installment_amount_real) > 0
+      ? Number(installment_amount_real)
+      : null;
 
   if (!Number.isFinite(caseId) || caseId <= 0) return null;
   if (!net || !gross || !termMonths || !aprStartPct) return null;
   if (!contract_date) return null;
 
   const payload = {
-  __sig: "WPS_PREVIEW_V2_2025-12-22",
-  contractDate: contract_date,
-  termMonths,
-  aprStartPct,
-  loanGross: gross,
-  loanNet: net,
-  installment,
+    __sig: "WPS_PREVIEW_V2_2025-12-22",
+    contractDate: contract_date,
+    termMonths,
+    aprStartPct,
+    loanGross: gross,
+    loanNet: net,
+    installment,
+
+    monthsPaid: installments_paid ?? null, // ✅ POPRAWIONE
+    paidToDate: paidToDate ?? null         // ✅ POPRAWIONE
 };
 
-console.log("[WPS preview payload]", payload);
+  console.log("[WPS preview payload]", payload);
 
-const res = await fetch(`/api/cases/${caseId}/wps-basic/preview`, {
-  method: "POST",
-  headers: { "Content-Type": "application/json" },
-  body: JSON.stringify(payload),
-});
+  const res = await fetch(`/api/cases/${caseId}/wps-basic/preview`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
 
   if (!res.ok) {
-    // debug minimalny — żebyś widział czemu nie liczy
     const txt = await res.text().catch(() => "");
     console.warn("[WPS] preview HTTP", res.status, txt);
     return null;
@@ -3079,8 +3083,9 @@ const res = await fetch(`/api/cases/${caseId}/wps-basic/preview`, {
     console.warn("[WPS] preview ok=false", data);
     return null;
   }
-console.log("[WPS v2 debug]", data.result);
-window.__LAST_WPS_PREVIEW = data.result;
+
+  console.log("[WPS v2 debug]", data.result);
+  window.__LAST_WPS_PREVIEW = data.result;
 
   const wps = Math.max(0, Math.round(Number(data.result?.wpsToday)));
   return Number.isFinite(wps) ? wps : null;
@@ -3089,6 +3094,8 @@ window.__LAST_WPS_PREVIEW = data.result;
 // ===============================
 //   WPS BASIC — obsługa UI + zapis + oferta SKD
 // ===============================
+let lastWpsMonthsPaid = null;
+let lastWpsPaidToDate = null;
 let lastWpsBasic = null;
 
 (function setupWpsBasicUI() {
@@ -3106,6 +3113,9 @@ let lastWpsBasic = null;
   const interestInput = document.getElementById("wpsInterestInput");
   const contractDateInput = document.getElementById("wpsContractDate");
   const metaEl = document.getElementById("wpsResultMeta");
+  const earlyRepaidChk = document.getElementById("wpsEarlyRepaid");
+  const repaidDateWrap = document.getElementById("wpsRepaidDateWrap");
+  const repaidDateInput = document.getElementById("wpsRepaidDate");
 
   // 🔹 ID sprawy – z pola, window.caseData albo URL
   function resolveCaseId() {
@@ -3130,9 +3140,37 @@ let lastWpsBasic = null;
     if (Number.isFinite(last)) return last;
   }
 
+  if (earlyRepaidChk && repaidDateWrap) {
+  const syncEarlyRepaidUi = () => {
+    const on = earlyRepaidChk.checked;
+    repaidDateWrap.style.display = on ? "" : "none";
+    if (!on && repaidDateInput) repaidDateInput.value = "";
+  };
+
+  earlyRepaidChk.addEventListener("change", syncEarlyRepaidUi);
+  syncEarlyRepaidUi();
+}
   return null;
 }
 
+function monthsDiffFloor(fromDateStr, toDateStr) {
+  if (!fromDateStr || !toDateStr) return null;
+
+  const from = new Date(fromDateStr);
+  const to = new Date(toDateStr);
+
+  if (isNaN(from) || isNaN(to) || to < from) return null;
+
+  let months =
+    (to.getFullYear() - from.getFullYear()) * 12 +
+    (to.getMonth() - from.getMonth());
+
+  // jeśli nie doszliśmy jeszcze do dnia miesiąca "from" → nie zaliczamy bieżącego miesiąca
+  if (to.getDate() < from.getDate()) months -= 1;
+
+  // liczba zapłaconych rat nie może przekroczyć 0
+  return Math.max(0, months + 1);
+}
 
   function parseNumber(el) {
     if (!el) return null;
@@ -3219,16 +3257,34 @@ recalcInstallmentFromApr();
   // 2) PRZELICZ WPS
   btnCalc.addEventListener("click", async () => {
 
+    let endDate = null; 
+
   const loan_amount_net = parseNumber(loanNetInput);
   const loan_amount_total = parseNumber(loanTotalInput);
   const loan_term_months = parseNumber(termInput);
-  const installments_paid = parseNumber(paidInput);
+  const contract_date = contractDateInput?.value || null;
+
+    const early = !!document.getElementById("wpsEarlyRepaid")?.checked;
+  const repaidDate = document.getElementById("wpsRepaidDate")?.value || null;
+
+  endDate = (early && repaidDate)
+    ? repaidDate
+    : new Date().toISOString().slice(0, 10);
+
+  let installments_paid = parseNumber(paidInput);
+
+  if (installments_paid == null) {
+    const m = monthsDiffFloor(contract_date, endDate);
+    installments_paid = m != null ? m : null;
+  }
   const installment_amount_real = parseNumber(installmentRealInput);
   const interest_nominal = parseNumber(interestInput);
 
-  const contract_date = contractDateInput?.value || null;
-
   const caseId = resolveCaseId();
+
+  // po wyliczeniu installments_paid i endDate
+lastWpsMonthsPaid = installments_paid ?? null;
+lastWpsPaidToDate = endDate ?? null;
 
   console.log("[WPS UI] contract_date =", contract_date);
 
@@ -3251,9 +3307,11 @@ if (!loan_term_months || loan_term_months <= 0) {
   loan_amount_net,
   loan_amount_total,
   loan_term_months,
+  installments_paid,
   installment_amount_real,
   interest_nominal,
   contract_date,
+  paidToDate: endDate,
 });
 
 
@@ -3330,7 +3388,10 @@ if (!loan_term_months || loan_term_months <= 0) {
   loan_amount_total: parseNumber(loanTotalInput),
   loan_amount_net: parseNumber(loanNetInput),
   installment_amount_real: parseNumber(installmentRealInput),
-  wps_forecast: lastWpsBasic,
+
+  // ✅ override do wyliczenia WPS przy zapisie
+  months_paid: lastWpsMonthsPaid,
+  paid_to_date: lastWpsPaidToDate,
 }),
 
         });

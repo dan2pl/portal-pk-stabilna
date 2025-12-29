@@ -420,6 +420,22 @@
         <span>Data zawarcia umowy</span>
         <input id="wpsContractDate" type="date"/>
       </label>
+
+      <label class="form-field" style="grid-column: 1 / -1;">
+  <span style="display:flex; gap:10px; align-items:center;">
+    <input id="wpsEarlyRepaid" type="checkbox" />
+    <strong>Spłacony przed czasem</strong>
+  </span>
+  <small style="opacity:.75;">
+    Jeśli kredyt został całkowicie spłacony wcześniej, podaj orientacyjną datę spłaty.
+  </small>
+</label>
+
+<label class="form-field" id="wpsRepaidDateWrap" style="display:none;">
+  <span>Data całkowitej spłaty (orientacyjnie)</span>
+  <input id="wpsRepaidDate" type="date" />
+</label>
+
     </div>
 <label class="fld small-note">
   <span>Nie znasz raty? Podaj oprocentowanie z umowy (%):</span>
