@@ -555,81 +555,81 @@ export default function casesRoutes(app: Express) {
       }
 
       // przygotuj HTML raz (jeśli ktoś podał html z frontu – użyj go, jeśli nie – zbuduj z text)
-const htmlToSendAndStore =
-  html ??
-  buildPortalEmailHtml(
-    subject || "Informacja ze sprawy Portal PK",
-    text || ""
-  );
+      const htmlToSendAndStore =
+        html ??
+        buildPortalEmailHtml(
+          subject || "Informacja ze sprawy Portal PK",
+          text || ""
+        );
 
-const result = await sendEmail({
-  to,
-  cc: cc ?? null,
-  bcc: bcc ?? null,
-  subject,
-  text: text ?? null,
-  html: htmlToSendAndStore, // <-- to jest klucz
-  caseId,
-  actorId: user?.id ?? null,
-  tag: "CASE_EMAIL",
-});
+      const result = await sendEmail({
+        to,
+        cc: cc ?? null,
+        bcc: bcc ?? null,
+        subject,
+        text: text ?? null,
+        html: htmlToSendAndStore, // <-- to jest klucz
+        caseId,
+        actorId: user?.id ?? null,
+        tag: "CASE_EMAIL",
+      });
 
-if (!result.ok) {
-  return res
-    .status(500)
-    .json({ ok: false, error: result.error || "Send failed" });
-}
+      if (!result.ok) {
+        return res
+          .status(500)
+          .json({ ok: false, error: result.error || "Send failed" });
+      }
 
-// ZAPIS DO DB (case_emails)
-const fromAddress =
-  process.env.MAIL_FROM || "Portal PK <portal@mail.pokonajkredyt.pl>";
+      // ZAPIS DO DB (case_emails)
+      const fromAddress =
+        process.env.MAIL_FROM || "Portal PK <portal@mail.pokonajkredyt.pl>";
 
-// normalizacja do tablic text[]
-const normalizeEmails = (v: any): string[] => {
-  if (!v) return [];
-  if (Array.isArray(v)) return v.map((s) => String(s || "").trim()).filter(Boolean);
-  return String(v || "")
-    .split(",")
-    .map((s) => s.trim())
-    .filter(Boolean);
-};
+      // normalizacja do tablic text[]
+      const normalizeEmails = (v: any): string[] => {
+        if (!v) return [];
+        if (Array.isArray(v)) return v.map((s) => String(s || "").trim()).filter(Boolean);
+        return String(v || "")
+          .split(",")
+          .map((s) => s.trim())
+          .filter(Boolean);
+      };
 
-const toArr = normalizeEmails(to);
-if (!toArr.length) {
-  return res.status(400).json({ ok: false, error: "Brak adresu odbiorcy" });
-}
-const ccArr = normalizeEmails(cc);
-const bccArr = normalizeEmails(bcc);
+      const toArr = normalizeEmails(to);
+      if (!toArr.length) {
+        return res.status(400).json({ ok: false, error: "Brak adresu odbiorcy" });
+      }
+      const ccArr = normalizeEmails(cc);
+      const bccArr = normalizeEmails(bcc);
 
-if (!toArr.length) {
-  return res.status(400).json({ ok: false, error: "Brak adresu odbiorcy" });
-}
+      if (!toArr.length) {
+        return res.status(400).json({ ok: false, error: "Brak adresu odbiorcy" });
+      }
 
-const ins = await pool.query(
-  `INSERT INTO case_emails
+      const ins = await pool.query(
+        `INSERT INTO case_emails
    (case_id, direction, from_address, to_address, cc_address, bcc_address,
     subject, body_text, body_html, status, error_message, sent_by, sent_at)
    VALUES
    ($1, 'sent', $2, $3, $4, $5,
     $6, $7, $8, 'sent', NULL, $9, NOW())
    RETURNING id, created_at`,
-  [
-    caseId,
-    fromAddress,
-    toArr,
-    ccArr.length ? ccArr : null,
-    bccArr.length ? bccArr : null,
-    subject,
-    text ?? null,
-    htmlToSendAndStore,
-    user?.id ?? null,
-  ]
-);
+        [
+          caseId,
+          fromAddress,
+          toArr,
+          ccArr.length ? ccArr : null,
+          bccArr.length ? bccArr : null,
+          subject,
+          text ?? null,
+          htmlToSendAndStore,
+          user?.id ?? null,
+        ]
+      );
 
-console.log("✅ case_emails INSERT ok:", ins.rows[0]);
-return res.json({ ok: true, messageId: result.messageId || null, row: ins.rows[0] });
+      console.log("✅ case_emails INSERT ok:", ins.rows[0]);
+      return res.json({ ok: true, messageId: result.messageId || null, row: ins.rows[0] });
 
-return res.json({ ok: true, messageId: result.messageId || null });
+      return res.json({ ok: true, messageId: result.messageId || null });
     } catch (err: any) {
       console.error("❌ POST /api/cases/:id/emails error:", err);
       return res.status(500).json({ ok: false, error: "Server error" });
@@ -658,37 +658,37 @@ return res.json({ ok: true, messageId: result.messageId || null });
   });
 
   app.get("/api/cases", softApiLimit, requireAuth, async (req, res) => {
-  try {
-    const user = (req as any).user;
-    if (!user) return res.status(401).json({ error: "Brak dostępu – zaloguj się" });
+    try {
+      const user = (req as any).user;
+      if (!user) return res.status(401).json({ error: "Brak dostępu – zaloguj się" });
 
-    const pageRaw = parseInt(String(req.query.page ?? "1"), 10);
-    const limitRaw = parseInt(String(req.query.limit ?? "100"), 10);
+      const pageRaw = parseInt(String(req.query.page ?? "1"), 10);
+      const limitRaw = parseInt(String(req.query.limit ?? "100"), 10);
 
-    const page = Number.isFinite(pageRaw) && pageRaw > 0 ? pageRaw : 1;
-    const limitU = Number.isFinite(limitRaw) && limitRaw > 0 ? limitRaw : 100;
+      const page = Number.isFinite(pageRaw) && pageRaw > 0 ? pageRaw : 1;
+      const limitU = Number.isFinite(limitRaw) && limitRaw > 0 ? limitRaw : 100;
 
-    const limit = Math.min(limitU, 200);
-    const offset = (page - 1) * limit;
+      const limit = Math.min(limitU, 200);
+      const offset = (page - 1) * limit;
 
-    let whereSql = "";
-    const params: any[] = [];
+      let whereSql = "";
+      const params: any[] = [];
 
-    if (user.role !== "admin") {
-      whereSql = "WHERE owner_id = $1";
-      params.push(user.id);
-    }
+      if (user.role !== "admin") {
+        whereSql = "WHERE owner_id = $1";
+        params.push(user.id);
+      }
 
-    const countSql = `
+      const countSql = `
       SELECT COUNT(*)::int AS count
       FROM cases
       ${whereSql}
     `;
-    const countRes = await pool.query(countSql, params);
-    const totalCount = countRes.rows[0]?.count ?? 0;
-    const totalPages = totalCount === 0 ? 1 : Math.max(Math.ceil(totalCount / limit), 1);
+      const countRes = await pool.query(countSql, params);
+      const totalCount = countRes.rows[0]?.count ?? 0;
+      const totalPages = totalCount === 0 ? 1 : Math.max(Math.ceil(totalCount / limit), 1);
 
-    const rowsSql = `
+      const rowsSql = `
   SELECT
     id,
     client,
@@ -714,9 +714,11 @@ return res.json({ ok: true, messageId: result.messageId || null });
     variant_picked,
     variant_picked_at,
 
-    -- ✅ wariant bierzemy z JSON (bo nie ma kolumny "variant")
+    -- ✅ JSON (może być text lub json/jsonb – my i tak czytamy bezpiecznie)
     offer_skd,
-    (offer_skd->>'variant') AS variant
+
+    -- ✅ wariant wyciągnięty z JSON-a (działa nawet gdy offer_skd jest TEXT)
+    (NULLIF(offer_skd::text, '')::jsonb ->> 'variant') AS variant
 
   FROM cases
   ${whereSql}
@@ -725,21 +727,21 @@ return res.json({ ok: true, messageId: result.messageId || null });
   OFFSET $${params.length + 2}
 `;
 
-    const rows = await pool.query(rowsSql, [...params, limit, offset]);
+      const rows = await pool.query(rowsSql, [...params, limit, offset]);
 
-    return res.json({
-      items: rows.rows || [],
-      page,
-      limit,
-      totalCount,
-      totalPages,
-    });
-  } catch (err) {
-    console.error("❌ GET /api/cases ERROR:", err);
-    console.error("❌ GET /api/cases ERROR:", (err as any)?.message || err);
-    return res.status(500).json({ error: "Błąd serwera przy pobieraniu spraw" });
-  }
-});
+      return res.json({
+        items: rows.rows || [],
+        page,
+        limit,
+        totalCount,
+        totalPages,
+      });
+    } catch (err) {
+      console.error("❌ GET /api/cases ERROR:", err);
+      console.error("❌ GET /api/cases ERROR:", (err as any)?.message || err);
+      return res.status(500).json({ error: "Błąd serwera przy pobieraniu spraw" });
+    }
+  });
 
   // === KPI (per user / admin) ===
   app.get(
@@ -991,34 +993,34 @@ return res.json({ ok: true, messageId: result.messageId || null });
       }
 
       // selekcja tylko potrzebnych pól do frontu (bez wrażliwych)
-const safe = {
-  id: row.id,
-  client: row.client,
-  bank: row.bank,
-  loan_amount: row.loan_amount,
-  status: row.status,          // legacy – jak coś jeszcze z tego korzysta
-  status_code: statusCode,     // ⬅⬅⬅ KLUCZOWE DLA NOWEGO SYSTEMU
-  contract_date: row.contract_date,
-  phone: row.phone,
-  email: row.email,
-  address: row.address,
-  pesel: row.pesel,            // jak chcesz – można też wypiąć z API
-  wps_forecast: row.wps_forecast,
-  wps_final: row.wps_final,
-  client_benefit: row.client_benefit,
-  notes: row.notes,
-  owner_id: row.owner_id,
-  updated_at: row.updated_at,
-  offer_skd: row.offer_skd,    // jeśli trzymasz JSON z ofertą
-  iban: row.iban ?? null,
+      const safe = {
+        id: row.id,
+        client: row.client,
+        bank: row.bank,
+        loan_amount: row.loan_amount,
+        status: row.status,          // legacy – jak coś jeszcze z tego korzysta
+        status_code: statusCode,     // ⬅⬅⬅ KLUCZOWE DLA NOWEGO SYSTEMU
+        contract_date: row.contract_date,
+        phone: row.phone,
+        email: row.email,
+        address: row.address,
+        pesel: row.pesel,            // jak chcesz – można też wypiąć z API
+        wps_forecast: row.wps_forecast,
+        wps_final: row.wps_final,
+        client_benefit: row.client_benefit,
+        notes: row.notes,
+        owner_id: row.owner_id,
+        updated_at: row.updated_at,
+        offer_skd: row.offer_skd,    // jeśli trzymasz JSON z ofertą
+        iban: row.iban ?? null,
 
-  // ✅ NOWE: twarde kolumny do blokady UI po zatwierdzeniu
-  variant: row.variant ?? null,
-  variant_picked: !!row.variant_picked,
-  variant_picked_at: row.variant_picked_at ?? null,
-};
+        // ✅ NOWE: twarde kolumny do blokady UI po zatwierdzeniu
+        variant: row.variant ?? null,
+        variant_picked: !!row.variant_picked,
+        variant_picked_at: row.variant_picked_at ?? null,
+      };
 
-res.json(safe);
+      res.json(safe);
     } catch (err) {
       sendCaseError(res, err);
     }
@@ -1374,7 +1376,7 @@ res.json(safe);
     "/api/cases/:id/wps-basic",
     mediumApiLimit,
     requireAuth,
-    
+
     async (req, res) => {
       const user = (req as any).user;
       const idRaw = req.params.id;
@@ -1393,9 +1395,9 @@ res.json(safe);
       }
 
       try {
-  // 0) UZUPEŁNIJ DANE KREDYTU Z BODY (jeśli przyszły z frontu)
-  await pool.query(
-    `
+        // 0) UZUPEŁNIJ DANE KREDYTU Z BODY (jeśli przyszły z frontu)
+        await pool.query(
+          `
     UPDATE cases
     SET
       contract_date           = COALESCE($1::date, contract_date),
@@ -1406,155 +1408,155 @@ res.json(safe);
       installment_amount_real = COALESCE($6::numeric, installment_amount_real)
     WHERE id = $7
     `,
-    [
-      req.body?.contract_date ?? null,
-      req.body?.loan_term_months ?? null,
-      req.body?.interest_rate_annual ?? null,
-      req.body?.loan_amount_total ?? null,
-      req.body?.loan_amount_net ?? null,
-      req.body?.installment_amount_real ?? null,
-      caseId,
-    ]
-  );
+          [
+            req.body?.contract_date ?? null,
+            req.body?.loan_term_months ?? null,
+            req.body?.interest_rate_annual ?? null,
+            req.body?.loan_amount_total ?? null,
+            req.body?.loan_amount_net ?? null,
+            req.body?.installment_amount_real ?? null,
+            caseId,
+          ]
+        );
 
-const c = await loadCaseForUser(caseId, user);
+        const c = await loadCaseForUser(caseId, user);
 
-if (
-  c.contract_date == null ||
-  c.loan_term_months == null ||
-  c.interest_rate_annual == null ||
-  c.loan_amount_total == null ||
-  c.loan_amount_net == null
-) {
-  return res.status(400).json({ error: "Brak kompletu danych kredytu do wyliczenia WPS v2." });
-}
+        if (
+          c.contract_date == null ||
+          c.loan_term_months == null ||
+          c.interest_rate_annual == null ||
+          c.loan_amount_total == null ||
+          c.loan_amount_net == null
+        ) {
+          return res.status(400).json({ error: "Brak kompletu danych kredytu do wyliczenia WPS v2." });
+        }
 
 
-  // 2) LICZENIE WPS v2
-  const out = computeSkdV2({
-    contractDate: c.contract_date,
-    termMonths: Number(c.loan_term_months),
-    aprStartPct: Number(c.interest_rate_annual),
-    loanGross: Number(c.loan_amount_total),
-    loanNet: Number(c.loan_amount_net),
-    installment:
-      c.installment_amount_real != null
-        ? Number(c.installment_amount_real)
-        : null,
-    wiborType: "3M",
-  });
+        // 2) LICZENIE WPS v2
+        const out = computeSkdV2({
+          contractDate: c.contract_date,
+          termMonths: Number(c.loan_term_months),
+          aprStartPct: Number(c.interest_rate_annual),
+          loanGross: Number(c.loan_amount_total),
+          loanNet: Number(c.loan_amount_net),
+          installment:
+            c.installment_amount_real != null
+              ? Number(c.installment_amount_real)
+              : null,
+          wiborType: "3M",
+        });
 
-  const wpsNumber = Math.max(0, Math.round(Number(out.wpsToday)));
+        const wpsNumber = Math.max(0, Math.round(Number(out.wpsToday)));
 
-  // 3) ZAPIS WPS
-  const result = await pool.query(
-    `
+        // 3) ZAPIS WPS
+        const result = await pool.query(
+          `
     UPDATE cases
     SET wps_forecast = $1
     WHERE id = $2
     RETURNING id, client, loan_amount, bank, wps_forecast
     `,
-    [wpsNumber, caseId]
-  );
+          [wpsNumber, caseId]
+        );
 
-  try {
-  await pool.query(
-    `
+        try {
+          await pool.query(
+            `
     INSERT INTO cases_wps_history (case_id, user_id, wps_forecast, wps_input, note)
     VALUES ($1, $2, $3, $4, $5)
     `,
-    [
-      caseId,
-      user.id,
-      wpsNumber,
-      {
-        contract_date: c.contract_date,
-        loan_term_months: c.loan_term_months,
-        interest_rate_annual: c.interest_rate_annual,
-        loan_amount_total: c.loan_amount_total,
-        loan_amount_net: c.loan_amount_net,
-        installment_amount_real: c.installment_amount_real ?? null,
-        // jeśli masz override rat – dopisz tu też
-      },
-      null,
-    ]
-  );
-} catch (e) {
-  console.warn("[WPS-HISTORY] insert error:", e);
-}
+            [
+              caseId,
+              user.id,
+              wpsNumber,
+              {
+                contract_date: c.contract_date,
+                loan_term_months: c.loan_term_months,
+                interest_rate_annual: c.interest_rate_annual,
+                loan_amount_total: c.loan_amount_total,
+                loan_amount_net: c.loan_amount_net,
+                installment_amount_real: c.installment_amount_real ?? null,
+                // jeśli masz override rat – dopisz tu też
+              },
+              null,
+            ]
+          );
+        } catch (e) {
+          console.warn("[WPS-HISTORY] insert error:", e);
+        }
 
-  const row = result.rows[0];
+        const row = result.rows[0];
 
-  await createNotification({
-    userId: user.id,
-    caseId,
-    type: "wps_forecast_saved",
-    title: `Zapisano WPS (prognoza) dla sprawy #${row.id}`,
-    body:
-      `Nowa prognoza WPS: ${wpsNumber.toLocaleString("pl-PL")} PLN` +
-      (row.client ? ` (klient: ${row.client})` : ""),
-    meta: {
-      wps_forecast: wpsNumber,
-      loan_amount: row.loan_amount,
-      bank: row.bank,
-    },
-  });
+        await createNotification({
+          userId: user.id,
+          caseId,
+          type: "wps_forecast_saved",
+          title: `Zapisano WPS (prognoza) dla sprawy #${row.id}`,
+          body:
+            `Nowa prognoza WPS: ${wpsNumber.toLocaleString("pl-PL")} PLN` +
+            (row.client ? ` (klient: ${row.client})` : ""),
+          meta: {
+            wps_forecast: wpsNumber,
+            loan_amount: row.loan_amount,
+            bank: row.bank,
+          },
+        });
 
-  return res.json({
-    ok: true,
-    case: row,
-    skd_v2: {
-      monthsPaid: out.monthsPaid,
-      marginStartPct: out.marginStartPct,
-      wiborStartPct: out.wiborStartPct,
-    },
-  });
-} catch (err) {
-  console.error("Błąd PATCH /api/cases/:id/wps-basic:", err);
-  return res
-    .status(500)
-    .json({ error: "Błąd serwera przy zapisie WPS (prognoza)." });
-}
+        return res.json({
+          ok: true,
+          case: row,
+          skd_v2: {
+            monthsPaid: out.monthsPaid,
+            marginStartPct: out.marginStartPct,
+            wiborStartPct: out.wiborStartPct,
+          },
+        });
+      } catch (err) {
+        console.error("Błąd PATCH /api/cases/:id/wps-basic:", err);
+        return res
+          .status(500)
+          .json({ error: "Błąd serwera przy zapisie WPS (prognoza)." });
+      }
 
     }
   );
-// PREVIEW — liczy WPS v2 na backendzie (bez zapisu)
-app.post(
-  "/api/cases/:id/wps-basic/preview",
-  softApiLimit,
-  requireAuth,
-  async (req, res) => {
-    const user = (req as any).user;
-    const caseId = Number(req.params.id);
+  // PREVIEW — liczy WPS v2 na backendzie (bez zapisu)
+  app.post(
+    "/api/cases/:id/wps-basic/preview",
+    softApiLimit,
+    requireAuth,
+    async (req, res) => {
+      const user = (req as any).user;
+      const caseId = Number(req.params.id);
 
-    if (!Number.isFinite(caseId)) {
-      return res.status(400).json({ ok: false, error: "Nieprawidłowe ID sprawy." });
+      if (!Number.isFinite(caseId)) {
+        return res.status(400).json({ ok: false, error: "Nieprawidłowe ID sprawy." });
+      }
+
+      const allowed = await verifyCaseOwnership(caseId, user);
+      if (allowed === null) return res.status(404).json({ ok: false, error: "Nie znaleziono sprawy." });
+      if (!allowed) return res.status(403).json({ ok: false, error: "Brak dostępu do tej sprawy" });
+
+      try {
+        const body: any = req.body || {};
+        console.log("[WPS PREVIEW HIT]", caseId, body);
+
+        const out = computeSkdV2({
+          contractDate: body.contractDate,
+          termMonths: Number(body.termMonths),      // ✅ TO JEST KLUCZ
+          aprStartPct: Number(body.aprStartPct),
+          loanGross: Number(body.loanGross),
+          loanNet: Number(body.loanNet),
+          installment: body.installment != null ? Number(body.installment) : null,
+          wiborType: "3M",
+        });
+
+        return res.json({ ok: true, result: out });
+      } catch (e: any) {
+        return res.status(400).json({ ok: false, error: e?.message || "SKD v2 error" });
+      }
     }
-
-    const allowed = await verifyCaseOwnership(caseId, user);
-    if (allowed === null) return res.status(404).json({ ok: false, error: "Nie znaleziono sprawy." });
-    if (!allowed) return res.status(403).json({ ok: false, error: "Brak dostępu do tej sprawy" });
-
-    try {
-      const body: any = req.body || {};
-      console.log("[WPS PREVIEW HIT]", caseId, body);
-
-      const out = computeSkdV2({
-        contractDate: body.contractDate,
-        termMonths: Number(body.termMonths),      // ✅ TO JEST KLUCZ
-        aprStartPct: Number(body.aprStartPct),
-        loanGross: Number(body.loanGross),
-        loanNet: Number(body.loanNet),
-        installment: body.installment != null ? Number(body.installment) : null,
-        wiborType: "3M",
-      });
-
-      return res.json({ ok: true, result: out });
-    } catch (e: any) {
-      return res.status(400).json({ ok: false, error: e?.message || "SKD v2 error" });
-    }
-  }
-);
+  );
 
   // === ZAPIS OFERTY SKD (PUT — twarda walidacja) ===
   app.put(
@@ -1562,15 +1564,15 @@ app.post(
     mediumApiLimit,
     requireAuth,
     denyUnknownFields([
-  "wps_forecast",
-  "offer_skd",
-  "contract_date",
-  "loan_term_months",
-  "interest_rate_annual",
-  "loan_amount_total",
-  "loan_amount_net",
-  "installment_amount_real",
-]),
+      "wps_forecast",
+      "offer_skd",
+      "contract_date",
+      "loan_term_months",
+      "interest_rate_annual",
+      "loan_amount_total",
+      "loan_amount_net",
+      "installment_amount_real",
+    ]),
 
     async (req, res) => {
       try {
@@ -1622,38 +1624,38 @@ app.post(
         let buyout_pct: number | null = null;
 
         if (variant === "sell") {
-  let raw = sanitizeNumberLike(offer_skd.buyout_pct);
+          let raw = sanitizeNumberLike(offer_skd.buyout_pct);
 
-  if (raw === null) {
-    const prev = await pool.query(
-      `SELECT offer_skd FROM cases WHERE id = $1`,
-      [caseId]
-    );
+          if (raw === null) {
+            const prev = await pool.query(
+              `SELECT offer_skd FROM cases WHERE id = $1`,
+              [caseId]
+            );
 
-    const prevOffer = prev.rows?.[0]?.offer_skd || {};
-    const prevBuyout = sanitizeNumberLike(prevOffer.buyout_pct);
+            const prevOffer = prev.rows?.[0]?.offer_skd || {};
+            const prevBuyout = sanitizeNumberLike(prevOffer.buyout_pct);
 
-    if (prevBuyout === null) {
-      return res.status(400).json({
-        error: "buyout_pct musi być liczbą w zakresie 10–15%."
-      });
-    }
+            if (prevBuyout === null) {
+              return res.status(400).json({
+                error: "buyout_pct musi być liczbą w zakresie 10–15%."
+              });
+            }
 
-    raw = prevBuyout;
-  }
+            raw = prevBuyout;
+          }
 
-  let normalized = raw > 1 ? raw / 100 : raw;
+          let normalized = raw > 1 ? raw / 100 : raw;
 
-  if (normalized < 0.10 || normalized > 0.15) {
-    return res.status(400).json({
-      error: "buyout_pct musi zawierać się między 10 a 15 procent."
-    });
-  }
+          if (normalized < 0.10 || normalized > 0.15) {
+            return res.status(400).json({
+              error: "buyout_pct musi zawierać się między 10 a 15 procent."
+            });
+          }
 
-  buyout_pct = normalized;
-} else {
-  buyout_pct = null;
-}
+          buyout_pct = normalized;
+        } else {
+          buyout_pct = null;
+        }
 
 
         // ============================
@@ -1667,30 +1669,30 @@ app.post(
         // ============================
         const elig = offer_skd.eligibility || {};
         const eligibility = {
-  sf50: elig.sf50 === false ? false : true,
-  sf49: elig.sf49 === false ? false : true,
-  sell: elig.sell === false ? false : true,
-};
+          sf50: elig.sf50 === false ? false : true,
+          sf49: elig.sf49 === false ? false : true,
+          sell: elig.sell === false ? false : true,
+        };
 
         // ============================
         // 8) Finalny obiekt zapisowy
         // ============================
         const finalOffer = {
-  variant,
-  buyout_pct,
-  future_interest,
-  eligibility,
+          variant,
+          buyout_pct,
+          future_interest,
+          eligibility,
 
-  // ✅ NOWE: “zatwierdzony wybór wariantu”
-  variant_picked: offer_skd?.variant_picked === true,
-  variant_picked_at: offer_skd?.variant_picked_at ?? null,
-};
+          // ✅ NOWE: “zatwierdzony wybór wariantu”
+          variant_picked: offer_skd?.variant_picked === true,
+          variant_picked_at: offer_skd?.variant_picked_at ?? null,
+        };
 
         // ============================
         // 9) Zapis do bazy
         // ============================
         const result = await pool.query(
-  `
+          `
   UPDATE cases
 SET
   contract_date            = $1,
@@ -1709,20 +1711,20 @@ SET
 WHERE id = $11
 RETURNING id, wps_forecast, offer_skd, variant_picked, variant_picked_at;
   `,
-  [
-  body.contract_date ?? null,            // $1
-  body.loan_term_months ?? null,         // $2
-  body.interest_rate_annual ?? null,     // $3
-  body.loan_amount_total ?? null,        // $4
-  body.loan_amount_net ?? null,          // $5
-  body.installment_amount_real ?? null,  // $6
-  wf,                                    // $7
-  finalOffer,                            // $8
-  finalOffer.variant_picked ?? false,    // $9
-  finalOffer.variant_picked_at ?? null,  // $10
-  caseId                                 // $11
-]
-);
+          [
+            body.contract_date ?? null,            // $1
+            body.loan_term_months ?? null,         // $2
+            body.interest_rate_annual ?? null,     // $3
+            body.loan_amount_total ?? null,        // $4
+            body.loan_amount_net ?? null,          // $5
+            body.installment_amount_real ?? null,  // $6
+            wf,                                    // $7
+            finalOffer,                            // $8
+            finalOffer.variant_picked ?? false,    // $9
+            finalOffer.variant_picked_at ?? null,  // $10
+            caseId                                 // $11
+          ]
+        );
 
         if (!result.rowCount) {
           return res.status(404).json({ error: "Nie znaleziono sprawy." });

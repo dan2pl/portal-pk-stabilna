@@ -16,7 +16,7 @@ function simulateVariableWiborScheduleJS(opts) {
 
   const limitMonths = Number.isFinite(opts.limitMonths) ? opts.limitMonths : opts.termMonths;
 
-for (let m = 1; m <= Math.min(opts.termMonths, limitMonths); m++) {
+  for (let m = 1; m <= Math.min(opts.termMonths, limitMonths); m++) {
 
     if (m === 1 || (m - 1) % resetEvery === 0) {
       const resetDate = new Date(opts.startDate);
@@ -52,7 +52,7 @@ function simulateMarginOnlyScheduleJS(opts) {
 
   const limitMonths = Number.isFinite(opts.limitMonths) ? opts.limitMonths : opts.termMonths;
 
-for (let m = 1; m <= Math.min(opts.termMonths, limitMonths); m++) {
+  for (let m = 1; m <= Math.min(opts.termMonths, limitMonths); m++) {
 
     const interest = balance * monthlyRate;
     const capital = payment - interest;
@@ -367,7 +367,7 @@ function calculateWpsSKD({
     marginPct = 5.5; // fallback (możemy potem zrobić zależny od rocznika)
   }
 
-   // --- policz WPS: do dziś (m) + full (n)
+  // --- policz WPS: do dziś (m) + full (n)
   const pack = calcWpsWithWibor3M({
     principal: K,
     termMonths: n,
@@ -378,7 +378,7 @@ function calculateWpsSKD({
 
   // WPS "do dziś"
   const wps_basic = pack.toDate.wpsConservative;
-  const wps_max   = pack.toDate.wpsAggressive;
+  const wps_max = pack.toDate.wpsAggressive;
 
   // paid_real "do dziś" (żeby nie było undefined)
   const paid_real_sim = pack.toDate.real.totalPaid;
@@ -428,8 +428,6 @@ function deriveMarginFromAprStart({
 
   return Number(margin.toFixed(2));
 }
-console.log("SKD margin/start:", { startDate, marginPct, m, n });
-console.log("SKD wibor@start:", getWibor3MPct(startDate));
 
 function calcWpsWithWibor3M(opts) {
   const n = Number(opts.termMonths);
@@ -481,7 +479,7 @@ function calcWpsWithWibor3M(opts) {
       altMargin: toDate_altMargin,
       altCap: { totalPaid: capOnlyPaidToDate }, // spójnie “do dziś”
       wpsConservative: toDate_real.totalPaid - toDate_altMargin.totalPaid,
-      wpsAggressive:   toDate_real.totalPaid - capOnlyPaidToDate,
+      wpsAggressive: toDate_real.totalPaid - capOnlyPaidToDate,
       limitMonths: limit,
     },
     total: {
@@ -489,7 +487,7 @@ function calcWpsWithWibor3M(opts) {
       altMargin: total_altMargin,
       altCap: total_altCap,
       wpsConservative: total_real.totalPaid - total_altMargin.totalPaid,
-      wpsAggressive:   total_real.totalPaid - total_altCap.totalPaid,
+      wpsAggressive: total_real.totalPaid - total_altCap.totalPaid,
       limitMonths: n,
     },
   };
