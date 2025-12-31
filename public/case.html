@@ -551,6 +551,23 @@
                           <span class="file-browse">kliknij</span>, aby dodać
                           dokumenty
                         </div>
+                        <div class="file-doc-type">
+                          <label for="caseFileDocKey">
+                            Typ dodawanego dokumentu:
+                          </label>
+                          <select id="caseFileDocKey">
+                            <option value="">— wybierz typ dokumentu —</option>
+                            <option value="credit_agreement">
+                              Umowa kredytowa
+                            </option>
+                            <option value="schedule">Harmonogram</option>
+                            <option value="certificate">
+                              Zaświadczenie z banku
+                            </option>
+                            <option value="bik_report">Raport BIK</option>
+                            <option value="other">Inny dokument</option>
+                          </select>
+                        </div>
                         <input type="file" id="caseAddFiles" multiple hidden />
                         <p class="upload-hint">
                           Możesz dodać maks. 10 plików, każdy do 20 MB.<br />

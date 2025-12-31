@@ -518,6 +518,30 @@ function fillClientSection(data) {
   }
 }
 
+  const REQUIREMENT_LABEL = {
+  REQUIRED_NOW: "Wymagane do zawarcia umowy",
+  REQUIRED_LATER: "Wymagane później",
+};
+
+const DOCS_BY_VARIANT = {
+  sf50: [
+    { key: "credit_agreement", label: "Kompletna umowa kredytowa", requirement: "REQUIRED_NOW" },
+    { key: "schedule",         label: "Harmonogram",              requirement: "REQUIRED_LATER" }, // ✅ zmiana
+    { key: "certificate",      label: "Zaświadczenie z banku",     requirement: "REQUIRED_LATER" },
+  ],
+  sf49: [
+    { key: "credit_agreement", label: "Kompletna umowa kredytowa", requirement: "REQUIRED_NOW" },
+    { key: "schedule",         label: "Harmonogram",              requirement: "REQUIRED_LATER" }, // ✅ zmiana
+    { key: "certificate",      label: "Zaświadczenie z banku",     requirement: "REQUIRED_LATER" },
+  ],
+  sell: [
+    { key: "credit_agreement", label: "Kompletna umowa kredytowa", requirement: "REQUIRED_NOW" },
+    { key: "schedule",         label: "Harmonogram",              requirement: "REQUIRED_NOW" },
+    { key: "bik_report",       label: "Aktualny raport z BIK",     requirement: "REQUIRED_NOW" },
+    { key: "certificate",      label: "Zaświadczenie z banku",     requirement: "REQUIRED_NOW" },
+  ],
+};
+
 // ===============================
 //  TAB: DECYZJA (UI only — v1)
 // ===============================
@@ -529,91 +553,166 @@ function renderDecisionTab() {
   const btnChangeOffer = document.getElementById("btnDecisionChangeOffer");
   const hintEl = document.getElementById("decisionHint");
 
-  if (!variantEl || !docsEl || !btnPrimary || !btnRefresh) return;
+  if (!variantEl || !docsEl) return;
 
+  const caseId = window.caseData?.id;
   const offer = window.caseData?.offer_skd || {};
-  const variant = offer?.variant || "—";
+  const variantRaw = offer?.variant || window.caseData?.variant || "—";
+  const variant = String(variantRaw).toLowerCase();
 
   // pokaż wariant
-  variantEl.textContent = (variant || "—").toString().toUpperCase();
+  variantEl.textContent = (variant && variant !== "—") ? variant.toUpperCase() : "—";
 
-  // wymagane dokumenty per wariant
-  const required =
-    variant === "sell"
-      ? [
-          { key: "contract", label: "Umowa kredytowa" },
-          { key: "schedule", label: "Harmonogram" },
-          { key: "certificate", label: "Zaświadczenie z banku" },
-        ]
-      : [
-          { key: "contract", label: "Kompletna Umowa kredytowa" },
-          { key: "schedule", label: "Harmonogram" },
-          { key: "certificate", label: "Zaświadczenie" },
-        ];
+  // dokumenty wg mapy
+  const list = DOCS_BY_VARIANT[variant] || [];
+  const now = list.filter(d => d.requirement === "REQUIRED_NOW");
+  const later = list.filter(d => d.requirement === "REQUIRED_LATER");
 
-  const has = (key) => {
-    const files = Array.isArray(window.caseFiles) ? window.caseFiles : [];
-    const names = files
-      .map((f) => (f.original_name || f.filename || f.name || "").toLowerCase())
-      .filter(Boolean);
+  // statusy i notatki z DB
+  const docsStatus = (
+    window.caseData?.docs_status &&
+    typeof window.caseData.docs_status === "object"
+  ) ? window.caseData.docs_status : {};
 
-    const hit = (phrases) => names.some((n) => phrases.some((p) => n.includes(p)));
+  const docsNotes = (
+    window.caseData?.docs_notes &&
+    typeof window.caseData.docs_notes === "object"
+  ) ? window.caseData.docs_notes : {};
 
-    if (key === "contract") return hit(["umowa", "kredyt"]);
-    if (key === "schedule") return hit(["harmon", "grafik spłat", "plan spłat"]);
-    if (key === "certificate") return hit(["zaświadc", "zaswiadc", "bank"]);
-    return false;
+  // normalizacja: ok/pending/missing (tylko z DB)
+  function getStatus(key) {
+    const v = docsStatus?.[key] ? String(docsStatus[key]).toLowerCase() : "";
+    if (v === "ok") return "ok";
+    if (v === "pending") return "pending";
+    return "missing";
+  }
+
+  function nextStatus(s) {
+    if (s === "missing") return "pending";
+    if (s === "pending") return "ok";
+    return "missing";
+  }
+
+  function statusLabel(s) {
+    if (s === "ok") return "OK";
+    if (s === "pending") return "Do weryfikacji";
+    return "Brak";
+  }
+
+  function statusClass(s) {
+    if (s === "ok") return "doc-status--ok";
+    if (s === "pending") return "doc-status--pending";
+    return "doc-status--missing";
+  }
+
+  async function setDocStatus(caseId, key, status) {
+    const res = await fetch(`/api/cases/${caseId}/docs-status`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ key, status }),
+    });
+
+    const json = await res.json().catch(() => null);
+    if (!res.ok || !json?.ok) throw new Error(json?.error || "PATCH docs-status failed");
+
+    // zsynchronizuj lokalnie, żeby UI było spójne
+    if (!window.caseData) window.caseData = {};
+    window.caseData.docs_status = json.case?.docs_status || window.caseData.docs_status || {};
+    window.caseData.docs_notes  = json.case?.docs_notes  || window.caseData.docs_notes  || {};
+  }
+
+  const renderDocRow = (d) => {
+    const s = getStatus(d.key);
+    const note = docsNotes?.[d.key] ? String(docsNotes[d.key]) : "";
+    const safeTitle = note ? note.replaceAll('"', "'") : "";
+
+    return `
+      <div class="check-item" data-doc-key="${d.key}">
+        <span class="check-name">${d.label}</span>
+        <span class="doc-mini">${REQUIREMENT_LABEL[d.requirement]}</span>
+        <span class="doc-status ${statusClass(s)}"
+              title="${safeTitle || "Kliknij, aby zmienić status"}">
+          ${statusLabel(s)}
+        </span>
+      </div>
+    `;
   };
 
-  docsEl.innerHTML = required
-    .map((d) => {
-      const ok = has(d.key);
-      return `
-        <div class="check-item">
-          <span class="check-dot ${ok ? "ok" : "no"}"></span>
-          <span>${d.label}</span>
-        </div>
-      `;
-    })
-    .join("");
+  docsEl.innerHTML = `
+    <div class="docs-group">
+      <div class="docs-group-h">
+        <div class="docs-title">Wymagane do zawarcia umowy</div>
+        <div class="docs-sub">${now.filter(d => getStatus(d.key) === "ok").length}/${now.length}</div>
+      </div>
+      ${now.map(renderDocRow).join("") || `<div class="muted">Brak.</div>`}
+    </div>
 
-  // CTA zależny od wariantu
-  if (variant === "sell") {
-    btnPrimary.textContent = "Przygotuj wniosek o dokumenty";
-  } else {
-    btnPrimary.textContent = "Klient deklaruje współpracę";
-  }
+    <div class="docs-group" style="margin-top:10px;">
+      <div class="docs-group-h">
+        <div class="docs-title">Wymagane później</div>
+        <div class="docs-sub">${later.filter(d => getStatus(d.key) === "ok").length}/${later.length}</div>
+      </div>
+      ${later.map(renderDocRow).join("") || `<div class="muted">Brak.</div>`}
+      <div class="hint" style="margin-top:6px;">
+        Te dokumenty nie blokują zawarcia umowy, ale są potrzebne w dalszym procesie.
+      </div>
+    </div>
+  `;
 
-  // gating
-  const isSell = variant === "sell";
-  const isReady = isSell ? required.every((d) => has(d.key)) : has("contract");
-  btnPrimary.disabled = !isReady;
+  // klik na badge zmienia status
+  docsEl.querySelectorAll(".doc-status").forEach((badge) => {
+    badge.addEventListener("click", async (e) => {
+      e.preventDefault();
+      e.stopPropagation();
 
+      if (!caseId) return;
+
+      const row = badge.closest(".check-item");
+      const key = row?.getAttribute("data-doc-key");
+      if (!key) return;
+
+      const current = getStatus(key);
+      const next = nextStatus(current);
+
+      // optymistycznie zmień UI (lokalnie) i przerysuj
+      docsStatus[key] = next;
+      if (window.caseData) window.caseData.docs_status = docsStatus;
+      renderDecisionTab();
+
+      try {
+        await setDocStatus(caseId, key, next);
+      } catch (err) {
+        console.error("docs-status click error:", err);
+        alert("Nie udało się zapisać statusu dokumentu.");
+
+        // fallback: odśwież z backendu przy najbliższym wejściu
+        // (tu nic nie robimy, bo i tak caseData zostanie pobrane przy reload)
+      }
+    });
+  });
+
+  // ukryj nieużywane przyciski
+  if (btnPrimary) btnPrimary.style.display = "none";
+  if (btnRefresh) btnRefresh.style.display = "none";
+
+  // rename 3 przycisku (jeśli zostaje)
+  if (btnChangeOffer) btnChangeOffer.textContent = "Klient chce zmienić wariant";
+
+  // hint
   if (hintEl) {
-    if (isReady) {
-      hintEl.textContent =
-        variant === "sell"
-          ? "SELL: komplet dokumentów jest. Możesz wysłać sygnał do przygotowania wniosku."
-          : "SF49/SF50: umowa jest. Możesz wysłać deklarację współpracy.";
-    } else {
-      hintEl.textContent = isSell
-        ? "SELL: brakuje części dokumentów — uzupełnij je w zakładce Dokumenty."
-        : "SF49/SF50: dodaj umowę kredytową, aby odblokować deklarację.";
-    }
+    hintEl.textContent = list.length
+      ? "Checklisty służą do monitorowania dokumentów w procesie."
+      : "Brak wybranego wariantu — wybierz ofertę w SKD.";
   }
-
-  btnRefresh.onclick = () => renderDecisionTab();
 
   // ZMIANA OFERTY: otwórz modal SKD
   if (btnChangeOffer) {
     btnChangeOffer.onclick = () => {
-      // 1) jeśli masz globalną funkcję otwierającą modal — użyj jej
       if (typeof window.openSkdOfferModal === "function") {
         window.openSkdOfferModal();
         return;
       }
 
-      // 2) fallback: kliknij istniejący przycisk otwierający modal (ustaw mu ID)
       const opener = document.getElementById("openSkdOfferModalBtn");
       if (opener) {
         opener.click();
@@ -834,11 +933,13 @@ async function saveSection(caseId, section, payload) {
 }
 
 // === UPLOAD PLIKÓW DOKUMENTÓW DO BACKENDU ===
-async function uploadCaseFiles(caseId, files) {
+async function uploadCaseFiles(caseId, files, docKey) {
   if (!files || !files.length) return;
 
   const formData = new FormData();
   files.forEach((f) => formData.append("files", f));
+
+  if (docKey) formData.append("doc_key", docKey);
 
   try {
     const res = await fetch(
@@ -928,6 +1029,7 @@ function initCaseDocuments(caseId) {
   const dropArea = $local("caseFileDropArea");
   const fileInput = $local("caseAddFiles");
   const fileList = $local("caseFileList");
+  const docKeySelect = $local("caseFileDocKey");
 
   if (!dropArea || !fileInput) {
     console.warn("❗ Dokumenty: brak elementów dropArea/fileInput");
@@ -935,11 +1037,21 @@ function initCaseDocuments(caseId) {
   }
 
   dropArea.addEventListener("click", (e) => {
-    if (e.target.closest("a")) {
-      return;
-    }
-    fileInput.click();
-  });
+  // nie otwieraj okna plików, jeśli klik był w elementy interaktywne
+  if (
+    e.target.closest("a") ||
+    e.target.closest("select") ||
+    e.target.closest("option") ||
+    e.target.closest("button") ||
+    e.target.closest("input") ||
+    e.target.closest("textarea") ||
+    e.target.closest("[data-no-file-dialog]")
+  ) {
+    return;
+  }
+
+  fileInput.click();
+});
 
   let firstInit = true;
 
@@ -953,7 +1065,8 @@ function initCaseDocuments(caseId) {
     const files = Array.from(fileInput.files || []);
     if (!files.length) return;
 
-    await uploadCaseFiles(caseId, files);
+    const docKey = docKeySelect ? (docKeySelect.value || "") : "";
+    await uploadCaseFiles(caseId, files, docKey);
     await loadCaseFiles(caseId);
     fileInput.value = "";
   });
@@ -974,7 +1087,8 @@ function initCaseDocuments(caseId) {
     const files = Array.from(e.dataTransfer?.files || []);
     if (!files.length) return;
 
-    await uploadCaseFiles(caseId, files);
+    const docKey = docKeySelect ? (docKeySelect.value || "") : "";
+    await uploadCaseFiles(caseId, files, docKey);
     await loadCaseFiles(caseId);
   });
 
@@ -998,10 +1112,7 @@ function initCaseDocuments(caseId) {
         if (!ok) return;
 
         try {
-          const res = await fetch(
-            `/api/files/${encodeURIComponent(fileId)}`,
-            { method: "DELETE" }
-          );
+          const res = await fetch(`/api/files/${encodeURIComponent(fileId)}`, { method: "DELETE" });
 
           if (!res.ok) {
             const text = await res.text().catch(() => "");

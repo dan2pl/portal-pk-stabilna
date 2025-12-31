@@ -2826,3 +2826,122 @@ body {
   font-size: 12px;
   opacity: .75;
 }
+
+.doc-mini { font-size:12px; opacity:.7; margin-left:auto; white-space:nowrap; }
+.docs-group { padding:10px; border:1px solid rgba(0,0,0,.08); border-radius:12px; }
+.docs-group-h { display:flex; justify-content:space-between; gap:10px; align-items:center; margin-bottom:8px; }
+.docs-title { font-weight:800; }
+.docs-sub { font-size:12px; opacity:.7; }
+.muted { opacity:.7; font-size:13px; }
+.doc-mini {
+  font-size: 11px;
+  color: #8a8a8a;
+  margin-left: 8px;
+}
+.check-dot { cursor: pointer; }
+
+.check-dot.pending {
+  background: #f59e0b; /* pomarańcz */
+  box-shadow: 0 0 0 2px rgba(245,158,11,.25);
+}
+
+.doc-note {
+  margin-left: 6px;
+  opacity: .75;
+  cursor: help;
+}
+
+.doc-status{
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+  border: 1px solid rgba(0,0,0,.08);
+  user-select: none;
+}
+
+.doc-status--missing { opacity: .75; }
+.doc-status--pending { opacity: .95; }
+.doc-status--ok { opacity: 1; }
+.doc-status {
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+/* ✅ OK */
+.doc-status--ok {
+  background: #e6f6ee;
+  color: #1b7f4d;
+  border: 1px solid #bfe8d3;
+}
+
+/* ⏳ Do weryfikacji */
+.doc-status--pending {
+  background: #fff6e5;
+  color: #8a5a00;
+  border: 1px solid #ffe0a3;
+}
+
+/* ❌ Brak */
+.doc-status--missing {
+  background: #f5f5f5;
+  color: #777;
+  border: 1px solid #ddd;
+}
+.check-item .doc-status--ok {
+  box-shadow: 0 0 0 9999px rgba(27,127,77,0.04) inset;
+}
+/* ✅ Onboarding agenta (A1) */
+.pk-onboarding{
+  border: 1px solid rgba(0,0,0,.12);
+  border-radius: 14px;
+  padding: 14px 14px 12px;
+  margin: 12px 0 14px;
+  background: #fff;
+}
+
+.pk-onboarding__top{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+  margin-bottom: 8px;
+}
+
+.pk-onboarding__title{
+  font-weight: 700;
+  font-size: 14px;
+}
+
+.pk-onboarding__close{
+  border: 0;
+  background: transparent;
+  font-size: 16px;
+  cursor: pointer;
+  opacity: .7;
+}
+.pk-onboarding__close:hover{ opacity: 1; }
+
+.pk-onboarding__list{
+  margin: 0;
+  padding-left: 18px;
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.pk-onboarding__footer{
+  margin-top: 10px;
+  display:flex;
+  justify-content:flex-end;
+}
+
+.pk-onboarding__dontshow{
+  font-size: 12px;
+  opacity: .85;
+  user-select:none;
+}

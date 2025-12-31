@@ -1018,6 +1018,9 @@ export default function casesRoutes(app: Express) {
         variant: row.variant ?? null,
         variant_picked: !!row.variant_picked,
         variant_picked_at: row.variant_picked_at ?? null,
+        // ✅ docs status (źródło prawdy dla zakładki Decyzja)
+        docs_status: row.docs_status ?? null,
+        docs_notes: row.docs_notes ?? null,
       };
 
       res.json(safe);
@@ -1370,6 +1373,72 @@ export default function casesRoutes(app: Express) {
         res.status(500).json({ error: "Server error" });
       }
     });
+
+
+    // === DOCS STATUS (OK/PENDING/MISSING) ===
+app.patch(
+  "/api/cases/:id/docs-status",
+  mediumApiLimit,
+  requireAuth,
+  async (req, res) => {
+    const user = (req as any).user;
+    const caseId = Number(req.params.id);
+
+    if (!Number.isFinite(caseId)) {
+      return res.status(400).json({ ok: false, error: "Nieprawidłowe ID sprawy." });
+    }
+
+    const allowed = await verifyCaseOwnership(caseId, user);
+    if (allowed === null) return res.status(404).json({ ok: false, error: "Nie znaleziono sprawy." });
+    if (!allowed) return res.status(403).json({ ok: false, error: "Brak dostępu do tej sprawy" });
+
+    const body: any = req.body || {};
+    const keyRaw = String(body.key || "").trim();
+    const statusRaw = String(body.status || "").trim().toLowerCase();
+    const noteRaw = (body.note == null ? "" : String(body.note)).trim();
+
+    const ALLOWED_KEYS = new Set(["credit_agreement", "schedule", "certificate", "bik_report"]);
+    const ALLOWED_STATUS = new Set(["missing", "pending", "ok"]);
+
+    if (!ALLOWED_KEYS.has(keyRaw)) {
+      return res.status(400).json({ ok: false, error: "Nieprawidłowy key dokumentu." });
+    }
+    if (!ALLOWED_STATUS.has(statusRaw)) {
+      return res.status(400).json({ ok: false, error: "Nieprawidłowy status dokumentu." });
+    }
+
+    try {
+      const q = `
+        UPDATE cases
+        SET
+          docs_status = jsonb_set(
+            COALESCE(docs_status, '{}'::jsonb),
+            ARRAY[$1],
+            to_jsonb($2::text),
+            true
+          ),
+          docs_notes = CASE
+            WHEN $3::text = '' THEN (COALESCE(docs_notes, '{}'::jsonb) - $1)
+            ELSE jsonb_set(
+              COALESCE(docs_notes, '{}'::jsonb),
+              ARRAY[$1],
+              to_jsonb($3::text),
+              true
+            )
+          END,
+          updated_at = NOW()
+        WHERE id = $4
+        RETURNING id, docs_status, docs_notes, updated_at;
+      `;
+
+      const r = await pool.query(q, [keyRaw, statusRaw, noteRaw, caseId]);
+      return res.json({ ok: true, case: r.rows[0] });
+    } catch (e: any) {
+      console.error("Błąd PATCH /api/cases/:id/docs-status:", e);
+      return res.status(500).json({ ok: false, error: "Błąd serwera przy zapisie statusu dokumentów." });
+    }
+  }
+);
 
   // === ZAPIS WPS BASIC → WPS (prognoza) + powiadomienie ===
   app.patch(
@@ -1988,16 +2057,17 @@ RETURNING id, wps_forecast, offer_skd, variant_picked, variant_picked_at;
         const result = await pool.query(
           `
         SELECT
-          id,
-          case_id,
-          original_name,
-          stored_name,
-          mime_type,
-          size,
-          uploaded_at
-        FROM case_files
-        WHERE case_id = $1
-        ORDER BY uploaded_at DESC
+  id,
+  case_id,
+  original_name,
+  stored_name,
+  mime_type,
+  size,
+  doc_key,
+  uploaded_at
+FROM case_files
+WHERE case_id = $1
+ORDER BY uploaded_at DESC
         `,
           [id]
         );
@@ -2122,10 +2192,28 @@ RETURNING id, wps_forecast, offer_skd, variant_picked, variant_picked_at;
 
       // 2️⃣ pliki
       const files = (req.files as Express.Multer.File[]) || [];
-
+      
       if (!files.length) {
         return res.status(400).json({ error: "Brak plików do dodania" });
       }
+
+      // ✅ doc_key (opcjonalny typ dokumentu z frontu)
+const docKey =
+  typeof (req.body as any)?.doc_key === "string" && (req.body as any).doc_key.trim()
+    ? (req.body as any).doc_key.trim()
+    : (typeof (req.body as any)?.docKey === "string" && (req.body as any).docKey.trim()
+        ? (req.body as any).docKey.trim()
+        : null);
+
+// (opcjonalnie) lekka sanity-check lista dozwolonych kluczy
+const ALLOWED_DOC_KEYS = new Set([
+  "credit_agreement",
+  "schedule",
+  "certificate",
+  "bik_report",
+]);
+
+const safeDocKey = docKey && ALLOWED_DOC_KEYS.has(docKey) ? docKey : null;
 
       // 3️⃣ TYLKO limit rozmiaru (20 MB) – reszta jest robiona w fileFilter
       const maxSize = MAX_FILE_SIZE; // 20 MB
@@ -2143,31 +2231,51 @@ RETURNING id, wps_forecast, offer_skd, variant_picked, variant_picked_at;
         const placeholders: string[] = [];
 
         files.forEach((f, index) => {
-          const baseIndex = index * 5;
-          placeholders.push(
-            `($${baseIndex + 1}, $${baseIndex + 2}, $${baseIndex + 3}, $${baseIndex + 4}, $${baseIndex + 5})`
-          );
-          values.push(
-            caseId,
-            f.originalname,
-            f.filename,
-            f.mimetype,
-            f.size
-          );
-        });
+  const baseIndex = index * 6;
+  placeholders.push(
+    `($${baseIndex + 1}, $${baseIndex + 2}, $${baseIndex + 3}, $${baseIndex + 4}, $${baseIndex + 5}, $${baseIndex + 6})`
+  );
+  values.push(
+    caseId,
+    f.originalname,
+    f.filename,
+    f.mimetype,
+    f.size,
+    docKey
+  );
+});
 
         const sql = `
-        INSERT INTO case_files (case_id, original_name, stored_name, mime_type, size)
-        VALUES ${placeholders.join(", ")}
-        RETURNING id, case_id, original_name, stored_name, mime_type, size, uploaded_at
-      `;
+  INSERT INTO case_files (case_id, original_name, stored_name, mime_type, size, doc_key)
+  VALUES ${placeholders.join(", ")}
+  RETURNING id, case_id, original_name, stored_name, mime_type, size, doc_key, uploaded_at
+`;
 
         const result = await pool.query(sql, values);
-
+        console.log("[UPLOAD] doc_key =", safeDocKey);
         console.log(
           `📎 [UPLOAD] user=${user.id}, case=${caseId}, count=${result.rowCount}`
         );
-
+        
+        // ✅ jeśli docKey podany — ustaw docs_status[docKey] = 'pending' (nie nadpisuj 'ok')
+if (docKey) {
+  await pool.query(
+    `
+    UPDATE cases
+    SET docs_status = jsonb_set(
+      COALESCE(docs_status, '{}'::jsonb),
+      ARRAY[$1],
+      CASE
+        WHEN COALESCE(docs_status, '{}'::jsonb) ->> $1 = 'ok' THEN to_jsonb('ok'::text)
+        ELSE to_jsonb('pending'::text)
+      END,
+      true
+    )
+    WHERE id = $2
+    `,
+    [docKey, caseId]
+  );
+}
         return res.json({
           ok: true,
           files: result.rows,

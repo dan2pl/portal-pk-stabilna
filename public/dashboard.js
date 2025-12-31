@@ -3638,7 +3638,70 @@ document.addEventListener("DOMContentLoaded", () => {
     // auto-refresh co 60 sek
     setInterval(() => fetchNotifications(true), 60000);
   }
+// ✅ A1: Onboarding agenta (localStorage) — per userId (admin/agent osobno)
+(function initAgentOnboarding() {
+  const box = document.getElementById("agentOnboarding");
+  if (!box) return;
 
+  const btnClose = document.getElementById("agentOnboardingClose");
+  const chk = document.getElementById("agentOnboardingDontShow");
+
+  async function getUserId() {
+    // 1) jeśli masz już usera globalnie (czasem tak bywa)
+    if (window.me?.id) return String(window.me.id);
+    if (window.currentUser?.id) return String(window.currentUser.id);
+
+    // 2) fallback: pobierz z backendu
+    try {
+      const res = await fetch("/api/me", { credentials: "include" });
+      const data = await res.json().catch(() => null);
+
+      // dopasuj do tego co zwraca Twój backend:
+      // { ok:true, user:{id:...} } albo { id:... }
+      const id = data?.user?.id ?? data?.id ?? null;
+      return id != null ? String(id) : null;
+    } catch {
+      return null;
+    }
+  }
+
+  (async () => {
+    const uid = await getUserId();
+
+    // jeśli nie mamy userId -> NIE zapisuj anon, tylko pokaż normalnie (i tyle)
+    const KEY = uid ? `pk_agent_onboarding_hide:${uid}` : null;
+
+    // jeśli user już ukrył → nie pokazuj
+    try {
+      if (KEY && localStorage.getItem(KEY) === "1") {
+        box.style.display = "none";
+        return;
+      }
+    } catch {}
+
+    // klik X → chowamy, ale NIE zapisujemy
+    if (btnClose) {
+      btnClose.addEventListener("click", () => {
+        box.style.display = "none";
+      });
+    }
+
+    // checkbox → zapisuje decyzję
+    if (chk) {
+      chk.addEventListener("change", () => {
+        try {
+          if (!KEY) return; // jak nie mamy userId, to nie zapisujemy nic
+          if (chk.checked) {
+            localStorage.setItem(KEY, "1");
+            box.style.display = "none";
+          } else {
+            localStorage.removeItem(KEY);
+          }
+        } catch {}
+      });
+    }
+  })();
+})();
   initNotifications();
 });
 
